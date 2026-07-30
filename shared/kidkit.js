@@ -94,10 +94,12 @@
       var onHold   = opts.onHold || function () {};
       var keysDown = {};
       var pointerHeld = false, padHeld = false, wasHeld = false;
-      // Latched by blur; stays true (forcing padHeld false) until poll()
-      // observes the pad with nothing pressed — i.e. a genuine release —
-      // so a still-held button can't resurrect the hold blur just cleared.
-      var padSuppressed = false;
+      // Suppression is latched per pad (on padState[p.index].suppressed), not
+      // globally: with two controllers, a stale held button on pad A must not
+      // block pad B's fresh press from clearing B's own latch. Each pad's
+      // suppression stays true (forcing that pad's contribution to padHeld
+      // false) until poll() observes THAT pad with nothing pressed — i.e. a
+      // genuine release for that pad.
 
       function heldNow() {
         var k;
@@ -112,7 +114,8 @@
       }
       function releaseAll(source) {
         keysDown = {}; pointerHeld = false; padHeld = false;
-        padSuppressed = true;
+        var pk;
+        for (pk in padState) { if (padState.hasOwnProperty(pk)) padState[pk].suppressed = true; }
         syncHold(source || 'blur');
       }
 
@@ -182,12 +185,13 @@
         try { pads = global.navigator && global.navigator.getGamepads ? global.navigator.getGamepads() : null; }
         catch (e) { return; }
         if (!pads) return;
-        var anyDown = false;
+        var held = false;
 
         for (var i = 0; i < pads.length; i++) {
           var p = pads[i];
           if (!p || !p.buttons) continue;
-          var st = padState[p.index] || (padState[p.index] = { b: [], ax: {} });
+          var st = padState[p.index] || (padState[p.index] = { b: [], ax: {}, suppressed: false });
+          var padDown = false;
 
           for (var b = 0; b < p.buttons.length; b++) {
             var btn = p.buttons[b];
@@ -201,7 +205,7 @@
               else onPress('pad');           // A, B, bumpers, triggers, d-pad up/down
             }
             if (down && b !== BTN_X && b !== BTN_Y && b !== BTN_START &&
-                b !== BTN_SELECT && b !== BTN_LEFT && b !== BTN_RIGHT) anyDown = true;
+                b !== BTN_SELECT && b !== BTN_LEFT && b !== BTN_RIGHT) padDown = true;
             st.b[b] = down;
           }
 
@@ -211,17 +215,19 @@
           if (upNow && !st.ax.up) { lastSource = 'pad'; onPress('pad'); }
           if (lNow && !st.ax.l) onNav('left');
           if (rNow && !st.ax.r) onNav('right');
-          if (upNow) anyDown = true;
+          if (upNow) padDown = true;
           st.ax.up = upNow; st.ax.l = lNow; st.ax.r = rNow;
+
+          if (st.suppressed) {
+            // Force this pad off until it's observed with nothing pressed —
+            // only then is its suppression genuinely satisfied and lifted.
+            if (!padDown) st.suppressed = false;
+            padDown = false;
+          }
+          if (padDown) held = true;
         }
 
-        if (padSuppressed) {
-          // Force the pad off until it's observed with nothing pressed —
-          // only then is the suppression genuinely satisfied and lifted.
-          if (!anyDown) padSuppressed = false;
-          anyDown = false;
-        }
-        if (anyDown !== padHeld) { padHeld = anyDown; syncHold('pad'); }
+        if (held !== padHeld) { padHeld = held; syncHold('pad'); }
       }
 
       function padCount() {

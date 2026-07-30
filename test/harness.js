@@ -518,8 +518,19 @@ function createHarness(gameName, options) {
   function cancelAnimationFrameStub() { pendingFrame = null; }
 
   /* ---- gamepads ------------------------------------------------ */
-  const pads = opts.gamepad === false ? [] : [makePad(0)];
-  function getGamepads() { return pads.length ? [pads[0], null, null, null] : [null, null, null, null]; }
+  /* Default stays one pad so no existing test changes behaviour.
+     { gamepads: 2 } presents two connected pads (index 0 and 1) via
+     navigator.getGamepads(), for tests that need to isolate per-pad state
+     (e.g. KidKit's per-pad blur latch). { gamepad: false } keeps the old
+     "no pad connected at all" escape hatch. */
+  const padCount = opts.gamepad === false ? 0 : (opts.gamepads || 1);
+  const pads = [];
+  for (let i = 0; i < padCount; i++) pads.push(makePad(i));
+  function getGamepads() {
+    const arr = [null, null, null, null];
+    for (const p of pads) if (p.index < arr.length) arr[p.index] = p;
+    return arr;
+  }
 
   /* ---- RNG ----------------------------------------------------- */
   /* A busy frame legitimately burns ~14k draws when a boss explodes, so the
@@ -624,10 +635,11 @@ function createHarness(gameName, options) {
      Holding it longer is what a real stuck button looks like — one jump. */
   let pendingRelease = [];
 
-  /* Gamepad button indices currently owned by hold() (sustained press). A
-     pendingRelease closure checks this set at *fire* time, not at queue
-     time, so it stays inert for as long as hold() owns the button — even if
-     the closure was queued before hold(true) was called. */
+  /* Gamepad buttons currently owned by hold()/padHold() (sustained press),
+     keyed by `${padIndex}:${buttonIndex}`. A pendingRelease closure checks
+     this set at *fire* time, not at queue time, so it stays inert for as
+     long as hold()/padHold() owns the button — even if the closure was
+     queued before the hold began. */
   const heldButtons = new Set();
 
   function step() {
@@ -645,15 +657,17 @@ function createHarness(gameName, options) {
     }
   }
 
-  function pressPadButton(name) {
-    if (!pads.length) return;
+  function pressPadButton(name, padIndex) {
+    const pi = padIndex == null ? 0 : padIndex;
+    if (!pads[pi]) return;
     const i = typeof name === 'number' ? name : PAD_BUTTONS[name];
     if (i == null) throw new Error(`unknown gamepad button: ${name}`);
-    const b = pads[0].buttons[i];
+    const b = pads[pi].buttons[i];
     b.pressed = true; b.value = 1; b.touched = true;
-    pads[0].timestamp = clock.now;
+    pads[pi].timestamp = clock.now;
+    const key = pi + ':' + i;
     pendingRelease.push(() => {
-      if (heldButtons.has(i)) return;   // hold() owns this button — leave it pressed
+      if (heldButtons.has(key)) return;   // hold()/padHold() owns this button — leave it pressed
       b.pressed = false; b.value = 0; b.touched = false;
     });
   }
@@ -726,29 +740,54 @@ function createHarness(gameName, options) {
         el.dispatchEvent(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
         winDispatch(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
       }
-      if (pads.length) {
+      if (pads[0]) {
         const i = PAD_BUTTONS.a;
         const b = pads[0].buttons[i];
+        const key = '0:' + i;
         if (on) {
-          heldButtons.add(i);
+          heldButtons.add(key);
           b.pressed = true; b.value = 1; b.touched = true;
           pads[0].timestamp = clock.now;
         } else {
-          heldButtons.delete(i);
+          heldButtons.delete(key);
           b.pressed = false; b.value = 0; b.touched = false;
         }
+      }
+      return api;
+    },
+    /* Sustained hold of the gamepad A button on a single pad, with NO
+       pointer events dispatched — unlike hold(), which drives both the
+       pointer and pad paths together. Use this to isolate the gamepad-only
+       path in a test (e.g. multi-pad scenarios) so nothing but the pad can
+       satisfy an assertion. Respects the same button-ownership rule as
+       hold(): while padHold(true, i) owns the button, no pendingRelease
+       closure (from pad()/padPress()/holdJump()) can clear it. */
+    padHold(on, index) {
+      const pi = index == null ? 0 : index;
+      if (!pads[pi]) return api;
+      const i = PAD_BUTTONS.a;
+      const b = pads[pi].buttons[i];
+      const key = pi + ':' + i;
+      if (on) {
+        heldButtons.add(key);
+        b.pressed = true; b.value = 1; b.touched = true;
+        pads[pi].timestamp = clock.now;
+      } else {
+        heldButtons.delete(key);
+        b.pressed = false; b.value = 0; b.touched = false;
       }
       return api;
     },
     blur() { winDispatch(makeEvent('blur', null, {})); return api; },
     fingerprint() { return rngCalls + ':' + (rngSum >>> 0).toString(16); },
     /* Queue a press for the next frame; the caller pumps it. */
-    pad(button) { pressPadButton(button); return api; },
+    pad(button, index) { pressPadButton(button, index); return api; },
     /* Press, let one frame poll it, then one clear frame so the next
        press reads as a fresh edge. */
-    padPress(button) { pressPadButton(button); step(); step(); return api; },
-    connectPad() {
-      winDispatch(makeEvent('gamepadconnected', null, { gamepad: pads[0] }));
+    padPress(button, index) { pressPadButton(button, index); step(); step(); return api; },
+    connectPad(index) {
+      const pi = index == null ? 0 : index;
+      winDispatch(makeEvent('gamepadconnected', null, { gamepad: pads[pi] }));
       return api;
     },
     padCount: () => pads.length,

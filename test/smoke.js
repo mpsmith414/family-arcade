@@ -154,10 +154,15 @@ test('KidKit: blur latches the pad off until released', note => {
     onHold: (down, src) => seen.push((down ? '+' : '-') + src),
   });
 
-  h.hold(true);
+  // padHold() drives ONLY the mock gamepad button — no pointerdown/up side
+  // effect — so nothing but the gamepad path can satisfy the assertions
+  // below. (A pointer-driven hold() previously masked this: its synthetic
+  // pointerup fired syncHold('touch') and made the final assertion pass
+  // even when the pad latch itself never cleared.)
+  h.padHold(true, 0);
   pads.poll();
-  note(`after hold+poll: held= ${pads.held}`);
-  assert(pads.held === true, 'held should be true after hold+poll');
+  note(`after padHold+poll: held= ${pads.held}`);
+  assert(pads.held === true, 'held should be true after padHold+poll');
 
   h.blur();
   note(`after blur: held= ${pads.held}`);
@@ -172,13 +177,56 @@ test('KidKit: blur latches the pad off until released', note => {
 
   // now genuinely release the pad, then press it again — the latch must not
   // get stuck off forever.
-  h.hold(false);
+  h.padHold(false, 0);
   pads.poll();
   assert(pads.held === false, 'held should stay false once the pad is actually released');
 
-  h.hold(true);
+  h.padHold(true, 0);
   pads.poll();
   assert(pads.held === true, 'a fresh press after a real release must restore the hold');
+
+  note(`event log: ${seen.join(' ')}`);
+  return h;
+});
+
+/* REGRESSION GUARD — two controllers. Pad A is still held through blur while
+   pad B is idle. A global latch ORs A's stale button into B's poll, so the
+   combined "anything down" never goes quiet while A keeps holding — B's own
+   fresh press would then stay masked for as long as A holds. Suppression
+   must be tracked per pad: B's latch clears on ITS OWN all-quiet poll,
+   independent of whatever pad A is doing. */
+test('KidKit: blur latch is per-pad', note => {
+  const h = createHarness('oliver-run', { seed: 5, gamepads: 2 });
+  const seen = [];
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'),
+    onHold: (down, src) => seen.push((down ? '+' : '-') + src),
+  });
+
+  // pad A (index 0) held down; pad B (index 1) idle at blur time.
+  h.padHold(true, 0);
+  pads.poll();
+  note(`after A held+poll: held= ${pads.held}`);
+  assert(pads.held === true, 'held should be true with pad A down');
+
+  h.blur();
+  note(`after blur: held= ${pads.held}`);
+  assert(pads.held === false, 'blur must force-release everything');
+
+  // A is still physically down; B is still idle. This poll must observe
+  // B's all-quiet state and clear B's own latch, while A's stays suppressed
+  // because A never went quiet.
+  pads.poll();
+  note(`after blur + poll (A still down, B idle): held= ${pads.held}`);
+  assert(pads.held === false, 'pad A still held must not resurrect the hold');
+
+  // B makes a fresh press. Under a global latch this stays masked forever
+  // because A's stale button keeps the aggregate "anyDown" true. Per-pad
+  // suppression means B's own latch already cleared, so this must register.
+  h.padHold(true, 1);
+  pads.poll();
+  note(`after B fresh press (A still held): held= ${pads.held}`);
+  assert(pads.held === true, "pad B's fresh press must register even while pad A is still held");
 
   note(`event log: ${seen.join(' ')}`);
   return h;
