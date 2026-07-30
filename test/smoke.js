@@ -326,9 +326,12 @@ test('glide is inert while grounded', note => {
   const h = createHarness('oliver-run', { seed: 20260729 });
   // Deliberately NOT h.tap() + h.hold(true): hold() drives the pointer path
   // AND the mock gamepad button together (by design, see harness.js), which
-  // means starting via tap() and then holding fires a SECOND press edge on
-  // the very first frame's gamepad poll -- a genuine extra jump, not a glide
-  // bug. keyDown() with no matching keyUp is a single input source with a
+  // means starting via tap() and then holding fires a SECOND press edge: the
+  // pointerdown inside hold(true) is dispatched synchronously, before any
+  // frame is pumped, and tap() has already set state to 'play' -- so it calls
+  // jump() for real. A genuine extra jump, not a glide bug. (The gamepad poll
+  // is at most a second contributor; the pointer path alone is enough.)
+  // keyDown() with no matching keyUp is a single input source with a
   // single press edge that then stays down for the rest of the run: it both
   // starts the game and holds forever, with no second edge ever created, so
   // it is the only way to actually keep the hero on the ground for all 9000
