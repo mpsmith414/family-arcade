@@ -65,7 +65,18 @@
     -webkit-tap-highlight-color:transparent;overflow:hidden;
   }
   #stage{
-    position:relative;width:100%;max-width:920px;
+    position:relative;width:100%;
+    /* Fill whatever screen it lands on. It used to stop at 920px, which on a
+       telly left a wide dead border around the game — and a TV browser puts a
+       mouse cursor on screen that the stick drives around, so most of the
+       time that cursor was sitting out in the border where a button press
+       landed on nothing. 2 is the canvas aspect (900x450). The three lines
+       are a cascade, not a mistake: an old TV browser keeps the plain 920px,
+       a phone gets dvh so the address bar sliding away cannot push the
+       on-screen buttons off the bottom. */
+    max-width:920px;
+    max-width:min(100%, calc((100vh - 24px) * 2));
+    max-width:min(100%, calc((100dvh - 24px) * 2));
     border-radius:18px;overflow:hidden;
     box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(255,209,102,.25);
     touch-action:manipulation;cursor:pointer;

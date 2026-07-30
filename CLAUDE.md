@@ -91,6 +91,12 @@ h.keyDown('ArrowLeft');  h.keyUp('ArrowLeft');
 h.stick(-1, 0);          // left stick, sticks until set back to 0,0
 h.padHold('left', true); // d-pad held, unlike padPress which is one edge
 h.pointerHold(.02, .95); h.pointerRelease();
+
+// a telly's cursor: pressing beside the game, and losing the page's focus
+h.tapPage(-1.5, .5);     // press outside the box; nx/ny still measured across it
+h.pageHold(-2, .5);      // …and held, for steering
+h.loseFocus(); h.regainFocus();
+h.byId('kk-focus-guard');// nodes the page built at runtime, unlike el()
 ```
 
 Feel values for the sky lane and the glide all live in the `TUNE` object at the
@@ -131,6 +137,24 @@ Steering lives there too, behind `KidKit.input.create({steer:true})`, which adds
 diagonal isn't faster) and `.pointer()` (where a finger is being held, 0..1
 across the element). Daddy Smash is the only caller today; the second movement
 game must not grow its own copy.
+
+### Playing on a TV — the cursor rules
+
+A TV browser (Fire TV's Silk in particular) paints a mouse cursor over the page
+and drives it with the left stick. Three things follow, all of them load-bearing:
+
+- **A press anywhere on the page counts**, not just on the game box — the kit
+  binds to the document as well as to the element, and the element is only used
+  to work out *where* the press was. Don't narrow that back to the stage.
+- **The games fill the screen** (`#stage` scales to the viewport instead of
+  stopping at 920px). Any dead border is somewhere the cursor can sit where a
+  press does nothing, which reads to a kid as a broken controller.
+- **`KidKit.focusGuard()`** watches `document.hasFocus()`, because a cursor
+  pushed past the edge of the page hands focus to the browser chrome, and from
+  then on `keydown` never fires and `getGamepads()` freezes. It covers the page
+  with a "Press any button" panel — the press that hits it is what brings focus
+  home, and it spends that gesture on fullscreen when a pad is connected.
+  `input.create()` arms it; opt out with `{focusGuard:false}`.
 
 Gamepad mapping is deliberate: **almost every button jumps**, because a
 five-year-old shouldn't have to find the right one. Only X/Y are a separate

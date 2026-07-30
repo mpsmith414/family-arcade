@@ -1227,6 +1227,94 @@ test('daddy: 20000 frames of hard running never throws either', note => {
   return h;
 });
 
+/* ================================================================ *
+ * KidKit — the TV cursor
+ *
+ * A telly browser draws a mouse cursor over the page and lets the left
+ * stick shove it around. The game is a rectangle in the middle of the
+ * screen, so that cursor spends most of its life in the dead space around
+ * it, and when it slides off the page entirely the browser chrome takes
+ * focus: keydown stops arriving, getGamepads() freezes, and every button
+ * on the controller goes dead with nothing on screen to say why.
+ * ================================================================ */
+
+test('kit: a press in the dead space around the game still counts', note => {
+  const h = createHarness('oliver-run');
+  assert(!h.hidden('startScreen'), 'should start on the menu');
+  h.tapPage(-1.5, 0.5);                 // well off to the left of the box
+  pump(h, 120);
+  assert(h.hidden('startScreen'), 'a press beside the game should still start it');
+  const after = h.num('score');
+  assert(after > 0, 'the game should be running after a press outside the box');
+  note(`started from a press outside the stage, score ${after}`);
+  return h;
+});
+
+test('kit: steering works with the cursor parked outside the game too', note => {
+  const h = createHarness('daddy-smash', { seed: 6 });
+  h.tap();
+  pump(h, 5);
+  // held out beyond the left edge — clamps to the edge, not to the middle
+  h.pageHold(-2, 0.5);
+  const seen = new Set();
+  for (let i = 0; i < 700; i++) { pump(h, 1); seen.add(h.text('whereTag')); }
+  assert(seen.has('🪴 the plant'),
+    `holding left of the box should still run left, only saw ${[...seen].join(', ')}`);
+  h.pageRelease();
+  note(`ran to ${[...seen].join(' / ')}`);
+  return h;
+});
+
+test('kit: losing focus puts up a way back, and a press takes it', note => {
+  const h = createHarness('daddy-smash', { seed: 9 });
+  h.tap();
+  pump(h, 30);
+  assert(!h.byId('kk-focus-guard'), 'nothing should be covering the game while focus is fine');
+
+  h.loseFocus();
+  pump(h, 6);
+  const early = h.byId('kk-focus-guard');
+  assert(!early || early.style.display === 'none',
+    'a blink of lost focus should not flash a panel over the game');
+
+  pump(h, 90);                          // ~1.5s: past the guard's delay
+  const panel = h.byId('kk-focus-guard');
+  assert(panel, 'a lost cursor should put something on screen saying how to come back');
+  assert(panel.style.display === 'flex', `guard should be showing, display was "${panel.style.display}"`);
+  assert(/press any button/i.test(panel.innerHTML), 'the way back has to say what to press');
+
+  // pressing it is what hands focus back — and the panel gets out of the way
+  h.regainFocus();
+  panel.dispatchEvent({ type: 'pointerdown', target: panel, preventDefault() {}, stopPropagation() {} });
+  pump(h, 30);
+  assert(panel.style.display === 'none', 'the panel must clear once focus is back');
+  assert(h.hidden('startScreen'), 'and the game underneath is still running, not reset');
+  note('guard appeared after ~1s unfocused, cleared on the press that brought focus home');
+  return h;
+});
+
+test('kit: a key held when focus is lost does not stay stuck', note => {
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.tap();
+  pump(h, 5);
+  h.keyDown('ArrowLeft');
+  const goingLeft = new Set();
+  for (let i = 0; i < 500; i++) { pump(h, 1); goingLeft.add(h.text('whereTag')); }
+  assert(goingLeft.has('🪴 the plant'), `never got left: ${[...goingLeft].join(', ')}`);
+
+  // the cursor wanders off; the keyup for that arrow is never delivered
+  h.loseFocus();
+  h.regainFocus();
+  h.keyDown('ArrowRight');
+  const goingRight = new Set();
+  for (let i = 0; i < 900; i++) { pump(h, 1); goingRight.add(h.text('whereTag')); }
+  const right = [...goingRight].filter(w => RIGHT_SIDE.includes(w));
+  assert(right.length,
+    `left stayed stuck down through the blur — right never got across: ${[...goingRight].join(', ')}`);
+  note(`held left, lost focus, then right → ${right.join(' / ')}`);
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * sky lane (Task 4)
  * ---------------------------------------------------------------- */
