@@ -543,6 +543,12 @@ test('high score survives a reload', note => {
   h.tap();
   h.holdJump(true);
   pump(h, 4000);
+  // The score label and the internal point total can land a half-frame apart
+  // when a collision bonus lands on the very last pumped frame (the label is
+  // written before that frame's collisions are scored) — settle a couple of
+  // quiet frames so the label has caught up before comparing it to "best".
+  h.holdJump(false);
+  pump(h, 3);
 
   const score = h.num('score');
   assert(score > 0, 'need a score before testing persistence');
@@ -565,6 +571,53 @@ test('high score survives a reload', note => {
   assert(h.hidden('startScreen') === false, 'reload should land back on the menu');
   note(`after reload: best "${h.text('best')}", score "${h.text('score')}"`);
   return h;
+});
+
+/* ---------------------------------------------------------------- *
+ * sky lane (Task 4)
+ * ---------------------------------------------------------------- */
+
+/* REGRESSION GUARD — green before and after this task, by design.
+   Platforms are not observable from the DOM, so this cannot assert their
+   absence in Boss Rush directly. What it does assert is the thing that would
+   actually break: that a mode with no `run` phase still runs clean once the
+   sky-lane code exists. Named for what it checks, not what we wish it could. */
+test('sky lane: Boss Rush is unaffected by the sky lane code', note => {
+  const h = createHarness('oliver-run', { seed: 41 });
+  h.click('rushBtn');          // Boss Rush only cycles warn -> boss -> victory
+  pump(h, 6000);
+  assert(h.text('lvlName') === 'Boss Rush', 'should be in rush mode');
+  assert(h.num('score') > 200, `rush should have progressed, got ${h.num('score')}`);
+  assert(h.hidden('startScreen'), 'game should still be in play');
+  note(`rush reached score ${h.num('score')} over 6000 frames`);
+  return h;
+});
+
+test('sky lane: platforms survive a long run without incident', note => {
+  const h = createHarness('oliver-run', { seed: 42 });
+  h.tap();
+  runCycles(h, 12000, 24, 40);       // climb around the clusters
+  assert(h.num('score') > 500, `run should have progressed, got ${h.num('score')}`);
+  assert(h.hidden('startScreen'), 'game should still be in play');
+  note(`score ${h.num('score')} after 12000 frames of climbing`);
+  return h;
+});
+
+test('sky lane: gold stars are unreachable without leaving the ground', note => {
+  const grounded = createHarness('oliver-run', { seed: 43 });
+  grounded.tap();
+  pump(grounded, 9000);            // never jumps
+  const flat = grounded.num('score');
+  grounded.dispose();
+
+  const climber = createHarness('oliver-run', { seed: 43 });
+  climber.tap();
+  runCycles(climber, 9000, 24, 40);
+  const climbed = climber.num('score');
+  note(`grounded ${flat} vs climbing ${climbed}`);
+  assert(climbed > flat * 1.15,
+    `using the sky lane should pay noticeably better: ${flat} -> ${climbed}`);
+  return climber;
 });
 
 /* ---------------------------------------------------------------- *
