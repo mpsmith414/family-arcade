@@ -243,6 +243,27 @@
 <script>
 (() => {
   const W = 900, H = 450, GROUND = 366;
+  /* Every number that changes how the high road feels. Tune these with a
+     six-year-old sitting next to you; nothing else should need touching. */
+  const TUNE = {
+    glideVyMax:    2.4,          // max descent px/frame while the button is held
+    tier1Y:        GROUND - 130, // low platform top surface (jump apex is ~152)
+    tier2Y:        GROUND - 260, // high platform, only reachable from tier 1
+    platWMin:      90,
+    platWMax:      160,
+    platThick:     16,
+    clusterMin:    2,
+    clusterMax:    4,
+    clusterGapMin: 420,          // frames of plain ground between clusters
+    clusterGapMax: 780,
+    firstCluster:  480,          // frames into a run phase before the first one
+    tier2Chance:   0.45,
+    goldChance:    0.7,          // chance a given platform carries a gold star
+    goldLift:      40,           // how far above the platform the star floats
+    goldPoints:    50,           // a normal star is 10
+    goldCharge:    5,            // a normal star is 2
+    skySeed:       20260729,
+  };
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const el = {
@@ -593,6 +614,7 @@
   /* One input layer for touch, mouse, keyboard, TV remote and gamepad.
      Any button on a pad jumps except X / Y, which swap the kids. */
   const padTag = document.getElementById('padTag');
+  let holding = false;
   const gamepads = KidKit.input.create({
     element: document.getElementById('stage'),
     onPress: () => {
@@ -600,6 +622,7 @@
       if (!KidKit.input.activateFocused()) startGame('adventure');
     },
     onAction: () => doSwap(),
+    onHold: down => { holding = down; },
     onNav: dir => { if (state !== 'play') KidKit.input.moveFocus(dir, el.start); },
     onPause: () => { if (state !== 'play') KidKit.input.activateFocused(); },
     onGamepad: (connected, id) => {
@@ -935,6 +958,10 @@
     if (coyote>0) coyote -= dt;
     tryJump();
     hero.vy += lv.grav*dt;
+    // Hold to float: clamps descent only, so it can never gain height and
+    // reaching a platform stays a matter of nailing the jump.
+    const gliding = holding && hero.vy > 0 && !hero.onGround && !P('dog');
+    if (gliding) hero.vy = Math.min(hero.vy, TUNE.glideVyMax);
     hero.y += hero.vy*dt;
     const base = heroBase();
     if (hero.y>=base){
@@ -945,7 +972,7 @@
     hero.run += dt*(hero.onGround ? .32 : .1);
 
     // record Oliver's movement; little sister replays it a beat later
-    trail.push({y:hero.y, run:hero.run, air:!hero.onGround});
+    trail.push({y:hero.y, run:hero.run, air:!hero.onGround, glide:gliding});
     while (trail.length > SIS_DELAY) trail.shift();
 
     if (phase==='run'){ spawnIn -= dt; if (spawnIn<=0) spawn(); }

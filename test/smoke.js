@@ -317,6 +317,61 @@ test('harness: hold() survives a pad press', note => {
   return h;
 });
 
+/* REGRESSION GUARD — green before and after this task, by design.
+
+   Glide only engages while airborne and descending. A run that never jumps
+   must therefore be bit-for-bit identical whether or not the button is held —
+   which is a far stronger claim than "the score looks similar". */
+test('glide is inert while grounded', note => {
+  const h = createHarness('oliver-run', { seed: 20260729 });
+  // Deliberately NOT h.tap() + h.hold(true): hold() drives the pointer path
+  // AND the mock gamepad button together (by design, see harness.js), which
+  // means starting via tap() and then holding fires a SECOND press edge on
+  // the very first frame's gamepad poll -- a genuine extra jump, not a glide
+  // bug. keyDown() with no matching keyUp is a single input source with a
+  // single press edge that then stays down for the rest of the run: it both
+  // starts the game and holds forever, with no second edge ever created, so
+  // it is the only way to actually keep the hero on the ground for all 9000
+  // frames while `holding` is true throughout.
+  h.keyDown('ArrowUp');       // held for the entire run, never jumping
+  pump(h, 9000);
+  const actual = {
+    score: h.num('score'),
+    level: h.text('lvlName'),
+    trophies: h.text('trophies'),
+    rng: h.fingerprint(),
+  };
+  note(JSON.stringify(actual));
+  for (const k of Object.keys(GROUND_BASELINE)) {
+    assert(actual[k] === GROUND_BASELINE[k],
+      `holding changed ${k} on the ground: ${JSON.stringify(actual[k])} != ${JSON.stringify(GROUND_BASELINE[k])}`);
+  }
+  return h;
+});
+
+/* How a child actually glides: the same press both jumps and begins the
+   float, you keep holding to stay up, then release and press again. You
+   cannot press a button you are already holding, so never mix hold() with
+   pad() — cycle hold() instead. holdFor = 1 gives identical jump edges with
+   no float, which makes it the control run for any A/B comparison. */
+function runCycles(h, totalFrames, holdFor, period) {
+  for (let i = 0; i < totalFrames; i++) {
+    const phase = i % (period || 40);
+    if (phase === 0) h.hold(true);
+    if (phase === holdFor) h.hold(false);
+    pump(h, 1);
+  }
+}
+
+test('holding through a long run throws nothing', note => {
+  const h = createHarness('oliver-run', { seed: 33 });
+  h.tap();
+  runCycles(h, 6000, 24, 40);      // jump, float for 24 frames, land, repeat
+  assert(h.num('score') > 500, `run should have progressed, got ${h.num('score')}`);
+  note(`score ${h.num('score')} over 6000 frames of jump-and-float cycles`);
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * 1. it boots
  * ---------------------------------------------------------------- */
