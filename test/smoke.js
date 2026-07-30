@@ -1049,6 +1049,31 @@ for (const [label, goLeft, goRight] of STEERERS) {
   });
 }
 
+/* Daddy spawns mid-room at z:34, not down at the kids' z:88, so the plant is
+   not in his lane and the landmarks either side of him are the toy box and
+   the big chair. Holding one way then the other is the honest question:
+   a Daddy nobody is driving would wander after the kids instead. */
+test('daddy: steering Daddy walks him across the room', note => {
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 5);
+
+  h.keyDown('ArrowLeft');
+  const goingLeft = new Set();
+  for (let i = 0; i < 900; i++) { pump(h, 1); goingLeft.add(h.text('whereTag')); }
+  assert(goingLeft.has('🧸 the toy box'), `holding left never walked Daddy to the toy box: ${[...goingLeft].join(', ')}`);
+
+  h.keyUp('ArrowLeft');
+  h.keyDown('ArrowRight');
+  const goingRight = new Set();
+  for (let i = 0; i < 900; i++) { pump(h, 1); goingRight.add(h.text('whereTag')); }
+  assert(goingRight.has('🪑 the big chair'), `holding right never walked Daddy to the big chair: ${[...goingRight].join(', ')}`);
+
+  note(`left → ${[...goingLeft].join(' / ')}   right → ${[...goingRight].join(' / ')}`);
+  return h;
+});
+
 /* Releasing has to actually release, and "did they stop?" is the wrong way
    to ask: being grabbed carries the kid across the room, so the position
    moves for reasons that have nothing to do with the key. Ask it the other

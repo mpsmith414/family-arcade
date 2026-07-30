@@ -945,6 +945,8 @@
        child across the room past the other is what actually happens, and
        going after the nearest meant a player who put the controller down
        was always the closest target — so the little sister never got a go. */
+    const human = playerIdx === 2 && state === 'play';
+
     if (!daddy.chase || daddy.chase.held || daddy.chase.safe > 0 || daddy.chaseCd <= 0){
       daddy.chase = pickTarget();
       daddy.chaseCd = rnd(420, 700);
@@ -961,6 +963,10 @@
         daddy.mode = 'wind'; daddy.timer = 20;
         daddy.lx = dx/d; daddy.lz = dz/d;
         sfx.wind();
+      } else if (human){
+        // no corner-cutting help: a human is doing the aiming
+        const s = playerSteer();
+        move(daddy, s.x, s.z, DAD_WALK*boost*slow, dt);
       } else {
         // aim a little ahead of where they are going, so corners get cut
         const lead = 9;
