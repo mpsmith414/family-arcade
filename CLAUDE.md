@@ -1,8 +1,19 @@
 # Family Arcade — working notes
 
 Homemade browser games for my two young kids. Oliver (older) and Emsile (little
-sister) are the characters in `games/oliver-run`. Built to be played on a phone,
-a tablet, and a TV with a controller.
+sister) are the characters in both games. Built to be played on a phone, a
+tablet, and a TV with a controller.
+
+Two games so far, and they are deliberately opposites — a fast reflex runner and
+a slow collecting game. Keep it that way: a third game should contrast with both
+rather than land in between.
+
+- `games/oliver-run` — endless runner, tap to jump, 18 bosses, scores distance.
+- `games/emsile-fishing` — still screen, tap on the bite, scores a book of 15 sea
+  creatures. Tap does three jobs depending on state (wiggle the lure / hook the
+  fish / skip the celebration), and mashing is always rewarded, never punished.
+  Miss a bite and the hook still comes up with junk, which is the joke rather
+  than a penalty.
 
 ## Hard constraints — do not break these
 
@@ -35,9 +46,17 @@ way that eyeballing missed (a `ReferenceError` firing every frame a power-up
 was active, and a hitbox that stretched to the ground while jumping).
 
 ```bash
-node test/smoke.js            # ~8s, no dependencies
+node test/smoke.js            # both games, ~20s, no dependencies
 node test/smoke.js powers     # only tests matching "powers"
+node test/smoke.js fishing    # only the Emsile Fishing block
 ```
+
+The harness draws to a no-op canvas, so it proves the game does not throw and
+that the numbers add up — it says nothing about whether the art looks right.
+For that, serve the folder and screenshot it in a real browser; Chromium and
+Playwright are already on the box. Doing that caught two things the tests could
+not: the fish book's bottom row sitting under the on-screen buttons, and every
+uncaught silhouette leaking its hard-coded highlights.
 
 The harness takes a folder name and works for any game under `games/`: it
 walks that game's `<script>` tags in order, evals `src=` ones off disk (which

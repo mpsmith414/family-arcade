@@ -52,6 +52,7 @@
   .card:active{transform:translateY(0)}
   .art{height:126px;display:flex;align-items:center;justify-content:center;font-size:52px}
   .art.run{background:linear-gradient(160deg,#3B2263,#8B4A6B 60%,#F2A65A)}
+  .art.fish{background:linear-gradient(160deg,#8FD8F5,#2A8FC4 45%,#04203A)}
   .art.soon{background:linear-gradient(160deg,#1F2340,#2E3357)}
   .meta{padding:13px 15px 15px}
   .meta strong{display:block;font-size:17px;letter-spacing:.02em}
@@ -87,10 +88,19 @@
     </span>
   </button>
 
+  <button class="card" data-go="games/emsile-fishing/index.html">
+    <span class="best" id="bestFish" hidden></span>
+    <span class="art fish">🎣</span>
+    <span class="meta">
+      <strong>Emsile Fishing</strong>
+      <span>Tap when it bites. Fill a book of 15 sea creatures. Slow, calm, nobody loses.</span>
+    </span>
+  </button>
+
   <button class="card" disabled>
     <span class="art soon">➕</span>
     <span class="meta">
-      <strong>Game Two</strong>
+      <strong>Game Three</strong>
       <span>Empty slot. Drop a folder in /games and add one line to this page.</span>
     </span>
   </button>
@@ -112,6 +122,16 @@
     var tag = document.getElementById('bestRun');
     tag.textContent = 'Best ' + best + (trophies ? '  🏆' + trophies : '');
     tag.hidden = false;
+  }
+
+  // and the fish book's progress on its card
+  var book = KidKit.storage.getJSON('emsile-fishing-album', {});
+  var species = 0;
+  for (var k in book) if (Object.prototype.hasOwnProperty.call(book, k)) species++;
+  if (species){
+    var fishTag = document.getElementById('bestFish');
+    fishTag.textContent = '🐠 ' + species + '/15';
+    fishTag.hidden = false;
   }
 
   var cards = [].slice.call(document.querySelectorAll('.card:not([disabled])'));

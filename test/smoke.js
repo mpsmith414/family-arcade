@@ -1,13 +1,14 @@
 /* ============================================================================
-   Smoke test for games/oliver-run, driven through test/harness.js.
+   Smoke tests for every game, driven through test/harness.js.
 
      node test/smoke.js            run everything
-     node test/smoke.js powers     run only tests whose name matches "powers"
+     node test/smoke.js powers     only tests whose name matches "powers"
+     node test/smoke.js fishing    only the Emsile Fishing block
 
-   Everything here is black box: the game is an IIFE with no exports, so the
+   Everything here is black box: each game is an IIFE with no exports, so the
    assertions read the same stub DOM the game writes to (score, boss name,
-   power tag) rather than reaching inside it. Nothing in the game had to
-   change to make it testable.
+   power tag, catch name) rather than reaching inside it. No game code had to
+   change to make any of this testable.
    ========================================================================== */
 'use strict';
 
@@ -257,6 +258,261 @@ test('high score survives a reload', note => {
   assert(h.text('score') === '0', 'score should reset to 0 on reload');
   assert(h.hidden('startScreen') === false, 'reload should land back on the menu');
   note(`after reload: best "${h.text('best')}", score "${h.text('score')}"`);
+  return h;
+});
+
+/* ================================================================ *
+ * games/emsile-fishing
+ *
+ * The cycle runs itself — cast, wait, bite, reel, show, cast — and the only
+ * thing a player contributes is a tap. That makes both halves of the design
+ * testable without any timing cleverness: tap often and you catch fish, tap
+ * never and the hook still comes up with junk. Neither path can end the game,
+ * which is the property these tests are really guarding.
+ * ================================================================ */
+const FISH_NAMES = [
+  'Goldfish', 'Blue Tang', 'Crab', 'Seahorse', 'Starfish', 'Puffer Fish',
+  'Jellyfish', 'Sea Turtle', 'Lantern Fish', 'Octopus', 'Swordfish',
+  'Baby Whale', 'Treasure!', 'Rubber Duck', 'Golden Fish',
+];
+const JUNK_NAMES = ['Old Boot', 'Lost Sock', 'Seaweed', 'Tin Can'];
+const ZONE_NAMES = ['Sunny Shallows', 'Kelp Forest', 'Twilight Deep', 'The Deep Deep'];
+
+/* album label reads "7 / 15" */
+function speciesCount(h) {
+  const m = /(\d+)\s*\/\s*(\d+)/.exec(h.text('albumCount'));
+  return m ? Number(m[1]) : -1;
+}
+function junkCount(h) {
+  const m = /(\d+)/.exec(h.text('junkTag'));
+  return m ? Number(m[1]) : 0;
+}
+/* Play the way a kid plays: keep tapping. Every bite window is 80 frames, so
+   a tap every 10 frames can never miss one. */
+function mash(h, frames, every) {
+  const gap = every || 10;
+  for (let i = 0; i < frames; i++) {
+    if (i % gap === 0) h.tap();
+    pump(h, 1);
+  }
+}
+
+test('fishing: boots to the menu with an empty book', note => {
+  const h = createHarness('emsile-fishing');
+  note(`loaded ${h.loaded.join(', ')}`);
+  assert(!h.hidden('startScreen'), 'start screen should be visible before play');
+  assert(h.text('zoneName') === ZONE_NAMES[0], `expected first zone, got "${h.text('zoneName')}"`);
+  assert(h.num('catches') === 0, 'catches should start at 0');
+  assert(speciesCount(h) === 0, `fresh install should have an empty book, got "${h.text('albumCount')}"`);
+  assert(h.text('albumCount') === '0 / 15', `expected "0 / 15", got "${h.text('albumCount')}"`);
+  assert(h.hidden('catchWrap'), 'catch banner should not be up yet');
+  pump(h, 60);
+  assert(h.num('catches') === 0, 'nothing should be caught while still on the menu');
+  return h;
+});
+
+for (const [label, start] of Object.entries(STARTERS)) {
+  test(`fishing: starts and catches from ${label}`, note => {
+    const h = createHarness('emsile-fishing', { seed: 4242 });
+    assert(!h.hidden('startScreen'), 'precondition: menu visible');
+    start(h);
+    pump(h, 5);
+    assert(h.hidden('startScreen'), `${label} did not start the game`);
+
+    // keep playing through the same input so that path stays live
+    for (let i = 0; i < 900; i++) {
+      if (i % 10 === 0) start(h);
+      pump(h, 1);
+    }
+    const caught = h.num('catches');
+    assert(caught > 0, `no fish landed in 900 frames of ${label}`);
+    assert(speciesCount(h) > 0, 'a fish was counted but the book stayed empty');
+    note(`${caught} fish, ${speciesCount(h)} species in ${900} frames`);
+    return h;
+  });
+}
+
+test('fishing: a caught fish is named and goes in the book', note => {
+  const h = createHarness('emsile-fishing', { seed: 31 });
+  h.click('startBtn');
+  const seen = [];
+  for (let i = 0; i < 3000 && seen.length < 3; i++) {
+    if (i % 10 === 0) h.tap();
+    pump(h, 1);
+    if (!h.hidden('catchWrap')) {
+      const name = h.text('catchName');
+      if (name && seen[seen.length - 1] !== name) seen.push(name);
+    }
+  }
+  assert(seen.length >= 3, `only saw ${seen.length} catches: ${seen.join(', ')}`);
+  for (const name of seen) {
+    assert(FISH_NAMES.includes(name), `"${name}" is not one of the 15 creatures`);
+  }
+  assert(h.num('catches') >= 3, `catch counter behind the banners: ${h.num('catches')}`);
+  assert(junkCount(h) === 0, `tapping every 10 frames should never miss a bite, but junk = ${junkCount(h)}`);
+  note(`caught ${seen.join(', ')}`);
+  return h;
+});
+
+test('fishing: never tapping still lands junk, and never ends the game', note => {
+  const h = createHarness('emsile-fishing', { seed: 77 });
+  h.click('startBtn');          // start without ever using the tap handler
+
+  // The banner is only up for part of each cycle, so collect names as they
+  // appear rather than sampling whatever happens to be on screen at the end.
+  const seen = [];
+  for (let i = 0; i < 3000; i++) {
+    pump(h, 1);
+    if (!h.hidden('catchWrap')) {
+      const name = h.text('catchName');
+      if (name && seen[seen.length - 1] !== name) seen.push(name);
+    }
+  }
+
+  const junk = junkCount(h);
+  assert(junk > 0, 'ignoring every bite should still fill the junk pile');
+  assert(h.num('catches') === 0, `no tap means no fish, but catches = ${h.num('catches')}`);
+  assert(speciesCount(h) === 0, 'junk must not count towards the book');
+  assert(h.hidden('startScreen'), 'the game must not bounce back to the menu — there is no game over');
+  assert(seen.length > 0, 'junk should still get its own little banner');
+  for (const name of seen) {
+    assert(JUNK_NAMES.includes(name), `"${name}" landed without a single tap`);
+  }
+  note(`${junk} pieces of junk in 3000 frames (${seen.join(', ')}), still fishing`);
+  return h;
+});
+
+test('fishing: wiggling the line brings the bite sooner', note => {
+  // Same seed, same everything, except one run mashes the button. The wiggle
+  // knocks 30 frames off the wait, so the masher has to land more fish.
+  const calm = createHarness('emsile-fishing', { seed: 555 });
+  calm.click('startBtn');
+  for (let i = 0; i < 2400; i++) {
+    if (i % 240 === 0) calm.tap();       // rare enough to still catch each bite
+    pump(calm, 1);
+  }
+  const calmCatches = calm.num('catches') + junkCount(calm);
+  calm.dispose();
+
+  const busy = createHarness('emsile-fishing', { seed: 555 });
+  busy.click('startBtn');
+  mash(busy, 2400);
+  const busyCatches = busy.num('catches');
+
+  assert(busyCatches > calmCatches,
+    `wiggling should speed things up: ${busyCatches} vs ${calmCatches} in the same 2400 frames`);
+  note(`wiggling: ${busyCatches} catches, leaving it alone: ${calmCatches}`);
+  return busy;
+});
+
+test('fishing: the water gets deeper as the book fills', note => {
+  const h = createHarness('emsile-fishing', { seed: 8 });
+  h.click('startBtn');
+  const zonesSeen = [h.text('zoneName')];
+  for (let i = 0; i < 20000; i++) {
+    if (i % 10 === 0) h.tap();
+    pump(h, 1);
+    const z = h.text('zoneName');
+    if (z !== zonesSeen[zonesSeen.length - 1]) zonesSeen.push(z);
+    if (zonesSeen.length === ZONE_NAMES.length) break;
+  }
+  assert(zonesSeen.length === ZONE_NAMES.length,
+    `only reached ${zonesSeen.length} of ${ZONE_NAMES.length} zones: ${zonesSeen.join(' → ')}`);
+  for (let i = 0; i < zonesSeen.length; i++) {
+    assert(zonesSeen[i] === ZONE_NAMES[i], `zones out of order: ${zonesSeen.join(' → ')}`);
+  }
+  note(`${zonesSeen.join(' → ')} after ${h.num('catches')} catches`);
+  return h;
+});
+
+test('fishing: the fish book opens and closes', note => {
+  const h = createHarness('emsile-fishing', { seed: 12 });
+  h.click('startBtn');
+  pump(h, 400);
+
+  const shut = h.el('albumBtn').getAttribute('aria-label');
+  assert(/show/i.test(shut), `expected a "show" label while closed, got "${shut}"`);
+
+  h.click('albumBtn');
+  pump(h, 30);
+  assert(/back/i.test(h.el('albumBtn').getAttribute('aria-label')), 'book did not open on the button');
+  assert(h.hidden('catchWrap'), 'the catch banner must not show through the book');
+
+  // a tap anywhere closes it again — same one button
+  h.tap();
+  pump(h, 30);
+  assert(/show/i.test(h.el('albumBtn').getAttribute('aria-label')), 'tapping did not close the book');
+
+  // and X on a pad toggles it, which is the only non-jump button in the kit
+  h.padPress('x');
+  pump(h, 5);
+  assert(/back/i.test(h.el('albumBtn').getAttribute('aria-label')), 'gamepad X did not open the book');
+  h.padPress('x');
+  pump(h, 5);
+  assert(/show/i.test(h.el('albumBtn').getAttribute('aria-label')), 'gamepad X did not close the book');
+
+  // fishing carries on afterwards
+  const before = h.num('catches');
+  mash(h, 900);
+  assert(h.num('catches') > before, 'fishing stopped after closing the book');
+  note(`reopened cleanly, ${h.num('catches')} caught total`);
+  return h;
+});
+
+test('fishing: the book survives a reload', note => {
+  let h = createHarness('emsile-fishing', { seed: 64 });
+  assert(speciesCount(h) === 0, 'precondition: empty book');
+  h.click('startBtn');
+  mash(h, 3000);
+
+  const caught = h.num('catches');
+  const species = speciesCount(h);
+  assert(caught > 0, 'need a catch before testing persistence');
+
+  // save() debounces behind a 1200ms setTimeout, so pump past it
+  pump(h, 120);
+  assert(h.store['emsile-fishing-album'] !== undefined, 'nothing was written to storage');
+  const stored = JSON.parse(h.store['emsile-fishing-album']);
+  assert(Object.keys(stored).length === species,
+    `storage has ${Object.keys(stored).length} species, HUD says ${species}`);
+  assert(Number(h.store['emsile-fishing-catches']) === caught,
+    `stored total ${h.store['emsile-fishing-catches']} vs ${caught} caught`);
+  note(`caught ${caught} across ${species} species: ${Object.keys(stored).join(', ')}`);
+
+  h = h.reload();
+  assert(h.num('catches') === caught, `after reload catches showed ${h.num('catches')}, expected ${caught}`);
+  assert(speciesCount(h) === species, `after reload book showed "${h.text('albumCount')}"`);
+  assert(!h.hidden('startScreen'), 'reload should land back on the menu');
+  note(`after reload: ${h.num('catches')} catches, book "${h.text('albumCount')}"`);
+  return h;
+});
+
+test('fishing: survives 20000 frames with no exception', note => {
+  const h = createHarness('emsile-fishing', { seed: 3 });
+  h.click('startBtn');
+  mash(h, 20000);
+
+  const caught = h.num('catches');
+  const species = speciesCount(h);
+  assert(caught > 20, `expected a real haul after 20000 frames, got ${caught}`);
+  assert(species >= 8, `only ${species} of 15 species after ${caught} catches — the book fills too slowly`);
+  assert(h.hidden('startScreen'), 'game should still be in play');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${caught} catches, ${species}/15 species, zone "${h.text('zoneName')}", ${h.timerCount} timers alive`);
+  note(`audio nodes built: ${h.audioStats.oscillators} oscillators, ${h.audioStats.sources} buffer sources`);
+  return h;
+});
+
+test('fishing: a long idle run never throws either', note => {
+  // The other endurance test taps; this one exercises the paths a distracted
+  // kid hits — bite windows expiring, junk after junk, forever.
+  const h = createHarness('emsile-fishing', { seed: 99 });
+  h.click('startBtn');
+  pump(h, 12000);
+  assert(junkCount(h) > 10, `expected a big junk pile, got ${junkCount(h)}`);
+  assert(h.hidden('startScreen'), 'still fishing');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${junkCount(h)} junk, 0 fish, no crash`);
   return h;
 });
 

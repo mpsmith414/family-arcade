@@ -4,13 +4,19 @@ Homemade games for the kids. Plain HTML/JS — no build step, no npm, no server 
 Runs in any modern browser, installs to a home screen, and works offline.
 
 ```
-index.html                    the arcade menu
-manifest.webmanifest          app name / icon / fullscreen landscape
-sw.js                         offline cache  (bump CACHE when you change a game)
-shared/kidkit.js              reusable: storage, input+gamepad, audio, music, kid lock
-games/oliver-run/index.html   game one
-icons/                        app icons
+index.html                       the arcade menu
+manifest.webmanifest             app name / icon / fullscreen landscape
+sw.js                            offline cache  (bump CACHE when you change a game)
+shared/kidkit.js                 reusable: storage, input+gamepad, audio, music, kid lock
+games/oliver-run/index.html      game one — fast one-tap runner
+games/emsile-fishing/index.html  game two — slow one-tap fishing, 15 creatures to collect
+test/harness.js, test/smoke.js   headless tests for both  (node test/smoke.js)
+icons/                           app icons
 ```
+
+The two games are deliberately opposites. Oliver Run is fast and loud and scores
+distance; Emsile Fishing is still and quiet, runs at 84 bpm instead of 132, and
+scores a picture book you fill in. Same one button, same shared kit.
 
 ## Putting it online
 
@@ -94,7 +100,7 @@ Everything is wired through `KidKit.input`, so every game gets all of these free
 | Almost any key | jump |
 | Arrow keys | menu navigation |
 | Gamepad A/B/bumpers/triggers/d-pad, stick up | jump |
-| Gamepad X or Y | secondary action (swaps the kids in Oliver Run) |
+| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing) |
 | Gamepad Start | confirm in menus |
 
 A cheap Bluetooth controller paired to a Fire TV or Android TV makes this a couch
@@ -105,7 +111,8 @@ game. Apple TV has no browser at all — AirPlay from a phone instead.
 1. `games/your-game/index.html`
 2. Add `<script src="../../shared/kidkit.js"></script>` in the head
 3. Copy a card in `index.html` and point `data-go` at it
-4. Add the new path to `FILES` in `sw.js` and bump `CACHE` to `arcade-v2`
+4. Add the new path to `FILES` in `sw.js` and bump `CACHE` to the next `arcade-vN`
+5. `node test/smoke.js` — the harness takes any folder name under `games/`
 
 ### The bits worth reusing
 
