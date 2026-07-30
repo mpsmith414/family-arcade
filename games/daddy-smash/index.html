@@ -821,7 +821,7 @@
 
   function swapKid(){
     if (state !== 'play') return;
-    playerIdx = 1 - playerIdx;
+    playerIdx = nextIdx();
     KidKit.storage.set('daddy-smash-kid', player().def.id);
     sfx.swap();
     puffAt(player().x, player().z, 6);

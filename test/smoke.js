@@ -1149,16 +1149,21 @@ test('daddy: swapping which kid you are', note => {
   pump(h, 12);
   assert(h.text('kidTag') === 'Emsile', 'gamepad X did not swap the kids');
 
-  // and the button on the kid's side of the screen does the same
+  // and the button on the kid's side of the screen cycles to the next kid
   h.click('swapBtn');
   pump(h, 12);
-  assert(h.text('kidTag') === 'Oliver', 'the swap button did not swap back');
+  assert(h.text('kidTag') === 'Daddy', 'the swap button did not cycle to Daddy');
+
+  // and cycles back through Oliver
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Oliver', 'the swap button did not cycle back to Oliver');
 
   // the game carries on, and whoever you are can still be caught
   const before = h.num('slams');
   pump(h, 2500);
   assert(h.num('slams') > before, 'the chase stopped after swapping');
-  note(`swapped both ways, ${h.num('slams')} smashes total`);
+  note(`cycled through all three characters, ${h.num('slams')} smashes total`);
   return h;
 });
 
@@ -1184,6 +1189,17 @@ test('daddy: choosing Daddy on the menu sticks across a reload', note => {
   pump(h, 30);
   assert(h.text('kidTag') === 'Daddy', `picking Daddy did not take, got "${h.text('kidTag')}"`);
   assert(h.store['daddy-smash-kid'] === 'daddy', `storage says "${h.store['daddy-smash-kid']}"`);
+
+  // test swapping away from Daddy and cycling back through Oliver and Emsile
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Oliver', 'swap away from Daddy should cycle to Oliver');
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Emsile', 'swap from Oliver should cycle to Emsile');
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Daddy', 'swap from Emsile should cycle back to Daddy');
 
   h = h.reload();
   assert(h.text('kidTag') === 'Daddy', `after reload the game forgot, showing "${h.text('kidTag')}"`);
