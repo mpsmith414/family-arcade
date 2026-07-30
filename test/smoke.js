@@ -138,6 +138,52 @@ test('KidKit tracks held state across key, pointer, pad and blur', note => {
   return h;
 });
 
+/* REGRESSION GUARD — the pad is polled, not event-driven. releaseAll('blur')
+   used to clear padHeld to false, but the very next poll() recomputed
+   anyDown straight from the still-pressed physical button, saw it differed
+   from padHeld, and flipped the hold back on one frame after blur — even
+   though the child never re-pressed anything. Keyboard/pointer never have
+   this problem because the browser never replays their down-events; only
+   the pad resurrects. Fix: blur must latch the pad off until it is observed
+   with nothing pressed, at which point a fresh press works normally again. */
+test('KidKit: blur latches the pad off until released', note => {
+  const h = createHarness('oliver-run', { seed: 5 });
+  const seen = [];
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'),
+    onHold: (down, src) => seen.push((down ? '+' : '-') + src),
+  });
+
+  h.hold(true);
+  pads.poll();
+  note(`after hold+poll: held= ${pads.held}`);
+  assert(pads.held === true, 'held should be true after hold+poll');
+
+  h.blur();
+  note(`after blur: held= ${pads.held}`);
+  assert(pads.held === false, 'held should be false right after blur');
+
+  // the gamepad button is still physically down here — blur cannot reach
+  // out and release it, only poll() ever looks at it again.
+  pads.poll();
+  note(`after blur + next poll(): held= ${pads.held}`);
+  assert(pads.held === false,
+    'blur must latch the pad off: poll() right after blur must not resurrect the hold from a still-pressed button');
+
+  // now genuinely release the pad, then press it again — the latch must not
+  // get stuck off forever.
+  h.hold(false);
+  pads.poll();
+  assert(pads.held === false, 'held should stay false once the pad is actually released');
+
+  h.hold(true);
+  pads.poll();
+  assert(pads.held === true, 'a fresh press after a real release must restore the hold');
+
+  note(`event log: ${seen.join(' ')}`);
+  return h;
+});
+
 /* REGRESSION GUARD — hold() must own the gamepad A button for as long as
    it's held. Before the fix, any pressPadButton() call (via pad(),
    padPress(), or the holdJump() cadence) queued a pendingRelease closure

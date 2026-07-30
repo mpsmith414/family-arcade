@@ -94,6 +94,10 @@
       var onHold   = opts.onHold || function () {};
       var keysDown = {};
       var pointerHeld = false, padHeld = false, wasHeld = false;
+      // Latched by blur; stays true (forcing padHeld false) until poll()
+      // observes the pad with nothing pressed — i.e. a genuine release —
+      // so a still-held button can't resurrect the hold blur just cleared.
+      var padSuppressed = false;
 
       function heldNow() {
         var k;
@@ -108,6 +112,7 @@
       }
       function releaseAll(source) {
         keysDown = {}; pointerHeld = false; padHeld = false;
+        padSuppressed = true;
         syncHold(source || 'blur');
       }
 
@@ -210,6 +215,12 @@
           st.ax.up = upNow; st.ax.l = lNow; st.ax.r = rNow;
         }
 
+        if (padSuppressed) {
+          // Force the pad off until it's observed with nothing pressed —
+          // only then is the suppression genuinely satisfied and lifted.
+          if (!anyDown) padSuppressed = false;
+          anyDown = false;
+        }
         if (anyDown !== padHeld) { padHeld = anyDown; syncHold('pad'); }
       }
 
