@@ -28,6 +28,10 @@
    - Time is virtual. setTimeout(…, 1500) inside saveBest() will not fire
      unless frames are pumped past it, which is exactly what makes the
      high-score persistence test meaningful.
+   - tap() and key() send the release as well as the press. A game that
+     steers on held input reads a press-only stub as a stuck key and runs
+     into the wall forever. Hold things deliberately with keyDown/keyUp,
+     stick(), padHold() and pointerHold()/pointerRelease().
    ========================================================================== */
 'use strict';
 
@@ -158,6 +162,15 @@ function makeEvent(type, target, extra) {
     stopImmediatePropagation() {},
   };
   return Object.assign(ev, extra);
+}
+
+/* Turn a 0..1 position over an element into the clientX/clientY a real
+   pointer event would carry. Steering code normalises it straight back, so
+   the stub's rect can be any size and the maths still lands in the same
+   place on the canvas. */
+function at(el, nx, ny) {
+  const r = el.getBoundingClientRect();
+  return { clientX: r.left + nx * r.width, clientY: r.top + ny * r.height };
 }
 
 /* ---------------------------------------------------------------- *
@@ -717,6 +730,14 @@ function createHarness(gameName, options) {
       return api;
     },
     click(id) { doc.getElementById(id).click(); return api; },
+    /* A real key press is down *and* up. Games that steer on held keys read
+       as stuck-on forever otherwise, so this sends both — use keyDown/keyUp
+       when you actually want the key held across frames. */
+    key(k) {
+      api.keyDown(k);
+      api.keyUp(k);
+      return api;
+    },
     keyDown(k) {
       winDispatch(makeEvent('keydown', doc.body, { key: k, code: k, repeat: false }));
       return api;
@@ -725,20 +746,19 @@ function createHarness(gameName, options) {
       winDispatch(makeEvent('keyup', doc.body, { key: k, code: k }));
       return api;
     },
-    key(k) { api.keyDown(k); api.keyUp(k); return api; },
-    /* Sustained hold of the gamepad A button — unlike holdJump() or
-       pad()/padPress(), which press-and-release on a cadence to generate
-       repeated press *edges*. hold(true) takes ownership of button A for as
-       long as it's held: any pendingRelease closure queued by pad(),
-       padPress(), or the holdJump() cadence is inert against that button
+    /* Sustained hold of the gamepad A button *and* a pointer together —
+       one call for "the child is leaning on the button". Unlike holdJump()
+       or pad()/padPress(), which press-and-release on a cadence to generate
+       repeated press *edges*, hold(true) takes ownership of button A for as
+       long as it is held: any pendingRelease closure queued by pad(),
+       padPress() or the holdJump() cadence is inert against that button
        while hold() owns it, so the press survives. hold(false) returns
-       ownership and releases the button immediately.
+       ownership and releases immediately.
 
        Do not mix hold() with pad()/padPress()/holdJump() on the SAME button
-       to try to generate repeated presses while held down — a button that
-       is already pressed cannot produce a new press edge, so those calls
-       would be no-ops for as long as hold() owns it. For a repeated
-       jump-then-glide pattern, cycle hold(true) / hold(false) instead. */
+       to generate repeated presses while held — a button already pressed
+       cannot produce a new press edge. Cycle hold(true)/hold(false) instead.
+       To isolate the gamepad path with no pointer events, use padHold(). */
     hold(on, id) {
       const el = doc.getElementById(id || 'stage');
       if (on) {
@@ -747,42 +767,54 @@ function createHarness(gameName, options) {
         el.dispatchEvent(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
         winDispatch(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
       }
-      if (pads[0]) {
-        const i = PAD_BUTTONS.a;
-        const b = pads[0].buttons[i];
-        const key = '0:' + i;
-        if (on) {
-          heldButtons.add(key);
-          b.pressed = true; b.value = 1; b.touched = true;
-          pads[0].timestamp = clock.now;
-        } else {
-          heldButtons.delete(key);
-          b.pressed = false; b.value = 0; b.touched = false;
-        }
-      }
+      api.padHold('a', !!on, 0);
       return api;
     },
-    /* Sustained hold of the gamepad A button on a single pad, with NO
-       pointer events dispatched — unlike hold(), which drives both the
-       pointer and pad paths together. Use this to isolate the gamepad-only
-       path in a test (e.g. multi-pad scenarios) so nothing but the pad can
-       satisfy an assertion. Respects the same button-ownership rule as
-       hold(): while padHold(true, i) owns the button, no pendingRelease
-       closure (from pad()/padPress()/holdJump()) can clear it. */
-    padHold(on, index) {
+
+    /* --- held / analogue input, for games you steer rather than tap --- */
+
+    /* Hold a finger at (nx, ny), 0..1 across the stage. Stays down until
+       pointerRelease(); pointerMove() drags it without lifting. */
+    pointerHold(nx, ny, id) {
+      const el = doc.getElementById(id || 'stage');
+      el.dispatchEvent(makeEvent('pointerdown', el, Object.assign({ pointerId: 1, button: 0 }, at(el, nx, ny))));
+      return api;
+    },
+    pointerMove(nx, ny, id) {
+      const el = doc.getElementById(id || 'stage');
+      el.dispatchEvent(makeEvent('pointermove', el, Object.assign({ pointerId: 1 }, at(el, nx, ny))));
+      return api;
+    },
+    pointerRelease(id) {
+      const el = doc.getElementById(id || 'stage');
+      el.dispatchEvent(makeEvent('pointerup', el, { pointerId: 1 }));
+      return api;
+    },
+    /* Left stick, -1..1 on each axis. Sticks until set back to 0,0. */
+    stick(x, y) {
+      if (pads.length) { pads[0].axes[0] = x; pads[0].axes[1] = y; pads[0].timestamp = clock.now; }
+      return api;
+    },
+    /* Hold any pad button down across frames — d-pad steering, unlike
+       padPress which is a single edge. Dispatches NO pointer events, so it
+       isolates the gamepad path when a test needs to prove the pad alone
+       satisfied an assertion.
+
+       While held this way the button is OWNED: pendingRelease closures from
+       pad()/padPress()/holdJump() are inert against it. Pass on=false to
+       release and hand ownership back. `index` selects the pad (default 0)
+       for multi-controller tests. */
+    padHold(button, on, index) {
       const pi = index == null ? 0 : index;
       if (!pads[pi]) return api;
-      const i = PAD_BUTTONS.a;
+      const i = typeof button === 'number' ? button : PAD_BUTTONS[button];
+      if (i == null) throw new Error(`unknown gamepad button: ${button}`);
       const b = pads[pi].buttons[i];
       const key = pi + ':' + i;
-      if (on) {
-        heldButtons.add(key);
-        b.pressed = true; b.value = 1; b.touched = true;
-        pads[pi].timestamp = clock.now;
-      } else {
-        heldButtons.delete(key);
-        b.pressed = false; b.value = 0; b.touched = false;
-      }
+      const down = on !== false;
+      if (down) heldButtons.add(key); else heldButtons.delete(key);
+      b.pressed = down; b.value = down ? 1 : 0; b.touched = down;
+      pads[pi].timestamp = clock.now;
       return api;
     },
     blur() { winDispatch(makeEvent('blur', null, {})); return api; },
