@@ -17,7 +17,7 @@
 (function (global) {
   'use strict';
 
-  var KidKit = { version: '1.1.0' };
+  var KidKit = { version: '1.2.0' };
 
   /* ------------------------------------------------------------------ *
    * storage — localStorage, falling back to memory if it's unavailable
@@ -103,6 +103,46 @@
       var padState = {};
       var padsLive = 0;
       var lastSource = 'touch';
+      // Set true by releaseAll('blur'). A pad that already existed in
+      // padState gets latched via the loop below, but a pad poll() has never
+      // seen yet gets no entry to latch — this flag is the initial value
+      // handed to any padState entry created AFTER a blur, so a pad
+      // discovered for the first time post-blur (reconnected, or simply
+      // never polled before blur) still starts suppressed instead of
+      // reporting held straight from its first observation. Never reset:
+      // a newly discovered pad that is quiet on its very first poll clears
+      // its own suppression on that same poll (see the per-pad clearing
+      // logic below), so leaving this latched costs nothing.
+      var suppressNewPads = false;
+
+      var onHold   = opts.onHold || function () {};
+      var keysDown = {};
+      var pointerHeld = false, padHeld = false, wasHeld = false;
+      // Suppression is latched per pad (on padState[p.index].suppressed), not
+      // globally: with two controllers, a stale held button on pad A must not
+      // block pad B's fresh press from clearing B's own latch. Each pad's
+      // suppression stays true (forcing that pad's contribution to padHeld
+      // false) until poll() observes THAT pad with nothing pressed — i.e. a
+      // genuine release for that pad.
+
+      function heldNow() {
+        var k;
+        for (k in keysDown) { if (keysDown[k]) return true; }
+        return pointerHeld || padHeld;
+      }
+      function syncHold(source) {
+        var now = heldNow();
+        if (now === wasHeld) return;
+        wasHeld = now;
+        onHold(now, source);
+      }
+      function releaseAll(source) {
+        keysDown = {}; pointerHeld = false; padHeld = false;
+        suppressNewPads = true;
+        var pk;
+        for (pk in padState) { if (padState.hasOwnProperty(pk)) padState[pk].suppressed = true; }
+        syncHold(source || 'blur');
+      }
 
       /* --- steering state (only live when opts.steer) ---------------- *
        * keyVec  which direction keys are held down right now
@@ -141,13 +181,21 @@
       el.addEventListener('pointerdown', function (e) {
         if (onInteractive(e)) return;
         lastSource = 'touch';
+        pointerHeld = true;
         if (steer) {
           ptr.active = true;
           ptr.id = e.pointerId;
           trackPointer(e);
         }
         onPress('touch');
+        syncHold('touch');
       });
+      function pointerRelease() { pointerHeld = false; syncHold('touch'); }
+      el.addEventListener('pointerup', pointerRelease);
+      el.addEventListener('pointerleave', pointerRelease);
+      // release on the window too: a finger lifted off-element still counts
+      global.addEventListener('pointerup', pointerRelease);
+      global.addEventListener('pointercancel', pointerRelease);
 
       if (steer) {
         el.addEventListener('pointermove', function (e) {
@@ -198,8 +246,16 @@
 
         if (e.preventDefault) e.preventDefault();
         lastSource = 'key';
+        keysDown[e.key] = 1;
         onPress('key');
+        syncHold('key');
       });
+
+      global.addEventListener('keyup', function (e) {
+        if (keysDown[e.key]) { delete keysDown[e.key]; syncHold('key'); }
+      });
+
+      global.addEventListener('blur', function () { releaseAll('blur'); });
 
       // --- gamepad ---
       global.addEventListener('gamepadconnected', function (e) {
@@ -217,11 +273,13 @@
         try { pads = global.navigator && global.navigator.getGamepads ? global.navigator.getGamepads() : null; }
         catch (e) { return; }
         if (!pads) return;
+        var held = false;
 
         for (var i = 0; i < pads.length; i++) {
           var p = pads[i];
           if (!p || !p.buttons) continue;
-          var st = padState[p.index] || (padState[p.index] = { b: [], ax: {} });
+          var st = padState[p.index] || (padState[p.index] = { b: [], ax: {}, suppressed: suppressNewPads });
+          var padDown = false;
 
           for (var b = 0; b < p.buttons.length; b++) {
             var btn = p.buttons[b];
@@ -234,6 +292,8 @@
               else if (b === BTN_RIGHT) { onNav('right'); }
               else onPress('pad');           // A, B, bumpers, triggers, d-pad up/down
             }
+            if (down && b !== BTN_X && b !== BTN_Y && b !== BTN_START &&
+                b !== BTN_SELECT && b !== BTN_LEFT && b !== BTN_RIGHT) padDown = true;
             st.b[b] = down;
           }
 
@@ -243,7 +303,16 @@
           if (upNow && !st.ax.up) { lastSource = 'pad'; onPress('pad'); }
           if (lNow && !st.ax.l) onNav('left');
           if (rNow && !st.ax.r) onNav('right');
+          if (upNow) padDown = true;
           st.ax.up = upNow; st.ax.l = lNow; st.ax.r = rNow;
+
+          if (st.suppressed) {
+            // Force this pad off until it's observed with nothing pressed —
+            // only then is its suppression genuinely satisfied and lifted.
+            if (!padDown) st.suppressed = false;
+            padDown = false;
+          }
+          if (padDown) held = true;
 
           if (steer) {
             var sx = Math.abs(ax[0] || 0) > STICK_DEAD ? ax[0] : 0;
@@ -259,6 +328,8 @@
             if (sx || sy) lastSource = 'pad';
           }
         }
+
+        if (held !== padHeld) { padHeld = held; syncHold('pad'); }
       }
 
       /* Keys and stick added together, then clamped to a unit circle so a
@@ -287,7 +358,8 @@
            false means nobody is touching — not "touching the top left". */
         pointer: function () { return { active: ptr.active, nx: ptr.nx, ny: ptr.ny }; },
         releaseSteer: clearHeld,
-        get lastSource() { return lastSource; }
+        get lastSource() { return lastSource; },
+        get held() { return wasHeld; }
       };
     },
 

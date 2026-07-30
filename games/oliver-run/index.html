@@ -243,6 +243,27 @@
 <script>
 (() => {
   const W = 900, H = 450, GROUND = 366;
+  /* Every number that changes how the high road feels. Tune these with a
+     six-year-old sitting next to you; nothing else should need touching. */
+  const TUNE = {
+    glideVyMax:    2.4,          // max descent px/frame while the button is held
+    tier1Y:        GROUND - 130, // low platform top surface (jump apex is ~152)
+    tier2Y:        GROUND - 260, // high platform, only reachable from tier 1
+    platWMin:      90,
+    platWMax:      160,
+    platThick:     16,
+    clusterMin:    2,
+    clusterMax:    4,
+    clusterGapMin: 420,          // frames of plain ground between clusters
+    clusterGapMax: 780,
+    firstCluster:  480,          // frames into a run phase before the first one
+    tier2Chance:   0.45,
+    goldChance:    0.7,          // chance a given platform carries a gold star
+    goldLift:      40,           // how far above the platform the star floats
+    goldPoints:    50,           // a normal star is 10
+    goldCharge:    5,            // a normal star is 2
+    skySeed:       20260729,
+  };
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const el = {
@@ -534,6 +555,12 @@
   let phase, phaseT, boss, trophies, chargeCount;
   let mode = 'adventure', rushCount = 0;
   let trail = [];
+  /* Sky lane. Its randomness comes from a dedicated PRNG so the Math.random()
+     stream stays byte-identical for anyone who never leaves the ground —
+     that is what makes the ground-lane regression test an exact equality. */
+  let platforms = [], skyIn = 0;
+  let skyRnd = rnd(TUNE.skySeed);
+  const skyRange = (a, b) => a + skyRnd()*(b - a);
   const SIS_GAP = 60, SIS_SCALE = .55, SIS_DELAY = 15;
   let leader = 'oliver';
   const swapBtn = document.getElementById('swapBtn');
@@ -561,6 +588,7 @@
     phase='run'; phaseT=0; boss=null; trophies=0; chargeCount=0;
     rushCount = 0; bag = [];
     trail = [];
+    platforms = []; skyIn = TUNE.firstCluster; skyRnd = rnd(TUNE.skySeed);
     power = null; orbs = []; powerIn = 420; jumpsLeft = 0; hero.sc = 1;
     el.powerTag.hidden = true;
     el.bossWrap.hidden = true; el.trophies.textContent = '';
@@ -584,7 +612,7 @@
     if (P('rocket')) jv *= 1.12;
     if (P('giant')) jv *= 1.06;
     hero.vy = jv; hero.onGround = false; coyote = 0; buffer = 0;
-    const base = heroBase();
+    const base = hero.y;
     for (let i=0;i<7;i++) bits.push({x:hero.x,y:base,vx:-1-Math.random()*2.5,vy:-Math.random()*2,
       life:20,c: grounded ? 'rgba(255,255,255,.7)' : '#FFB03D',s:4,rot:0,spin:0});
     sfx.jump();
@@ -593,6 +621,7 @@
   /* One input layer for touch, mouse, keyboard, TV remote and gamepad.
      Any button on a pad jumps except X / Y, which swap the kids. */
   const padTag = document.getElementById('padTag');
+  let holding = false;
   const gamepads = KidKit.input.create({
     element: document.getElementById('stage'),
     onPress: () => {
@@ -600,6 +629,7 @@
       if (!KidKit.input.activateFocused()) startGame('adventure');
     },
     onAction: () => doSwap(),
+    onHold: down => { holding = down; },
     onNav: dir => { if (state !== 'play') KidKit.input.moveFocus(dir, el.start); },
     onPause: () => { if (state !== 'play') KidKit.input.activateFocused(); },
     onGamepad: (connected, id) => {
@@ -703,6 +733,22 @@
     starIn = 110 + Math.random()*140;
   }
 
+  /* A cluster always opens on tier 1 so it is reachable from the ground;
+     later platforms in the cluster may step up to tier 2. */
+  function spawnCluster(){
+    const n = Math.floor(skyRange(TUNE.clusterMin, TUNE.clusterMax + 1));
+    let x = W + 80;
+    for (let i=0;i<n;i++){
+      const w = skyRange(TUNE.platWMin, TUNE.platWMax);
+      const high = i > 0 && skyRnd() < TUNE.tier2Chance;
+      const p = {x, y: high ? TUNE.tier2Y : TUNE.tier1Y, w, star:null};
+      if (skyRnd() < TUNE.goldChance) p.star = {dx: w/2, got:false};
+      platforms.push(p);
+      x += w + skyRange(70, 150);
+    }
+    skyIn = skyRange(TUNE.clusterGapMin, TUNE.clusterGapMax);
+  }
+
   /* ---------- power-ups ---------- */
   const POWERS = [
     {id:'dog',    name:'RIDE THE DOG', dur:900, c:'#C98A4A', icon:'paw'},
@@ -744,6 +790,20 @@
   const RIDE_H = 40;
   function heroBase(){ return P('dog') ? GROUND - RIDE_H : GROUND; }
   function targetScale(){ return P('giant') ? 1.75 : P('tiny') ? .58 : 1; }
+
+  /* The surface the hero would land on this frame. Platforms are one-way:
+     they only catch a hero who was at or above the top edge last frame, so
+     jumping up through one never collides. Uses foot position, not the body
+     box — the body box is what caused the old hitbox-to-the-ground bug. */
+  function landingY(prevY){
+    let base = heroBase();
+    if (P('dog')) return base;
+    for (const p of platforms){
+      if (hero.x < p.x - 6 || hero.x > p.x + p.w + 6) continue;
+      if (prevY <= p.y + 2 && p.y < base) base = p.y;
+    }
+    return base;
+  }
 
   /* ---------- boss ---------- */
   const BOSS_HOME = 660, BOSS_AIR = GROUND-118;
@@ -934,9 +994,14 @@
     if (buffer>0) buffer -= dt;
     if (coyote>0) coyote -= dt;
     tryJump();
+    const prevY = hero.y;
     hero.vy += lv.grav*dt;
+    // Hold to float: clamps descent only, so it can never gain height and
+    // reaching a platform stays a matter of nailing the jump.
+    const gliding = holding && hero.vy > 0 && !hero.onGround && !P('dog');
+    if (gliding) hero.vy = Math.min(hero.vy, TUNE.glideVyMax);
     hero.y += hero.vy*dt;
-    const base = heroBase();
+    const base = landingY(prevY);
     if (hero.y>=base){
       hero.y = base; hero.vy = 0;
       jumpsLeft = P('rocket') ? 1 : 0;
@@ -945,10 +1010,13 @@
     hero.run += dt*(hero.onGround ? .32 : .1);
 
     // record Oliver's movement; little sister replays it a beat later
-    trail.push({y:hero.y, run:hero.run, air:!hero.onGround});
+    trail.push({y:hero.y, run:hero.run, air:!hero.onGround, glide:gliding});
     while (trail.length > SIS_DELAY) trail.shift();
 
-    if (phase==='run'){ spawnIn -= dt; if (spawnIn<=0) spawn(); }
+    if (phase==='run'){
+      spawnIn -= dt; if (spawnIn<=0) spawn();
+      skyIn -= dt;   if (skyIn<=0) spawnCluster();
+    }
     starIn -= dt; if (starIn<=0) spawnStar();
     powerIn -= dt;
     if (powerIn<=0){ if (!power && !orbs.length) spawnOrb(); else powerIn = 240; }
@@ -968,6 +1036,24 @@
     const inFire = (cx,cy) => fireR>0 && Math.hypot(cx-hero.x, cy-hcy) < fireR;
     const hit = (x,y,w,h) => hitBox(x,y,w,h) || inFire(x+w/2, y+h/2);
     const sup = superT>0;
+
+    for (const p of platforms) p.x -= speed*dt;
+    platforms = platforms.filter(p => p.x + p.w > -120);
+
+    /* Gold stars ride their platform, so they are always exactly as reachable
+       as the platform is. burst() draws from Math.random(), but collecting one
+       requires leaving the ground, so a grounded run never reaches it. */
+    for (const p of platforms){
+      if (!p.star || p.star.got) continue;
+      const sx = p.x + p.star.dx, sy = p.y - TUNE.goldLift;
+      if (Math.hypot(sx - hero.x, sy - hcy) < 44*Math.max(1, hs)){
+        p.star.got = true;
+        points += TUNE.goldPoints;
+        burst(sx, sy, ['#FFD23D','#FFF3D6','#FFFFFF'], 22, 7);
+        pop(sx, sy-26, '+'+TUNE.goldPoints, '#FFD23D', 32);
+        sfx.star(); addCharge(TUNE.goldCharge); bumpCombo();
+      }
+    }
 
     // fire ring embers
     if (fireR && Math.random()<.6){
@@ -1472,6 +1558,38 @@
       ctx.fillStyle = '#0C3A4E'; ctx.beginPath(); ctx.arc(2,-21,5,0,7); ctx.fill();
       ctx.fillStyle = '#3EB394'; roundRect(-13,-3,10,4,2); ctx.fill(); roundRect(3,-3,10,4,2); ctx.fill();
     }
+    ctx.restore();
+  }
+
+  /* No Math.random() in here — shimmer comes from the frame counter, or the
+     ground-lane fingerprint test breaks on the render path. */
+  function drawPlatform(p){
+    const lv = L();
+    ctx.fillStyle = lv.block.b;
+    roundRect(p.x, p.y, p.w, TUNE.platThick, 6); ctx.fill();
+    ctx.fillStyle = lv.block.a;
+    roundRect(p.x, p.y, p.w, TUNE.platThick*.6, 6); ctx.fill();
+    ctx.fillStyle = lv.line;
+    ctx.globalAlpha = .5 + Math.sin(t*.04 + p.x*.01)*.2;
+    ctx.fillRect(p.x+4, p.y, p.w-8, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  /* No Math.random() in here — shimmer comes from the frame counter, or the
+     ground-lane fingerprint test breaks on the render path. */
+  function drawGoldStar(x, y){
+    ctx.save();
+    ctx.translate(x, y + Math.sin(t*.05 + x*.01)*6);
+    ctx.rotate(Math.sin(t*.02 + x*.01)*.3);
+    const g = ctx.createRadialGradient(0,0,3,0,0,40);
+    g.addColorStop(0,'rgba(255,230,120,.75)');
+    g.addColorStop(1,'rgba(255,210,61,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,40,0,7); ctx.fill();
+    ctx.fillStyle = '#FFD23D'; ctx.beginPath();
+    for (let i=0;i<10;i++){ const r = i%2?9:22, a = -Math.PI/2 + i*Math.PI/5;
+      ctx[i?'lineTo':'moveTo'](Math.cos(a)*r, Math.sin(a)*r); }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#FFF3D6'; ctx.lineWidth = 2; ctx.stroke();
     ctx.restore();
   }
 
@@ -2287,6 +2405,10 @@
 
     drawSky(); drawBackdrop(); drawGround();
 
+    for (const p of platforms){
+      drawPlatform(p);
+      if (p.star && !p.star.got) drawGoldStar(p.x + p.star.dx, p.y - TUNE.goldLift);
+    }
     for (const s of stars) drawStar(s);
     for (const o of orbs) drawOrb(o);
     for (const o of things) drawSmashable(o);

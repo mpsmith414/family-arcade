@@ -467,16 +467,26 @@ test('glide is inert while grounded', note => {
   return h;
 });
 
+/* How a child actually glides: the same press both jumps and begins the
+   float, you keep holding to stay up, then release and press again. You
+   cannot press a button you are already holding, so never mix hold() with
+   pad() — cycle hold() instead. holdFor = 1 gives identical jump edges with
+   no float, which makes it the control run for any A/B comparison. */
+function runCycles(h, totalFrames, holdFor, period) {
+  for (let i = 0; i < totalFrames; i++) {
+    const phase = i % (period || 40);
+    if (phase === 0) h.hold(true);
+    if (phase === holdFor) h.hold(false);
+    pump(h, 1);
+  }
+}
+
 test('holding through a long run throws nothing', note => {
   const h = createHarness('oliver-run', { seed: 33 });
   h.tap();
-  h.hold(true);
-  for (let i = 0; i < 6000; i++) {
-    if (i % 5 === 0) h.pad('a');   // jump into the glide repeatedly
-    pump(h, 1);
-  }
+  runCycles(h, 6000, 24, 40);      // jump, float for 24 frames, land, repeat
   assert(h.num('score') > 500, `run should have progressed, got ${h.num('score')}`);
-  note(`score ${h.num('score')} over 6000 frames of hold + jump`);
+  note(`score ${h.num('score')} over 6000 frames of jump-and-float cycles`);
   return h;
 });
 ```
@@ -625,11 +635,7 @@ test('sky lane: Boss Rush is unaffected by the sky lane code', note => {
 test('sky lane: platforms survive a long run without incident', note => {
   const h = createHarness('oliver-run', { seed: 42 });
   h.tap();
-  h.hold(true);
-  for (let i = 0; i < 12000; i++) {
-    if (i % 3 === 0) h.pad('a');     // climb around the clusters
-    pump(h, 1);
-  }
+  runCycles(h, 12000, 24, 40);       // climb around the clusters
   assert(h.num('score') > 500, `run should have progressed, got ${h.num('score')}`);
   assert(h.hidden('startScreen'), 'game should still be in play');
   note(`score ${h.num('score')} after 12000 frames of climbing`);
@@ -656,11 +662,7 @@ test('sky lane: gold stars are unreachable without leaving the ground', note => 
 
   const climber = createHarness('oliver-run', { seed: 43 });
   climber.tap();
-  climber.hold(true);
-  for (let i = 0; i < 9000; i++) {
-    if (i % 3 === 0) climber.pad('a');
-    pump(climber, 1);
-  }
+  runCycles(climber, 9000, 24, 40);
   const climbed = climber.num('score');
   note(`grounded ${flat} vs climbing ${climbed}`);
   assert(climbed > flat * 1.15,
@@ -925,27 +927,25 @@ allows a direct measurement of the glide deferred from Task 3. Two runs, same
 seed, same jump cadence, differing **only** in whether the button is held:
 
 ```js
-/* The one test that isolates the glide itself. Identical seed and identical
-   jump cadence, so the only variable is the hold. Extra hang time means more
-   gold stars lined up and collected, which shows up in the score. */
+/* The one test that isolates the glide itself. Both runs share a seed and
+   press the jump button on exactly the same frames — the ONLY difference is
+   how long the button stays down afterwards. holdFor:1 releases immediately
+   (a plain jump); holdFor:24 keeps floating. Any score difference is the
+   glide and nothing else. */
 test('glide measurably improves sky lane collection', note => {
-  const run = held => {
+  const run = holdFor => {
     const h = createHarness('oliver-run', { seed: 44 });
     h.tap();
-    if (held) h.hold(true);
-    for (let i = 0; i < 9000; i++) {
-      if (i % 3 === 0) h.pad('a');
-      h.frames(1);
-    }
+    runCycles(h, 9000, holdFor, 40);
     const score = h.num('score');
     h.dispose();
     return score;
   };
-  const without = run(false);
-  const with_ = run(true);
-  note(`no glide ${without} vs glide ${with_}`);
-  assert(with_ > without,
-    `holding should collect more: ${without} -> ${with_}`);
+  const tapOnly = run(1);
+  const floating = run(24);
+  note(`tap-only ${tapOnly} vs floating ${floating}`);
+  assert(floating > tapOnly,
+    `holding should collect more: ${tapOnly} -> ${floating}`);
 });
 ```
 

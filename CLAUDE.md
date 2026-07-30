@@ -93,6 +93,14 @@ h.padHold('left', true); // d-pad held, unlike padPress which is one edge
 h.pointerHold(.02, .95); h.pointerRelease();
 ```
 
+Feel values for the sky lane and the glide all live in the `TUNE` object at the
+top of `games/oliver-run/index.html`. Change those rather than hunting through
+the game loop. Anything sky-lane related must draw from `skyRnd`, never
+`Math.random()` — the ground-lane regression test asserts an exact fingerprint
+of the `Math.random()` stream, and one stray draw on the render path breaks it.
+That test is what proves the younger child's game is untouched by everything
+added above it, so treat a failure there as a real defect, never a flaky test.
+
 Gotchas already handled in there, worth knowing before you change it:
 
 - **Node has a built-in read-only `navigator`** that shadows a plain
