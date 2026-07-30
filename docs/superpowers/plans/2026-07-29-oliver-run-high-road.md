@@ -10,6 +10,21 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-29-oliver-run-high-road-design.md`
 
+## Regression guards — read before reviewing
+
+Three tests in this plan are **green before and after** the task that
+introduces them, deliberately:
+
+1. `ground lane is byte-identical (Emsile regression)` — Task 1
+2. `glide is inert while grounded` — Task 3
+3. `sky lane: Boss Rush is unaffected by the sky lane code` — Task 4
+
+They are invariance proofs, not TDD red-first tests. Their value is precisely
+that they never go red: they assert that the ground lane a three-year-old plays
+is untouched by everything being added above it. Converting them to fail-first
+would destroy what they prove. **Do not flag them as dead tests, and do not
+rewrite them to fail first.** Every other test in this plan is red-first.
+
 ## Global Constraints
 
 - **No build step, no npm, no dependencies, no framework.** Vanilla HTML + CSS + canvas 2D + WebAudio.
@@ -152,7 +167,11 @@ Expected: a single JSON line. Copy it verbatim — it is pasted into the test in
 In `test/smoke.js`, immediately after the `POWER_DURATIONS` constant, add the captured object and the test. **Replace the placeholder object below with the exact JSON printed in Step 4.**
 
 ```js
-/* Captured from the pre-high-road build. A run with no jump and no hold input
+/* REGRESSION GUARD — green before and after every task, by design. That is
+   the entire point: it proves nothing changed. Do not "fix" it into a
+   red-first test; inverting it would destroy the invariance proof.
+
+   Captured from the pre-high-road build. A run with no jump and no hold input
    never leaves the ground, so it can never touch a platform or a gold star —
    which means the sky lane must not perturb this by so much as one RNG draw.
    If this test fails after a sky-lane change, the separate-PRNG rule was
@@ -424,7 +443,9 @@ quantitative proof that glide works is deferred to Task 5, where gold stars make
 altitude observable through the score.
 
 ```js
-/* Glide only engages while airborne and descending. A run that never jumps
+/* REGRESSION GUARD — green before and after this task, by design.
+
+   Glide only engages while airborne and descending. A run that never jumps
    must therefore be bit-for-bit identical whether or not the button is held —
    which is a far stronger claim than "the score looks similar". */
 test('glide is inert while grounded', note => {
@@ -585,12 +606,19 @@ Adds the TUNE block holding every high-road feel value."
 Add to `test/smoke.js`:
 
 ```js
-test('sky lane: platforms appear only during the run phase', note => {
+/* REGRESSION GUARD — green before and after this task, by design.
+   Platforms are not observable from the DOM, so this cannot assert their
+   absence in Boss Rush directly. What it does assert is the thing that would
+   actually break: that a mode with no `run` phase still runs clean once the
+   sky-lane code exists. Named for what it checks, not what we wish it could. */
+test('sky lane: Boss Rush is unaffected by the sky lane code', note => {
   const h = createHarness('oliver-run', { seed: 41 });
-  h.click('rushBtn');          // Boss Rush has no run phase at all
+  h.click('rushBtn');          // Boss Rush only cycles warn -> boss -> victory
   pump(h, 6000);
   assert(h.text('lvlName') === 'Boss Rush', 'should be in rush mode');
-  note('rush mode completed 6000 frames with no run phase');
+  assert(h.num('score') > 200, `rush should have progressed, got ${h.num('score')}`);
+  assert(h.hidden('startScreen'), 'game should still be in play');
+  note(`rush reached score ${h.num('score')} over 6000 frames`);
   return h;
 });
 
