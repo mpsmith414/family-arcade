@@ -487,6 +487,114 @@ test('fishing: the book survives a reload', note => {
   return h;
 });
 
+/* --- sizes and the fight --------------------------------------------- *
+ * Every catch rolls a size, and the biggest of each species is kept. That is
+ * what stops a duplicate being a dud: a fourth jellyfish might still be the
+ * biggest jellyfish. Anything at or over BIG_SIZE puts up a fight — a longer
+ * reel the player can tap through — so these also cover that path.
+ * --------------------------------------------------------------------- */
+const SIZE_MIN = 0.62, SIZE_MAX = 1.9;
+
+function sizeRecords(h) {
+  const raw = h.store['emsile-fishing-sizes'];
+  return raw === undefined ? null : JSON.parse(raw);
+}
+/* Watch the badge line as it changes, rather than sampling it at one frame. */
+function collectBadges(h, frames, gap) {
+  const seen = [];
+  for (let i = 0; i < frames; i++) {
+    if (i % (gap || 10) === 0) h.tap();
+    pump(h, 1);
+    if (!h.hidden('catchWrap')) {
+      const badge = h.text('catchNew');
+      const name = h.text('catchName');
+      const key = name + '|' + badge;
+      if (seen[seen.length - 1] !== key) seen.push(key);
+    }
+  }
+  return seen;
+}
+
+test('fishing: every fish has a size, and the records only ever go up', note => {
+  const h = createHarness('emsile-fishing', { seed: 202 });
+  h.click('startBtn');
+  mash(h, 5000);
+  pump(h, 120);                       // past the 1200ms save debounce
+
+  const early = sizeRecords(h);
+  assert(early !== null, 'no size records were written to storage');
+  const species = Object.keys(JSON.parse(h.store['emsile-fishing-album']));
+  assert(species.length > 0, 'need some catches first');
+
+  // every species in the book has a record, and every record is a real size
+  for (const id of species) {
+    assert(early[id] !== undefined, `${id} is in the book with no size record`);
+    assertBetween(early[id], SIZE_MIN, SIZE_MAX, `${id} record out of range`);
+  }
+  assert(Object.keys(early).length === species.length,
+    `${Object.keys(early).length} size records vs ${species.length} species in the book`);
+
+  // keep fishing: a record may rise, but must never fall
+  mash(h, 6000);
+  pump(h, 120);
+  const later = sizeRecords(h);
+  for (const id of Object.keys(early)) {
+    assert(later[id] >= early[id],
+      `${id} record went backwards: ${early[id]} -> ${later[id]}`);
+  }
+  const grew = Object.keys(early).filter(id => later[id] > early[id]);
+  note(`${species.length} species recorded, ${grew.length} beat their record on the second run`);
+  note(`records: ${JSON.stringify(later)}`);
+  return h;
+});
+
+test('fishing: duplicates still pay off — new, biggest and whopper all show', note => {
+  const h = createHarness('emsile-fishing', { seed: 5150 });
+  h.click('startBtn');
+  const badges = collectBadges(h, 16000);
+  const kinds = new Set(badges.map(b => b.split('|')[1]));
+
+  assert(kinds.has('★ NEW FISH ★'), 'never saw a NEW FISH badge');
+  const gotBig = [...kinds].some(k => k.includes('BIGGEST YET') || k === 'WHOPPER!');
+  assert(gotBig, `no size badge in ${badges.length} catches: ${[...kinds].join(' / ')}`);
+  const gotCount = [...kinds].some(k => /^×\d+$/.test(k));
+  assert(gotCount, 'never saw a duplicate count badge');
+
+  // and a duplicate that beats the record must not be labelled NEW
+  const names = badges.map(b => b.split('|')[0]);
+  const dupBiggest = badges.filter((b, i) =>
+    b.includes('BIGGEST YET') && names.indexOf(names[i]) < i);
+  for (const b of dupBiggest) {
+    assert(!b.includes('NEW FISH'), `badge claims both new and biggest: ${b}`);
+  }
+  note(`${badges.length} catches, badges seen: ${[...kinds].join(' / ')}`);
+  return h;
+});
+
+test('fishing: a run of nothing but whoppers fights and lands cleanly', note => {
+  // Bucketing the low end of the RNG pins rollSize() into its whopper band, so
+  // every single fish is big enough to trigger the fight. Safe here because
+  // nothing in this game rejection-samples — every pick is a running sum.
+  const h = createHarness('emsile-fishing', { seed: 606 });
+  h.bucket(0, 20);
+  h.click('startBtn');
+  const badges = collectBadges(h, 6000);
+
+  assert(badges.length > 0, 'no catches at all — the fight may be stalling');
+  assert(h.num('catches') > 0, 'catch counter never moved');
+  assert(h.hidden('startScreen'), 'still fishing');
+
+  const recs = sizeRecords(h);
+  pump(h, 120);
+  const after = sizeRecords(h) || recs;
+  for (const [id, v] of Object.entries(after || {})) {
+    assert(v >= 1.4, `${id} recorded ${v} but every fish should have been a whopper`);
+    assertBetween(v, SIZE_MIN, SIZE_MAX, `${id} record out of range`);
+  }
+  note(`${h.num('catches')} whoppers landed in 6000 frames, records ${JSON.stringify(after)}`);
+  return h;
+});
+
 test('fishing: survives 20000 frames with no exception', note => {
   const h = createHarness('emsile-fishing', { seed: 3 });
   h.click('startBtn');

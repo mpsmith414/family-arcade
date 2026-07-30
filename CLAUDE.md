@@ -10,10 +10,16 @@ rather than land in between.
 
 - `games/oliver-run` — endless runner, tap to jump, 18 bosses, scores distance.
 - `games/emsile-fishing` — still screen, tap on the bite, scores a book of 15 sea
-  creatures. Tap does three jobs depending on state (wiggle the lure / hook the
-  fish / skip the celebration), and mashing is always rewarded, never punished.
-  Miss a bite and the hook still comes up with junk, which is the joke rather
-  than a penalty.
+  creatures. Tap does four jobs depending on state (wiggle the lure / hook the
+  fish / reel faster / skip the celebration), and mashing is always rewarded,
+  never punished. Miss a bite and the hook still comes up with junk, which is
+  the joke rather than a penalty.
+  Every catch rolls a size and the biggest of each species is kept, so a
+  duplicate is never a dud — it might be the biggest one yet. Anything big or
+  rare puts up a fight: a longer reel with the rod bent and the boat lurching,
+  and it stays a dark silhouette until it breaks the surface. That reveal is
+  the payoff, so the tap-to-reel-faster boost is capped short of the end and
+  can never skip it.
 
 ## Hard constraints — do not break these
 

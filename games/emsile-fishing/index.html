@@ -278,6 +278,10 @@
     junk:    ()=>{ tone(300,.20,'sawtooth',.04,-110); setTimeout(()=>tone(200,.28,'sawtooth',.04,-70),170); },
     zone:    ()=>seq([392,523,659,784],110,.24,'triangle',.055),
     bubble:  ()=>tone(1100,.05,'sine',.018,240),
+    bigOne:  ()=>{ tone(140,.5,'sawtooth',.06,60); setTimeout(()=>tone(105,.45,'square',.05,40),150); },
+    reelTick:()=>tone(1250,.035,'square',.022,-320),
+    surface: ()=>{ noise(.32,.09); seq([392,523,659],65,.20,'triangle',.05); },
+    record:  ()=>seq([659,784,988,1319,988,1319],85,.24,'triangle',.06),
   };
   el.mute.addEventListener('click', e=>{
     e.stopPropagation(); muted = !muted;
@@ -358,9 +362,14 @@
   const K_ALBUM = 'emsile-fishing-album';
   const K_TOTAL = 'emsile-fishing-catches';
   const K_JUNK  = 'emsile-fishing-junk';
+  const K_SIZES = 'emsile-fishing-sizes';
 
   let album = KidKit.storage.getJSON(K_ALBUM, {});
   if (!album || typeof album !== 'object') album = {};
+  /* Biggest of each species ever landed, kept in its own key so the album
+     stays a plain {id: count} and old saves need no migration. */
+  let records = KidKit.storage.getJSON(K_SIZES, {});
+  if (!records || typeof records !== 'object') records = {};
   let total = KidKit.storage.getNumber(K_TOTAL, 0);
   let junkPile = KidKit.storage.getNumber(K_JUNK, 0);
   let saveQueued = false;
@@ -370,9 +379,26 @@
     setTimeout(()=>{
       saveQueued = false;
       KidKit.storage.setJSON(K_ALBUM, album);
+      KidKit.storage.setJSON(K_SIZES, records);
       KidKit.storage.set(K_TOTAL, total);
       KidKit.storage.set(K_JUNK, junkPile);
     }, 1200);
+  }
+
+  /* ---------- how big is this one? ----------
+     Banded rather than uniform, so the sizes read as distinct outcomes instead
+     of a smear: most fish are normal, a few are titchy, and one in sixteen is
+     a whopper worth shouting about. Catching a species you already have is
+     never a dud, because it might be the biggest one yet. */
+  const SIZE_MIN = .62, SIZE_MAX = 1.9;
+  const BIG_SIZE = 1.4;              // triggers the fight
+  const WHOPPER  = 1.45;             // worth its own shout
+  function rollSize(){
+    const r = Math.random();
+    if (r < .06) return rnd(1.45, SIZE_MAX);   // whopper
+    if (r < .22) return rnd(1.15, 1.45);       // big
+    if (r < .78) return rnd(.85, 1.15);        // normal
+    return rnd(SIZE_MIN, .85);                 // titchy
   }
 
   const speciesCaught = () => CREATURES.reduce((n,c)=> n + (album[c.id] ? 1 : 0), 0);
@@ -410,12 +436,16 @@
   const CAST_F   = 46;
   const WAIT_MIN = 80,  WAIT_MAX = 180;
   const BITE_F   = 80;              // 1.3s to react
-  const REEL_F   = 56;
+  const REEL_F     = 56;           // an ordinary fish comes straight up
+  const REEL_BIG_F = 124;          // a big one puts up a fight
   const SHOW_F   = 170;
   const WIGGLE_CUT = 30;           // frames a wiggle knocks off the wait
   const WIGGLE_CD  = 12;
+  const REEL_BOOST = 5;            // frames of progress per tap while reeling
   // where the catch ends up: swung in under the rod, clear of the crew's heads
   const LAND_X = BOAT_X + 72, LAND_Y = SEA - 48;
+  // a whopper rides higher so it is held up rather than sat in the boat
+  const landY = () => LAND_Y - (caught ? Math.max(0, caught.size - 1) * 18 : 0);
 
   let state = 'menu';
   let prevState = 'wait';          // what to go back to when the album closes
@@ -425,8 +455,14 @@
   let wiggleCd = 0;
   let hookY = ZONES[0].hookY;
   let bobDip = 0;                  // 0..1, how far the bobber is pulled under
-  let biter = null;                // {def, x, y, dir, wig}
-  let caught = null;               // {def, x, y, rot, isNew}
+  let biter = null;                // {def, x, y, dir, wig, size}
+  let caught = null;               // {def, size, big, x, y, rot, isNew, reveal}
+  let reelProg = 0;                // frames of reeling done — taps add to this
+  let reelDur = REEL_F;
+  let reelTickAcc = 0;
+  let fightPull = 0;               // 0..1, how hard it is pulling right now
+  let rodBend = 0;                 // 0..1, how far the rod tip is loaded down
+  let shake = 0;
   let swimmers = [];
   let bubbles = [];
   let splashes = [];
@@ -521,6 +557,7 @@
     state = 'cast'; phase = 0;
     biter = null; caught = null; bobDip = 0;
     hookY = SEA + 6;
+    rodBend = 0; fightPull = 0;
     el.catchWrap.hidden = true;
     sfx.cast();
     splash(HOOK_X, SEA, 12);
@@ -540,7 +577,10 @@
       def, dir,
       x: dir > 0 ? -80 : W + 80,
       y: Z().hookY + rnd(-40, 40),
-      wig: 0
+      wig: 0,
+      // rolled now rather than on the hook, so a big one is visibly big as it
+      // swims over — half the anticipation is seeing it coming
+      size: rollSize()
     };
   }
 
@@ -551,18 +591,37 @@
   }
 
   /* Nothing is ever lost. Miss the window and the fish shrugs off, but the
-     hook still comes up with something — and the something is funny. */
-  function beginReel(def){
+     hook still comes up with something — and the something is funny.
+     Whatever it is comes up as a dark shape and only resolves when it breaks
+     the surface, so every reel is a small "what IS that" — junk included. */
+  function beginReel(def, size){
     state = 'reel'; phase = 0;
-    caught = { def, x: HOOK_X, y: hookY, rot: 0, isNew: false };
+    const sz = def.junk ? 1 : (size == null ? 1 : size);
+    const big = !def.junk && (sz >= BIG_SIZE || !!def.rare || def.len >= 70);
+    caught = {
+      def, size: sz, big,
+      x: HOOK_X, y: hookY, y0: hookY,
+      rot: 0, isNew: false,
+      reveal: 0, surfaced: false
+    };
     biter = null;
     bobDip = 0;
-    if (def.junk) sfx.junk(); else sfx.catchIt();
+    reelProg = 0; reelTickAcc = 0;
+    reelDur = big ? REEL_BIG_F : REEL_F;
+    if (def.junk) sfx.junk();
+    else if (big){
+      sfx.bigOne();
+      shake = 9;
+      pop(HOOK_X, hookY - 54, 'BIG ONE!', '#FFD23D', 30);
+    }
+    else sfx.catchIt();
   }
 
   function beginShow(){
     state = 'show'; phase = 0;
     const def = caught.def;
+    caught.reveal = 1;
+    rodBend = 0; fightPull = 0;
     sfx.land();
     splash(HOOK_X, SEA, 10);
 
@@ -573,16 +632,28 @@
     if (def.junk){
       junkPile++;
       el.catchNew.textContent = 'JUST JUNK — FUNNY THOUGH';
-      pop(LAND_X, LAND_Y - 34, '?!', '#FFD23D', 30);
+      pop(LAND_X, landY() - 34, '?!', '#FFD23D', 30);
     } else {
       total++;
       album[def.id] = (album[def.id] || 0) + 1;
       caught.isNew = album[def.id] === 1;
-      el.catchNew.textContent = caught.isNew ? '★ NEW FISH ★'
-        : (album[def.id] > 1 ? '×' + album[def.id] : '');
-      if (def.rare){ sfx.rare(); party(LAND_X, LAND_Y, 70); }
-      else if (caught.isNew){ sfx.newOne(); party(LAND_X, LAND_Y, 46); }
-      else party(LAND_X, LAND_Y, 16);
+
+      // a species you already have is still worth landing if it beats your record
+      const prev = records[def.id] || 0;
+      const beat = caught.size > prev + .005;
+      if (beat) records[def.id] = Math.round(caught.size * 100) / 100;
+
+      el.catchNew.textContent =
+          caught.isNew                 ? '★ NEW FISH ★'
+        : beat                         ? '🏆 BIGGEST YET!'
+        : caught.size >= WHOPPER       ? 'WHOPPER!'
+        : album[def.id] > 1            ? '×' + album[def.id]
+        : '';
+
+      if (def.rare){ sfx.rare(); party(LAND_X, landY(), 70); }
+      else if (caught.isNew){ sfx.newOne(); party(LAND_X, landY(), 46); }
+      else if (beat){ sfx.record(); party(LAND_X, landY(), 40); }
+      else party(LAND_X, landY(), 16);
 
       const nz = zoneIndex();
       if (nz !== zi){
@@ -615,8 +686,17 @@
     if (state === 'album'){ closeAlbum(); return; }
 
     if (state === 'bite'){
-      beginReel(biter.def);
+      beginReel(biter.def, biter.size);
       pop(HOOK_X, hookY - 34, 'GOT IT!', '#8BE05A', 26);
+      return;
+    }
+    /* Reeling: taps haul it in faster. Capped short of the end so the surface
+       reveal always gets to play — the whole point of the fight is the moment
+       you find out what it is. */
+    if (state === 'reel'){
+      reelProg = Math.min(reelProg + REEL_BOOST, reelDur * .92);
+      splash(caught.x, Math.max(SEA, caught.y), 4);
+      sfx.reelTick();
       return;
     }
     if (state === 'wait' || state === 'approach'){
@@ -636,7 +716,7 @@
       return;
     }
     if (state === 'show' && phase > 24){ beginCast(); return; }
-    if (state === 'cast' || state === 'reel') return;
+    if (state === 'cast') return;
   }
 
   function openAlbum(){
@@ -679,6 +759,7 @@
     t += dt;
     if (wiggleCd > 0) wiggleCd -= dt;
     if (glowPulse > 0) glowPulse = Math.max(0, glowPulse - dt*.02);
+    if (shake > 0) shake = Math.max(0, shake - .38*dt);
 
     // ambience keeps running behind the album and the menu alike
     if (swimmers.length < 7 && Math.random() < .012*dt) spawnSwimmer();
@@ -754,6 +835,7 @@
       b.y += (hookY - b.y) * .12 * dt;
       bobDip = .55 + Math.sin(t*.42)*.42;
       hookY = Z().hookY + Math.sin(t*.42)*7;
+      rodBend = .1 + bobDip*.09;               // the rod already twitches here
       if (phase >= BITE_F){
         // it got away — so the hook brings up junk instead, which is funnier
         pop(HOOK_X, hookY - 40, 'bye!', 'rgba(255,255,255,.8)', 20);
@@ -763,28 +845,56 @@
     }
 
     if (state === 'reel'){
-      const k = Math.min(1, phase / REEL_F);
-      caught.rot = Math.sin(phase*.35) * .5;
+      // reelProg, not phase: a tap adds to it, so mashing hauls it in faster
+      reelProg += dt;
+      const k = Math.min(1, reelProg / reelDur);
+      const surfaceY = SEA - 8;
+
+      // the rod loads up hardest through the middle of the fight
+      const load = Math.sin(k*Math.PI);
+      rodBend = (caught.big ? .95 : .28) * load;
+      fightPull = caught.big ? load : 0;
+
+      // a big one thrashes on the way up: net rising, but never smoothly
+      const thrashY = caught.big ? Math.sin(reelProg*.26)*15*fightPull : 0;
+      const thrashX = caught.big ? Math.sin(reelProg*.19)*11*fightPull : 0;
+      caught.rot = Math.sin(reelProg*.35) * (caught.big ? .62 : .5);
+
       if (k < .62){
-        // straight up the line, breaking the surface at the top
         const kk = k / .62;
-        caught.x = HOOK_X;
-        caught.y = hookY + (SEA - 8 - hookY) * kk;
-        hookY = caught.y;
+        const smooth = caught.y0 + (surfaceY - caught.y0) * kk;
+        caught.x = HOOK_X + thrashX;
+        caught.y = smooth + thrashY;
+        hookY = smooth;
       } else {
         // then an arc over into the boat, hook dropping back in the water
         const kk = (k - .62) / .38;
         caught.x = HOOK_X + (LAND_X - HOOK_X) * kk;
-        caught.y = (SEA - 8) + (LAND_Y - (SEA - 8)) * Math.sin(kk*Math.PI*.5);
+        caught.y = surfaceY + (landY() - surfaceY) * Math.sin(kk*Math.PI*.5);
         hookY = SEA + 4;
       }
+
+      // a dark shape below the water, fully itself by the time it is clear of it
+      caught.reveal = Math.max(0, Math.min(1, (SEA + 12 - caught.y) / 20));
+      if (!caught.surfaced && caught.reveal > .3){
+        caught.surfaced = true;
+        sfx.surface();
+        splash(caught.x, SEA, caught.big ? 26 : 14);
+        if (caught.big) shake = 7;
+      }
+
+      if (caught.big){
+        reelTickAcc += dt;
+        if (reelTickAcc >= 9){ reelTickAcc = 0; sfx.reelTick(); }
+      }
+
       if (k >= 1) beginShow();
       return;
     }
 
     if (state === 'show'){
       caught.rot = Math.sin(phase*.22) * .28;
-      caught.y = LAND_Y + Math.sin(phase*.16)*4;
+      caught.y = landY() + Math.sin(phase*.16)*4;
       if (phase >= SHOW_F) beginCast();
       return;
     }
@@ -1326,8 +1436,14 @@
   /* ================================================================== *
    * the boat and the crew
    * ================================================================== */
-  function boatBob(){ return Math.sin(t*.028)*3.4; }
-  function boatTilt(){ return Math.sin(t*.028 + 1)*.028; }
+  /* fightPull makes the whole boat lurch, which is most of why a big one feels
+     like a big one — the fish itself is still just a shape until it surfaces. */
+  function boatBob(){ return Math.sin(t*.028)*3.4 + fightPull*Math.sin(t*.5)*3.2; }
+  function boatTilt(){ return Math.sin(t*.028 + 1)*.028 + fightPull*Math.sin(t*.42)*.05; }
+  // the rod tip, wherever the current bend has put it — the line hangs off this
+  function rodTip(){
+    return { x: ROD_TIP.x, y: ROD_TIP.y + boatBob() + rodBend*30 };
+  }
 
   function drawEmsile(){
     // seated, blonde, purple dress — same kid as Oliver Run, sitting down
@@ -1432,11 +1548,11 @@
     ctx.save(); ctx.translate(-32, -16); drawOliver(); ctx.restore();
     ctx.save(); ctx.translate(18, -16); drawEmsile(); ctx.restore();
 
-    // the rod, in Emsile's hands
+    // the rod, in Emsile's hands — bends down under load
     ctx.strokeStyle = '#5A3A1E'; ctx.lineWidth = 4; ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(28, -40);
-    ctx.quadraticCurveTo(62, -66, 96, -80);
+    ctx.quadraticCurveTo(62, -66 + rodBend*20, 96, -80 + rodBend*30);
     ctx.stroke();
     ctx.lineCap = 'butt';
     ctx.restore();
@@ -1447,12 +1563,13 @@
 
   function drawLine(){
     const by = bobberY();
+    const tip = rodTip();
     ctx.strokeStyle = 'rgba(255,255,255,.62)';
     ctx.lineWidth = 1.6;
-    // rod tip out to the bobber, with a little sag
+    // rod tip out to the bobber; the sag pulls out straight under load
     ctx.beginPath();
-    ctx.moveTo(ROD_TIP.x, ROD_TIP.y + boatBob());
-    ctx.quadraticCurveTo((ROD_TIP.x + HOOK_X)/2, ROD_TIP.y + 46 + boatBob(), HOOK_X, by);
+    ctx.moveTo(tip.x, tip.y);
+    ctx.quadraticCurveTo((tip.x + HOOK_X)/2, tip.y + 46*(1 - rodBend*.8), HOOK_X, by);
     ctx.stroke();
     // bobber down to the hook
     ctx.strokeStyle = 'rgba(255,255,255,.4)';
@@ -1615,7 +1732,8 @@
     if (!biter) return;
     ctx.save();
     ctx.translate(biter.x, biter.y);
-    const sc = state === 'bite' ? 1 + Math.sin(t*.4)*.04 : 1;
+    const pulse = state === 'bite' ? 1 + Math.sin(t*.4)*.04 : 1;
+    const sc = pulse * biter.size;
     ctx.scale(biter.dir > 0 ? sc : -sc, sc);
     drawCreature(biter.def, biter.wig);
     ctx.restore();
@@ -1623,16 +1741,31 @@
 
   function drawCaught(){
     if (!caught) return;
+    const rev = caught.reveal;
     ctx.save();
     ctx.translate(caught.x, caught.y);
     ctx.rotate(caught.rot);
-    if (caught.def.rare){
-      const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 70);
-      g.addColorStop(0, 'rgba(255,240,170,.5)'); g.addColorStop(1, 'rgba(255,210,61,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 70, 0, 7); ctx.fill();
+    ctx.scale(caught.size, caught.size);
+
+    // under the water it is only a shape; it resolves as it breaks the surface
+    if (rev < 1){
+      const sil = silhouetteOf(caught.def, SIL_DEEP);
+      ctx.globalAlpha = 1 - rev;
+      ctx.drawImage(sil, -sil.width/2, -sil.height/2);
+      ctx.globalAlpha = 1;
     }
-    drawCreature(caught.def, t*.3);
+    if (rev > 0){
+      ctx.globalAlpha = rev;
+      if (caught.def.rare){
+        const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 70);
+        g.addColorStop(0, 'rgba(255,240,170,.5)'); g.addColorStop(1, 'rgba(255,210,61,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 70, 0, 7); ctx.fill();
+      }
+      drawCreature(caught.def, t*.3);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
+
     // sparkles on a rare one
     if (caught.def.rare && state === 'show'){
       ctx.fillStyle = 'rgba(255,246,200,.9)';
@@ -1704,9 +1837,12 @@
      turtle's flippers, the chest's gold, the lantern's glow), and every one of
      them leaked through. Rendering to a buffer and flooding it through
      source-in masks the lot, whatever the art does. Baked once per creature. */
+  const SIL_BOOK = '#5E88A8';        // light, against the dark fish book
+  const SIL_DEEP = '#0A2438';        // dark, against the water while reeling
   const silCache = {};
-  function silhouetteOf(def){
-    if (silCache[def.id]) return silCache[def.id];
+  function silhouetteOf(def, color){
+    const key = def.id + color;
+    if (silCache[key]) return silCache[key];
     const w = Math.ceil(Math.max(def.len, def.tall)*1.8) + 40;
     const h = Math.ceil(def.tall*2.2) + 40;
     const cv = document.createElement('canvas');
@@ -1754,14 +1890,17 @@
         roundRect(cx - cw/2 + 6, cy - ch/2 + 5, cw - 12, ch - 10, 12); ctx.stroke();
       }
 
-      const sc = Math.min(1.05, 94/def.len, 52/def.tall);
+      // the book shows your record specimen, so a monster goldfish looks like one
+      const rec = records[def.id] || 1;
+      const grow = Math.min(1.1, Math.max(.92, rec));
+      const sc = Math.min(1.05, 94/def.len, 52/def.tall) * (have ? grow : 1);
       ctx.save();
       ctx.translate(cx, cy - 6);
       ctx.scale(sc, sc);
       if (have){
         drawCreature(def, t*.06 + i);
       } else {
-        const sil = silhouetteOf(def);
+        const sil = silhouetteOf(def, SIL_BOOK);
         ctx.globalAlpha = .62;
         ctx.drawImage(sil, -sil.width/2, -sil.height/2);
         ctx.globalAlpha = 1;
@@ -1776,6 +1915,11 @@
           ctx.fillStyle = 'rgba(255,255,255,.55)';
           ctx.font = '700 11px "Trebuchet MS", sans-serif';
           ctx.fillText('×' + have, cx + cw/2 - 24, cy - ch/2 + 22);
+        }
+        // a trophy means your record for this one is a whopper
+        if (rec >= WHOPPER){
+          ctx.font = '700 15px "Trebuchet MS", sans-serif';
+          ctx.fillText('🏆', cx - cw/2 + 24, cy - ch/2 + 24);
         }
       } else {
         ctx.fillStyle = 'rgba(255,255,255,.3)';
@@ -1797,6 +1941,11 @@
   function render(){
     if (state === 'album'){ drawAlbum(); return; }
 
+    ctx.save();
+    if (shake > 0){
+      ctx.translate((Math.random()-.5)*shake*.8, (Math.random()-.5)*shake*.6);
+    }
+
     drawSky();
     drawWater();
     drawSwimmers();
@@ -1806,6 +1955,7 @@
     drawCaught();
     drawBits();
     drawBanner();
+    ctx.restore();
 
     if (glowPulse > 0){
       ctx.save();
