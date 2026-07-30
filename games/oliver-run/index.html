@@ -1017,8 +1017,6 @@
       spawnIn -= dt; if (spawnIn<=0) spawn();
       skyIn -= dt;   if (skyIn<=0) spawnCluster();
     }
-    for (const p of platforms) p.x -= speed*dt;
-    platforms = platforms.filter(p => p.x + p.w > -120);
     starIn -= dt; if (starIn<=0) spawnStar();
     powerIn -= dt;
     if (powerIn<=0){ if (!power && !orbs.length) spawnOrb(); else powerIn = 240; }
@@ -1038,6 +1036,24 @@
     const inFire = (cx,cy) => fireR>0 && Math.hypot(cx-hero.x, cy-hcy) < fireR;
     const hit = (x,y,w,h) => hitBox(x,y,w,h) || inFire(x+w/2, y+h/2);
     const sup = superT>0;
+
+    for (const p of platforms) p.x -= speed*dt;
+    platforms = platforms.filter(p => p.x + p.w > -120);
+
+    /* Gold stars ride their platform, so they are always exactly as reachable
+       as the platform is. burst() draws from Math.random(), but collecting one
+       requires leaving the ground, so a grounded run never reaches it. */
+    for (const p of platforms){
+      if (!p.star || p.star.got) continue;
+      const sx = p.x + p.star.dx, sy = p.y - TUNE.goldLift;
+      if (Math.hypot(sx - hero.x, sy - hcy) < 44*Math.max(1, hs)){
+        p.star.got = true;
+        points += TUNE.goldPoints;
+        burst(sx, sy, ['#FFD23D','#FFF3D6','#FFFFFF'], 22, 7);
+        pop(sx, sy-26, '+'+TUNE.goldPoints, '#FFD23D', 32);
+        sfx.star(); addCharge(TUNE.goldCharge); bumpCombo();
+      }
+    }
 
     // fire ring embers
     if (fireR && Math.random()<.6){
@@ -1557,6 +1573,24 @@
     ctx.globalAlpha = .5 + Math.sin(t*.04 + p.x*.01)*.2;
     ctx.fillRect(p.x+4, p.y, p.w-8, 2);
     ctx.globalAlpha = 1;
+  }
+
+  /* No Math.random() in here — shimmer comes from the frame counter, or the
+     ground-lane fingerprint test breaks on the render path. */
+  function drawGoldStar(x, y){
+    ctx.save();
+    ctx.translate(x, y + Math.sin(t*.05 + x*.01)*6);
+    ctx.rotate(Math.sin(t*.02 + x*.01)*.3);
+    const g = ctx.createRadialGradient(0,0,3,0,0,40);
+    g.addColorStop(0,'rgba(255,230,120,.75)');
+    g.addColorStop(1,'rgba(255,210,61,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,40,0,7); ctx.fill();
+    ctx.fillStyle = '#FFD23D'; ctx.beginPath();
+    for (let i=0;i<10;i++){ const r = i%2?9:22, a = -Math.PI/2 + i*Math.PI/5;
+      ctx[i?'lineTo':'moveTo'](Math.cos(a)*r, Math.sin(a)*r); }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#FFF3D6'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
   }
 
   function drawStar(s){
@@ -2371,7 +2405,10 @@
 
     drawSky(); drawBackdrop(); drawGround();
 
-    for (const p of platforms) drawPlatform(p);
+    for (const p of platforms){
+      drawPlatform(p);
+      if (p.star && !p.star.got) drawGoldStar(p.x + p.star.dx, p.y - TUNE.goldLift);
+    }
     for (const s of stars) drawStar(s);
     for (const o of orbs) drawOrb(o);
     for (const o of things) drawSmashable(o);

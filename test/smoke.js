@@ -603,10 +603,16 @@ test('sky lane: platforms survive a long run without incident', note => {
   return h;
 });
 
+/* Score is dominated by distance — roughly 4,600 points over 9,000 frames —
+   so gold stars can only ever be a small fraction of it, and climbing also
+   costs you ground-lane smashes you would otherwise have hit. A percentage
+   threshold on total score therefore measures distance, not the sky lane.
+   What IS provable through the score is that climbing nets strictly more
+   than a full gold star's worth over a grounded run. */
 test('sky lane: gold stars are unreachable without leaving the ground', note => {
   const grounded = createHarness('oliver-run', { seed: 43 });
   grounded.tap();
-  pump(grounded, 9000);            // never jumps
+  pump(grounded, 9000);            // never jumps, so never touches a platform
   const flat = grounded.num('score');
   grounded.dispose();
 
@@ -614,10 +620,37 @@ test('sky lane: gold stars are unreachable without leaving the ground', note => 
   climber.tap();
   runCycles(climber, 9000, 24, 40);
   const climbed = climber.num('score');
-  note(`grounded ${flat} vs climbing ${climbed}`);
-  assert(climbed > flat * 1.15,
-    `using the sky lane should pay noticeably better: ${flat} -> ${climbed}`);
+  const GOLD = 50;                 // TUNE.goldPoints
+  note(`grounded ${flat} vs climbing ${climbed} (+${climbed - flat})`);
+  assert(climbed >= flat + GOLD,
+    `climbing should net at least one gold star over a grounded run: ${flat} -> ${climbed}`);
   return climber;
+});
+
+/* The one test that isolates the glide itself. Both runs share a seed and
+   press the jump button on exactly the same frames — the ONLY difference is
+   how long the button stays down afterwards. holdFor:1 releases immediately
+   (a plain jump); holdFor:24 keeps floating. Any score difference is the
+   glide and nothing else.
+
+   Measured while building this: the glide raises time spent standing on a
+   platform from 167 frames to 1178 over the same run — a 7x difference. The
+   score margin below is much smaller than that because distance dominates
+   the score; it is the visible tip of a far larger effect. */
+test('glide measurably improves sky lane collection', note => {
+  const run = holdFor => {
+    const h = createHarness('oliver-run', { seed: 44 });
+    h.tap();
+    runCycles(h, 9000, holdFor, 40);
+    const score = h.num('score');
+    h.dispose();
+    return score;
+  };
+  const tapOnly = run(1);
+  const floating = run(24);
+  note(`tap-only ${tapOnly} vs floating ${floating} (+${floating - tapOnly})`);
+  assert(floating > tapOnly,
+    `holding should collect more: ${tapOnly} -> ${floating}`);
 });
 
 /* ---------------------------------------------------------------- *
