@@ -90,6 +90,17 @@
       var padState = {};
       var padsLive = 0;
       var lastSource = 'touch';
+      // Set true by releaseAll('blur'). A pad that already existed in
+      // padState gets latched via the loop below, but a pad poll() has never
+      // seen yet gets no entry to latch — this flag is the initial value
+      // handed to any padState entry created AFTER a blur, so a pad
+      // discovered for the first time post-blur (reconnected, or simply
+      // never polled before blur) still starts suppressed instead of
+      // reporting held straight from its first observation. Never reset:
+      // a newly discovered pad that is quiet on its very first poll clears
+      // its own suppression on that same poll (see the per-pad clearing
+      // logic below), so leaving this latched costs nothing.
+      var suppressNewPads = false;
 
       var onHold   = opts.onHold || function () {};
       var keysDown = {};
@@ -114,6 +125,7 @@
       }
       function releaseAll(source) {
         keysDown = {}; pointerHeld = false; padHeld = false;
+        suppressNewPads = true;
         var pk;
         for (pk in padState) { if (padState.hasOwnProperty(pk)) padState[pk].suppressed = true; }
         syncHold(source || 'blur');
@@ -190,7 +202,7 @@
         for (var i = 0; i < pads.length; i++) {
           var p = pads[i];
           if (!p || !p.buttons) continue;
-          var st = padState[p.index] || (padState[p.index] = { b: [], ax: {}, suppressed: false });
+          var st = padState[p.index] || (padState[p.index] = { b: [], ax: {}, suppressed: suppressNewPads });
           var padDown = false;
 
           for (var b = 0; b < p.buttons.length; b++) {

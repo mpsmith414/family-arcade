@@ -232,6 +232,61 @@ test('KidKit: blur latch is per-pad', note => {
   return h;
 });
 
+/* REGRESSION GUARD — releaseAll('blur') only latched padState entries that
+   ALREADY EXISTED at blur time. poll() lazily creates a pad's entry the
+   first time it observes that pad, initialising suppressed: false — so a
+   pad discovered for the first time AFTER blur (a controller connecting
+   late, or one that was connected but never polled before blur) arrived
+   completely unsuppressed. If its button was already down at that first
+   observation — normal for controllers that need a press to wake up and
+   register with the browser — it reported held immediately, with no prior
+   release, exactly what the latch exists to prevent. Fix: a module-level
+   suppressNewPads flag, set true by releaseAll(), is used as the initial
+   value for every newly created padState entry instead of a hard-coded
+   false. */
+test('KidKit: a pad discovered after blur starts suppressed', note => {
+  const h = createHarness('oliver-run', { seed: 5, gamepads: 2, startDisconnected: [1] });
+  const seen = [];
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'),
+    onHold: (down, src) => seen.push((down ? '+' : '-') + src),
+  });
+
+  // Pad 1's button is pressed while the pad is still withheld from
+  // navigator.getGamepads() — poll() cannot see it yet, so no padState
+  // entry exists for it at all.
+  h.padHold(true, 1);
+  pads.poll();
+  note(`before pad 1 is discovered: held= ${pads.held}`);
+  assert(pads.held === false, 'pad 1 is invisible to poll() until connected, so it cannot report held yet');
+
+  h.blur();
+  note(`after blur: held= ${pads.held}`);
+  assert(pads.held === false, 'blur must force-release everything');
+
+  // Pad 1 becomes visible for the first time now, AFTER blur, with its
+  // button already down — the exact "controller wakes on button press"
+  // scenario the latch exists to guard against.
+  h.connectGamepad(1);
+  pads.poll();
+  note(`first poll after pad 1 is discovered (button already down): held= ${pads.held}`);
+  assert(pads.held === false,
+    'a pad discovered for the first time after blur must start suppressed, not report held immediately');
+
+  // must not be stuck forever: a genuine release, then a fresh press, must
+  // work exactly as it would for a pad that existed before blur.
+  h.padHold(false, 1);
+  pads.poll();
+  assert(pads.held === false, 'held should stay false once pad 1 is actually released');
+
+  h.padHold(true, 1);
+  pads.poll();
+  assert(pads.held === true, 'a fresh press after a real release must restore the hold');
+
+  note(`event log: ${seen.join(' ')}`);
+  return h;
+});
+
 /* REGRESSION GUARD — hold() must own the gamepad A button for as long as
    it's held. Before the fix, any pressPadButton() call (via pad(),
    padPress(), or the holdJump() cadence) queued a pendingRelease closure

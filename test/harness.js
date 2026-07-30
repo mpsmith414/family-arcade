@@ -526,9 +526,16 @@ function createHarness(gameName, options) {
   const padCount = opts.gamepad === false ? 0 : (opts.gamepads || 1);
   const pads = [];
   for (let i = 0; i < padCount; i++) pads.push(makePad(i));
+  /* opts.startDisconnected: [index, ...] — those pads exist in `pads` (their
+     buttons can be driven via pad()/padHold()/hold() before they're
+     "discovered") but are withheld from getGamepads() until
+     connectGamepad(index) is called. This is what lets a test express "this
+     pad was never polled before some earlier event" — e.g. a controller that
+     only wakes and registers with the browser once a button is pressed. */
+  const disconnectedPads = new Set(opts.startDisconnected || []);
   function getGamepads() {
     const arr = [null, null, null, null];
-    for (const p of pads) if (p.index < arr.length) arr[p.index] = p;
+    for (const p of pads) if (p.index < arr.length && !disconnectedPads.has(p.index)) arr[p.index] = p;
     return arr;
   }
 
@@ -788,6 +795,14 @@ function createHarness(gameName, options) {
     connectPad(index) {
       const pi = index == null ? 0 : index;
       winDispatch(makeEvent('gamepadconnected', null, { gamepad: pads[pi] }));
+      return api;
+    },
+    /* Makes a pad started via opts.startDisconnected visible to
+       navigator.getGamepads() from now on. Distinct from connectPad() (which
+       only fires the gamepadconnected event) — this one controls actual
+       presence in getGamepads() output. */
+    connectGamepad(index) {
+      disconnectedPads.delete(index == null ? 0 : index);
       return api;
     },
     padCount: () => pads.length,
