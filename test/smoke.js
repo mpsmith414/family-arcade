@@ -624,6 +624,296 @@ test('fishing: a long idle run never throws either', note => {
   return h;
 });
 
+/* ================================================================ *
+ * games/daddy-smash
+ *
+ * The other two games are driven by one button, so a test taps. This one is
+ * driven by *held* input, which is a different shape of test: hold a
+ * direction for hundreds of frames and watch where the kid ends up. The
+ * landmark tag under the meter ("🪴 the plant") is the game's own readout
+ * of where the player is standing, so steering can be checked through the
+ * DOM like everything else — no test-only hooks in the game.
+ *
+ * The property these tests really guard is that getting caught is a reward:
+ * a kid who never moves gets smashed over and over and the game never ends,
+ * and a kid who runs gets smashed less. Both are wins, neither is a loss.
+ * ================================================================ */
+const SPOTS = {
+  plant:  '🪴 the plant',
+  dogbed: '🐶 the dog bed',
+  couch:  '🛋️ the couch',
+  middle: '🏠 in the middle',
+};
+/* everything down the right-hand wall — the big chair, the lamp, the dog bed */
+const RIGHT_SIDE = ['🪑 the big chair', '💡 the lamp', SPOTS.dogbed];
+
+/* Start the game and hold one input down for `frames`, collecting every
+   landmark the player is reported at along the way. A smash teleports them
+   to the couch, so the set of places seen is the honest question to ask —
+   "where did they end up" would be answering about the last slam. */
+function holdRun(setup, frames, seed) {
+  const h = createHarness('daddy-smash', { seed: seed == null ? 11 : seed });
+  h.tap();
+  pump(h, 5);
+  setup(h);
+  const seen = new Set();
+  for (let i = 0; i < frames; i++) {
+    pump(h, 1);
+    seen.add(h.text('whereTag'));
+  }
+  return { h, seen };
+}
+
+/* Keep the controls moving: lap the room, changing direction every 90
+   frames. This is a busy player, not a clever one — it does not react to
+   Daddy at all — so use it to keep the movement code hot, never to measure
+   how well evasion works. */
+function lapTheRoom(h, frames) {
+  const legs = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+  for (let i = 0; i < frames; i++) {
+    if (i % 90 === 0) {
+      const [x, y] = legs[(i / 90) % legs.length];
+      h.stick(x, y);
+    }
+    pump(h, 1);
+  }
+}
+
+test('daddy: boots to the menu with nobody smashed', note => {
+  const h = createHarness('daddy-smash');
+  note(`loaded ${h.loaded.join(', ')}`);
+  assert(!h.hidden('startScreen'), 'start screen should be visible before play');
+  assert(h.num('slams') === 0, 'smash counter should start at 0');
+  assert(h.text('best') === '', `fresh install should show no best, got "${h.text('best')}"`);
+  assert(h.text('kidTag') === 'Oliver', `expected to default to Oliver, got "${h.text('kidTag')}"`);
+  assert(h.hidden('partyTag'), 'no pillow party on the menu');
+  pump(h, 60);
+  assert(h.num('slams') === 0, 'nothing should be smashed while still on the menu');
+  return h;
+});
+
+for (const [label, start] of Object.entries(STARTERS)) {
+  test(`daddy: starts and gets smashed from ${label}`, note => {
+    const h = createHarness('daddy-smash', { seed: 42 });
+    assert(!h.hidden('startScreen'), 'precondition: menu visible');
+    start(h);
+    pump(h, 5);
+    assert(h.hidden('startScreen'), `${label} did not start the game`);
+
+    // then stand still, which is the surest way to be caught
+    pump(h, 2500);
+    const slams = h.num('slams');
+    assert(slams > 0, `standing still for 2500 frames should get you caught, got ${slams}`);
+    assert(/got smashed/i.test(h.text('catchLine')), `no smash shout, got "${h.text('catchLine')}"`);
+    note(`${slams} smashes, last shout "${h.text('catchLine')}"`);
+    return h;
+  });
+}
+
+/* Every way in to the same vector: held keys, the analogue stick, the d-pad
+   and a finger held on the glass. All four have to steer, because all four
+   are things that will actually happen in this house. */
+const STEERERS = [
+  ['held arrow keys', h => h.keyDown('ArrowLeft'), h => h.keyDown('ArrowRight')],
+  ['WASD', h => h.keyDown('a'), h => h.keyDown('d')],
+  ['the analogue stick', h => h.stick(-1, 0), h => h.stick(1, 0)],
+  ['the d-pad', h => h.padHold('left', true), h => h.padHold('right', true)],
+  ['a finger held on the glass', h => h.pointerHold(0.02, 0.95), h => h.pointerHold(0.98, 0.99)],
+];
+
+for (const [label, goLeft, goRight] of STEERERS) {
+  test(`daddy: steering with ${label}`, note => {
+    const left = holdRun(goLeft, 900);
+    assert(left.seen.has(SPOTS.plant),
+      `holding left should reach the plant in the far left corner, only saw ${[...left.seen].join(', ')}`);
+    left.h.dispose();
+
+    const right = holdRun(goRight, 900);
+    assert(right.seen.has(SPOTS.dogbed),
+      `holding right should reach the dog bed, only saw ${[...right.seen].join(', ')}`);
+    note(`left → ${[...left.seen].join(' / ')}   right → ${[...right.seen].join(' / ')}`);
+    return right.h;
+  });
+}
+
+/* Releasing has to actually release, and "did they stop?" is the wrong way
+   to ask: being grabbed carries the kid across the room, so the position
+   moves for reasons that have nothing to do with the key. Ask it the other
+   way instead — go left, let go, then go right. A key that stayed stuck
+   down would cancel the new direction out (axis() sums its inputs) and the
+   dog bed on the far side would never be reached. */
+test('daddy: letting go of a key really lets go', note => {
+  const h = createHarness('daddy-smash', { seed: 6 });
+  h.tap();
+  pump(h, 5);
+  h.keyDown('ArrowLeft');
+  const goingLeft = new Set();
+  for (let i = 0; i < 500; i++) { pump(h, 1); goingLeft.add(h.text('whereTag')); }
+  assert(goingLeft.has(SPOTS.plant), `holding left never reached the plant: ${[...goingLeft].join(', ')}`);
+
+  h.keyUp('ArrowLeft');
+  h.keyDown('ArrowRight');
+  const goingRight = new Set();
+  for (let i = 0; i < 900; i++) { pump(h, 1); goingRight.add(h.text('whereTag')); }
+  // any landmark down the right-hand wall will do: being smashed part-way
+  // through drops the kid back in a different lane, so which one they meet
+  // is luck — reaching that side of the room at all is the actual question
+  const right = [...goingRight].filter(w => RIGHT_SIDE.includes(w));
+  assert(right.length,
+    `left looks stuck down — right never got across the room: ${[...goingRight].join(', ')}`);
+  note(`left → plant, released, right → ${right.join(' / ')}`);
+  return h;
+});
+
+/* Not tested here: "running away means fewer smashes than standing still".
+   It is true — a driver that flees Daddy tangentially gets caught every ~32
+   seconds against every ~15 for one that never moves, measured over seven
+   seeds — but proving it needs a robot that can see where Daddy is, and he
+   is deliberately not in the DOM. A fixed pattern (lap the room, turn every
+   45 frames) is not evasion and scores the same as standing still, so a
+   test built on one would only be measuring its own driver. Checked with a
+   throwaway probe instead; DAD_WALK is tuned off those numbers. */
+
+test('daddy: near misses fill the giggle meter without anybody being caught', note => {
+  // The WHOOSH is the reward for the running itself, and it has to land
+  // before the first smash does or a kid who is good at this gets nothing.
+  const h = createHarness('daddy-smash', { seed: 31 });
+  h.tap();
+  pump(h, 5);
+  const width = () => parseFloat(h.styleOf('giggleFill', 'width')) || 0;
+  assert(width() === 0, `the meter should start empty, got "${h.styleOf('giggleFill', 'width')}"`);
+
+  let filledBeforeASmash = false;
+  for (let i = 0; i < 4000; i++) {
+    pump(h, 1);
+    if (h.num('slams') > 0) break;
+    if (width() > 0) { filledBeforeASmash = true; break; }
+  }
+  assert(filledBeforeASmash,
+    `the giggle meter never moved before the first smash — near misses are not paying out`);
+  note(`meter reading ${h.styleOf('giggleFill', 'width')} after ${h.frameCount} frames, still 0 smashes`);
+  return h;
+});
+
+test('daddy: both kids get smashed, not just the one you drive', note => {
+  const h = createHarness('daddy-smash', { seed: 17 });
+  h.tap();
+  const seen = new Set();
+  for (let i = 0; i < 6000 && seen.size < 2; i++) {
+    pump(h, 1);
+    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    if (m) seen.add(m[1]);
+  }
+  assert(seen.has('Oliver'), `Oliver never got smashed: saw ${[...seen].join(', ') || 'nobody'}`);
+  assert(seen.has('Emsile'), `Emsile never got smashed: saw ${[...seen].join(', ') || 'nobody'}`);
+  note(`both smashed within ${h.frameCount} frames`);
+  return h;
+});
+
+test('daddy: the pillow party arrives, then packs itself away', note => {
+  const h = createHarness('daddy-smash', { seed: 5 });
+  h.tap();
+  const started = h.until(() => !h.hidden('partyTag'), 6000, 'the pillow party to start');
+  assert(h.hasClass('giggleMeter', 'full'), 'the giggle meter should read full during the party');
+  const lasted = h.until(() => h.hidden('partyTag'), 2000, 'the pillow party to end');
+  assertBetween(lasted, 500, 900, 'the pillow party ran for the wrong number of frames');
+
+  // and the meter empties out ready to fill again
+  assert(!h.hasClass('giggleMeter', 'full'), 'the meter should reset once the party is over');
+  const again = h.until(() => !h.hidden('partyTag'), 8000, 'a second pillow party');
+  note(`first party after ${started} frames, lasted ${lasted}, second ${again} frames later`);
+  return h;
+});
+
+test('daddy: swapping which kid you are', note => {
+  const h = createHarness('daddy-smash', { seed: 12 });
+  h.tap();
+  pump(h, 60);
+  assert(h.text('kidTag') === 'Oliver', `expected to start as Oliver, got "${h.text('kidTag')}"`);
+
+  // X on a pad — the one button in the kit that isn't a jump
+  h.padPress('x');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Emsile', 'gamepad X did not swap the kids');
+
+  // and the button on the kid's side of the screen does the same
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Oliver', 'the swap button did not swap back');
+
+  // the game carries on, and whoever you are can still be caught
+  const before = h.num('slams');
+  pump(h, 2500);
+  assert(h.num('slams') > before, 'the chase stopped after swapping');
+  note(`swapped both ways, ${h.num('slams')} smashes total`);
+  return h;
+});
+
+test('daddy: choosing Emsile on the menu sticks across a reload', note => {
+  let h = createHarness('daddy-smash', { seed: 4 });
+  h.click('pickEmsile');
+  h.click('startBtn');
+  pump(h, 30);
+  assert(h.text('kidTag') === 'Emsile', `picking Emsile did not take, got "${h.text('kidTag')}"`);
+  assert(h.store['daddy-smash-kid'] === 'emsile', `storage says "${h.store['daddy-smash-kid']}"`);
+
+  h = h.reload();
+  assert(h.text('kidTag') === 'Emsile', `after reload the game forgot, showing "${h.text('kidTag')}"`);
+  assert(!h.hidden('startScreen'), 'reload should land back on the menu');
+  note('Emsile remembered across a reload');
+  return h;
+});
+
+test('daddy: best smash count survives a reload', note => {
+  let h = createHarness('daddy-smash', { seed: 21 });
+  assert(h.text('best') === '', `fresh install should show no best, got "${h.text('best')}"`);
+  h.tap();
+  pump(h, 4000);
+
+  const slams = h.num('slams');
+  assert(slams > 0, 'need some smashes before testing persistence');
+  assert(h.text('best') === 'Best ' + slams, `best label out of step: "${h.text('best')}" vs ${slams}`);
+
+  // saveBest() debounces behind a 1200ms setTimeout, so pump past it
+  pump(h, 100);
+  assert(h.store['daddy-smash-best'] !== undefined, 'nothing was written to storage');
+  const stored = Number(h.store['daddy-smash-best']);
+  assert(stored >= slams, `stored ${stored} is behind the ${slams} already smashed`);
+  note(`smashed ${slams}, storage now ${JSON.stringify(h.store)}`);
+
+  h = h.reload();
+  assert(h.text('best') === 'Best ' + stored,
+    `after reload best showed "${h.text('best')}", expected "Best ${stored}"`);
+  assert(h.num('slams') === 0, 'the counter should reset to 0 on reload');
+  return h;
+});
+
+test('daddy: 20000 frames of never moving, and it still never ends', note => {
+  // The kid who puts the controller down is the one this game has to be
+  // safe for: no lives, no game over, just smash after smash after smash.
+  const h = createHarness('daddy-smash', { seed: 3 });
+  h.tap();
+  pump(h, 20000);
+  const slams = h.num('slams');
+  assert(slams > 20, `expected a pile of smashes after 20000 idle frames, got ${slams}`);
+  assert(h.hidden('startScreen'), 'the game must never bounce back to the menu — there is no game over');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${slams} smashes, ${h.timerCount} timers alive`);
+  note(`audio nodes built: ${h.audioStats.oscillators} oscillators, ${h.audioStats.sources} buffer sources`);
+  return h;
+});
+
+test('daddy: 20000 frames of hard running never throws either', note => {
+  const h = createHarness('daddy-smash', { seed: 77 });
+  h.tap();
+  pump(h, 5);
+  lapTheRoom(h, 20000);
+  assert(h.hidden('startScreen'), 'still playing');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${h.num('slams')} smashes while running, still going`);
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * report
  * ---------------------------------------------------------------- */

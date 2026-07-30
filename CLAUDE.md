@@ -4,9 +4,8 @@ Homemade browser games for my two young kids. Oliver (older) and Emsile (little
 sister) are the characters in both games. Built to be played on a phone, a
 tablet, and a TV with a controller.
 
-Two games so far, and they are deliberately opposites — a fast reflex runner and
-a slow collecting game. Keep it that way: a third game should contrast with both
-rather than land in between.
+Three games, deliberately unlike each other. Keep it that way: a fourth should
+contrast with all three rather than land in between.
 
 - `games/oliver-run` — endless runner, tap to jump, 18 bosses, scores distance.
 - `games/emsile-fishing` — still screen, tap on the bite, scores a book of 15 sea
@@ -20,6 +19,14 @@ rather than land in between.
   and it stays a dark silhouette until it breaks the surface. That reveal is
   the payoff, so the tap-to-reel-faster boost is capped short of the end and
   can never skip it.
+- `games/daddy-smash` — free movement round one room, both kids on screen at
+  once, Daddy chasing. **This is the one that breaks the one-button rule, on
+  purpose and by request:** there is no button at all, only steering. The whole
+  contrast is that it is neither a runner nor a still screen — it is a floor
+  plan you move around in, and *being caught is the reward*, not the failure.
+  Getting smashed on the couch is the payoff the game is named after, so
+  anything that makes catches rarer is a bug and anything that makes them
+  feel like a punishment is a worse one.
 
 ## Hard constraints — do not break these
 
@@ -52,9 +59,10 @@ way that eyeballing missed (a `ReferenceError` firing every frame a power-up
 was active, and a hitbox that stretched to the ground while jumping).
 
 ```bash
-node test/smoke.js            # both games, ~20s, no dependencies
+node test/smoke.js            # all three games, ~35s, no dependencies
 node test/smoke.js powers     # only tests matching "powers"
 node test/smoke.js fishing    # only the Emsile Fishing block
+node test/smoke.js daddy      # only the Daddy Smash block
 ```
 
 The harness draws to a no-op canvas, so it proves the game does not throw and
@@ -77,6 +85,12 @@ h.tap();              // also .key('ArrowUp'), .padPress('a'), .holdJump(true)
 h.frames(600);        // pump the real update + render
 h.text('score');      // read it back off the stub DOM
 h.reload();           // same storage, fresh page — for persistence tests
+
+// held input, for a game you steer instead of tapping
+h.keyDown('ArrowLeft');  h.keyUp('ArrowLeft');
+h.stick(-1, 0);          // left stick, sticks until set back to 0,0
+h.padHold('left', true); // d-pad held, unlike padPress which is one edge
+h.pointerHold(.02, .95); h.pointerRelease();
 ```
 
 Gotchas already handled in there, worth knowing before you change it:
@@ -104,6 +118,12 @@ the WebAudio unlock, the chiptune music engine, and the kid lock. Games supply
 only their own data and rules. If you find yourself writing a second copy of any
 of those in a game, move it into the kit instead.
 
+Steering lives there too, behind `KidKit.input.create({steer:true})`, which adds
+`.axis()` (held arrows/WASD + left stick + d-pad, clamped to a unit circle so a
+diagonal isn't faster) and `.pointer()` (where a finger is being held, 0..1
+across the element). Daddy Smash is the only caller today; the second movement
+game must not grow its own copy.
+
 Gamepad mapping is deliberate: **almost every button jumps**, because a
 five-year-old shouldn't have to find the right one. Only X/Y are a separate
 action. Don't "fix" this by narrowing it.
@@ -111,6 +131,9 @@ action. Don't "fix" this by narrowing it.
 ## Design rules for these games
 
 - **One button.** Tap to jump, nothing else. Any new ability must map onto that.
+  Daddy Smash is the exception and it goes the other way — no buttons, only
+  steering. Either way the rule behind the rule holds: one thing to do, and a
+  kid who mashes or flails at it is never worse off than one who doesn't.
 - **No fail states.** Nothing kills the player, ever. There's no game over in
   Oliver Run by design — hitting a big obstacle just slows you briefly. Reward
   and spectacle instead of punishment. Don't add lives or death.
