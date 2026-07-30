@@ -28,6 +28,10 @@
    - Time is virtual. setTimeout(…, 1500) inside saveBest() will not fire
      unless frames are pumped past it, which is exactly what makes the
      high-score persistence test meaningful.
+   - tap() and key() send the release as well as the press. A game that
+     steers on held input reads a press-only stub as a stuck key and runs
+     into the wall forever. Hold things deliberately with keyDown/keyUp,
+     stick(), padHold() and pointerHold()/pointerRelease().
    ========================================================================== */
 'use strict';
 
@@ -158,6 +162,15 @@ function makeEvent(type, target, extra) {
     stopImmediatePropagation() {},
   };
   return Object.assign(ev, extra);
+}
+
+/* Turn a 0..1 position over an element into the clientX/clientY a real
+   pointer event would carry. Steering code normalises it straight back, so
+   the stub's rect can be any size and the maths still lands in the same
+   place on the canvas. */
+function at(el, nx, ny) {
+  const r = el.getBoundingClientRect();
+  return { clientX: r.left + nx * r.width, clientY: r.top + ny * r.height };
 }
 
 /* ---------------------------------------------------------------- *
@@ -678,11 +691,60 @@ function createHarness(gameName, options) {
     tap(id) {
       const el = doc.getElementById(id || 'stage');
       el.dispatchEvent(makeEvent('pointerdown', el, { pointerId: 1, button: 0 }));
+      el.dispatchEvent(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
       return api;
     },
     click(id) { doc.getElementById(id).click(); return api; },
+    /* A real key press is down *and* up. Games that steer on held keys read
+       as stuck-on forever otherwise, so this sends both — use keyDown/keyUp
+       when you actually want the key held across frames. */
     key(k) {
+      api.keyDown(k);
+      api.keyUp(k);
+      return api;
+    },
+    keyDown(k) {
       winDispatch(makeEvent('keydown', doc.body, { key: k, code: k, repeat: false }));
+      return api;
+    },
+    keyUp(k) {
+      winDispatch(makeEvent('keyup', doc.body, { key: k, code: k }));
+      return api;
+    },
+    /* --- held / analogue input, for games you steer rather than tap --- */
+
+    /* Hold a finger at (nx, ny), 0..1 across the stage. Stays down until
+       pointerRelease(); pointerMove() drags it without lifting. */
+    pointerHold(nx, ny, id) {
+      const el = doc.getElementById(id || 'stage');
+      el.dispatchEvent(makeEvent('pointerdown', el, Object.assign({ pointerId: 1, button: 0 }, at(el, nx, ny))));
+      return api;
+    },
+    pointerMove(nx, ny, id) {
+      const el = doc.getElementById(id || 'stage');
+      el.dispatchEvent(makeEvent('pointermove', el, Object.assign({ pointerId: 1 }, at(el, nx, ny))));
+      return api;
+    },
+    pointerRelease(id) {
+      const el = doc.getElementById(id || 'stage');
+      el.dispatchEvent(makeEvent('pointerup', el, { pointerId: 1 }));
+      return api;
+    },
+    /* Left stick, -1..1 on each axis. Sticks until set back to 0,0. */
+    stick(x, y) {
+      if (pads.length) { pads[0].axes[0] = x; pads[0].axes[1] = y; pads[0].timestamp = clock.now; }
+      return api;
+    },
+    /* Hold a pad button down across frames — d-pad steering, unlike padPress
+       which is a single edge. */
+    padHold(button, on) {
+      if (!pads.length) return api;
+      const i = typeof button === 'number' ? button : PAD_BUTTONS[button];
+      if (i == null) throw new Error(`unknown gamepad button: ${button}`);
+      const b = pads[0].buttons[i];
+      const down = on !== false;
+      b.pressed = down; b.value = down ? 1 : 0; b.touched = down;
+      pads[0].timestamp = clock.now;
       return api;
     },
     /* Queue a press for the next frame; the caller pumps it. */

@@ -1,0 +1,1785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Daddy Smash</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2E1B12">
+<script src="../../shared/kidkit.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100%;
+    overscroll-behavior:none;          /* no pull-to-refresh */
+    touch-action:none;                 /* no double-tap zoom / pan */
+    user-select:none;-webkit-user-select:none;
+    -webkit-touch-callout:none;        /* no long-press menu */
+  }
+  body{
+    background:#2E1B12;
+    font-family:"Trebuchet MS","Avenir Next","Segoe UI",system-ui,sans-serif;
+    display:flex;align-items:center;justify-content:center;padding:12px;
+    -webkit-tap-highlight-color:transparent;overflow:hidden;
+  }
+  #stage{
+    position:relative;width:100%;max-width:920px;
+    border-radius:18px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(255,180,110,.28);
+    touch-action:none;cursor:pointer;
+  }
+  canvas{display:block;width:100%;height:auto}
+  body.locked #stage{box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(255,210,61,.75)}
+
+  /* thick focus ring so you can see where you are from across the room */
+  button:focus{outline:4px solid #FFD23D;outline-offset:4px}
+
+  /* The other two games have a dark sky to sit on; this one has a cream
+     wall, and white-on-cream was unreadable on the telly. The scrim is what
+     makes the HUD legible — don't drop it. */
+  .hud{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:14px 18px 34px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(28,15,9,.66) 0%,rgba(28,15,9,.34) 58%,rgba(28,15,9,0) 100%);
+    font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;
+    text-shadow:0 2px 8px rgba(0,0,0,.9);
+  }
+  .left{display:flex;flex-direction:column;gap:7px}
+  .where{font-size:clamp(9px,2.1vw,12px);letter-spacing:.16em;opacity:.92}
+  .meter{
+    width:clamp(90px,22vw,150px);height:11px;border-radius:99px;
+    background:rgba(0,0,0,.36);overflow:hidden;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.5);
+  }
+  .meter i{display:block;height:100%;width:0%;border-radius:99px;
+    background:linear-gradient(90deg,#FF8A3D,#FFD23D,#FF6FA8);
+    background-size:200% 100%;transition:width .25s}
+  .meter.full i{animation:slide .7s linear infinite}
+  @keyframes slide{to{background-position:-200% 0}}
+  .who{font-size:clamp(9px,2vw,12px);opacity:.72;letter-spacing:.14em}
+  #partyTag{
+    font-size:clamp(10px,2.3vw,13px);color:#FFD23D;letter-spacing:.14em;
+    animation:wobble .5s ease-in-out infinite alternate;
+  }
+  #partyTag[hidden]{display:none}
+  @keyframes wobble{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
+
+  .scores{text-align:right}
+  .now{font-size:clamp(24px,5.4vw,38px);line-height:1;color:#FFD23D}
+  .lbl{font-size:clamp(8px,1.9vw,11px);letter-spacing:.26em;opacity:.75}
+  #best{font-size:clamp(9px,2vw,12px);opacity:.7;margin-top:3px;min-height:12px}
+
+  /* the "OLIVER GOT SMASHED!" shout — DOM text stays crisp on a TV */
+  /* Sits in the strip between the two HUD corners. It used to be twice this
+     size at 24% and covered the couch — which is to say it covered the very
+     thing it was shouting about. */
+  #catchLine{
+    position:absolute;top:11%;left:50%;transform:translateX(-50%) rotate(-2.5deg);
+    width:min(64%,470px);text-align:center;pointer-events:none;
+    font-size:clamp(17px,4.1vw,31px);font-weight:800;line-height:1;
+    text-transform:uppercase;letter-spacing:-.01em;color:#fff;
+    text-shadow:0 3px 0 rgba(0,0,0,.4), 0 6px 26px rgba(0,0,0,.85);
+    opacity:0;transition:opacity .2s;
+  }
+  #catchLine.show{opacity:1}
+
+  #padTag{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.6);color:#8BE05A;border-radius:999px;
+    padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;pointer-events:none;
+  }
+  #padTag[hidden]{display:none}
+
+  /* KID side: bottom left. Swapping which kid you are is the only button a
+     small hand ever needs, so it lives where the small hands already are. */
+  #swapBtn{
+    position:absolute;bottom:14px;left:14px;pointer-events:auto;
+    display:flex;align-items:center;gap:7px;
+    background:rgba(0,0,0,.55);border:3px solid rgba(255,255,255,.5);
+    border-radius:999px;padding:8px 15px;cursor:pointer;
+    box-shadow:0 5px 16px rgba(0,0,0,.45);
+    transition:transform .18s;font:inherit;color:#fff;
+  }
+  #swapBtn:active{transform:scale(.92)}
+  #swapBtn:focus-visible{outline:3px solid #FFD23D;outline-offset:3px}
+  #swapBtn b{font-size:23px;line-height:1}
+  #swapBtn i{font-style:normal;font-size:15px;opacity:.8}
+
+  #toast{
+    position:absolute;bottom:66px;right:14px;pointer-events:none;
+    background:rgba(0,0,0,.72);color:#fff;border-radius:12px;
+    padding:9px 13px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.03em;max-width:66%;text-align:right;
+    opacity:0;transition:opacity .35s;
+  }
+  #toast.show{opacity:1}
+  #toast em{font-style:normal;color:#FFD23D}
+
+  #sndHint{
+    position:absolute;bottom:66px;left:14px;pointer-events:none;
+    background:rgba(0,0,0,.62);color:#FFD23D;border-radius:12px;
+    padding:8px 12px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.04em;max-width:56%;
+  }
+  #sndHint[hidden]{display:none}
+  #sndHint small{color:#fff;opacity:.75;font-size:10px;font-weight:400;letter-spacing:.02em}
+
+  /* ADULT side: bottom right */
+  .sndbar{position:absolute;bottom:12px;right:14px;display:flex;gap:8px;pointer-events:auto}
+  .sndbtn{
+    background:rgba(255,255,255,.14);border:none;color:#fff;
+    width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:opacity .2s,background .2s;
+  }
+  .sndbtn:hover{background:rgba(255,255,255,.26)}
+  .sndbtn.off{opacity:.34}
+  .sndbtn:focus-visible{outline:3px solid #FFD23D;outline-offset:2px}
+  #lockBtn{position:relative;font-size:17px}
+
+  .screen{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:10px;text-align:center;
+    background:radial-gradient(120% 90% at 50% 45%, rgba(96,48,26,.72), rgba(30,16,10,.96));
+    color:#fff;padding:22px;
+  }
+  .screen[hidden]{display:none}
+  .kicker{font-size:clamp(9px,2.2vw,12px);letter-spacing:.32em;color:#FFD23D;text-transform:uppercase}
+  .title{
+    font-size:clamp(34px,10vw,72px);line-height:.9;font-weight:800;
+    letter-spacing:-.02em;text-transform:uppercase;
+    background:linear-gradient(90deg,#FF8A3D,#FFD23D,#FF6FA8,#FF8A3D);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 24px rgba(255,140,60,.4));
+  }
+  @supports not ((-webkit-background-clip:text) or (background-clip:text)){
+    .title{color:#FFD23D;background:none}
+  }
+  .sub{font-size:clamp(13px,3.2vw,17px);max-width:30ch;opacity:.92;line-height:1.5}
+
+  /* pick-a-kid: faces, not words */
+  .picker{display:flex;gap:14px;margin-top:4px}
+  .pick{
+    background:rgba(255,255,255,.08);border:3px solid rgba(255,255,255,.22);
+    border-radius:20px;padding:10px 18px 12px;cursor:pointer;font:inherit;color:#fff;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    transition:transform .16s,border-color .16s,background .16s;
+  }
+  .pick b{font-size:clamp(30px,7vw,42px);line-height:1}
+  .pick span{font-size:clamp(10px,2.4vw,13px);font-weight:800;letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+  .pick[aria-pressed="true"]{background:rgba(255,210,61,.18);border-color:#FFD23D;transform:translateY(-3px)}
+  .pick[aria-pressed="true"] span{opacity:1;color:#FFD23D}
+
+  .cta{
+    margin-top:6px;background:#FFD23D;color:#3A2010;border:none;
+    font:inherit;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
+    font-size:clamp(15px,3.6vw,19px);padding:15px 40px;border-radius:999px;cursor:pointer;
+    box-shadow:0 6px 0 #C79A3B;
+  }
+  .cta:active{transform:translateY(3px);box-shadow:0 3px 0 #C79A3B}
+  .cta:focus-visible{outline:3px solid #FF8A3D;outline-offset:4px}
+  .hint{font-size:clamp(10px,2.3vw,12px);letter-spacing:.08em;opacity:.62;text-transform:uppercase;line-height:1.7}
+  @media (prefers-reduced-motion:reduce){
+    .meter i,.meter.full i,#partyTag{transition:none;animation:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="game" width="900" height="450" role="img" aria-label="Daddy chasing the kids round the living room"></canvas>
+
+  <div class="hud">
+    <div class="left">
+      <div class="where" id="whereTag">🏠 in the middle</div>
+      <div class="meter" id="giggleMeter"><i id="giggleFill"></i></div>
+      <div class="who" id="kidTag">Oliver</div>
+      <div id="partyTag" hidden>🛏️ Pillow party!</div>
+    </div>
+    <div class="scores">
+      <div class="now" id="slams">0</div>
+      <div class="lbl">Smashes</div>
+      <div id="best"></div>
+    </div>
+  </div>
+
+  <div id="catchLine"></div>
+
+  <button id="swapBtn" aria-label="Play as the other kid">
+    <b id="swapFace">🧒</b><i>🔁</i>
+  </button>
+
+  <div class="sndbar">
+    <button id="lockBtn" class="sndbtn" aria-label="Turn kid lock on">🔓</button>
+    <button id="music" class="sndbtn" aria-label="Turn music off">🎵</button>
+    <button id="mute" class="sndbtn" aria-label="Turn sound effects off">🔊</button>
+  </div>
+
+  <div id="padTag" hidden>🎮 Controller</div>
+  <div id="toast"></div>
+  <div id="sndHint" hidden>🔇 Sound is blocked — tap the screen<br><small>On iPhone, also flick the side switch off silent</small></div>
+
+  <div class="screen" id="startScreen">
+    <div class="kicker">Nobody ever loses</div>
+    <h1 class="title">Daddy Smash</h1>
+    <p class="sub">Run away from Daddy! When he catches you he smashes you on the couch — then you run free again.</p>
+    <div class="picker">
+      <button class="pick" id="pickOliver" aria-pressed="true" aria-label="Play as Oliver"><b>🧒</b><span>Oliver</span></button>
+      <button class="pick" id="pickEmsile" aria-pressed="false" aria-label="Play as Emsile"><b>👧</b><span>Emsile</span></button>
+    </div>
+    <button class="cta" id="startBtn">Run!</button>
+    <p class="hint">Hold your finger anywhere and run to it.<br>Arrows, stick or d-pad work too. Tap 🔓 for kid lock.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 900, H = 450;
+
+  /* ================================================================== *
+   * the room
+   *
+   * World coords are a flat floor plan: x runs 0..100 wall to wall, z runs
+   * 0..100 from the back wall to the camera. Everything on screen — art,
+   * hit tests, the AI — works in those units and goes through proj(); the
+   * only place pixels appear is inside a draw function.
+   * ================================================================== */
+  const FAR_Y = 176, NEAR_Y = 434;      // floor at the back wall / at the front
+  const FAR_HW = 288, NEAR_HW = 452;    // half the room's width at each end
+  const MIN_X = 5, MAX_X = 95, MIN_Z = 6, MAX_Z = 94;
+
+  /* Slight easing so the far half of the floor compresses like a real room
+     rather than sliding linearly into the wall. */
+  const depth = t => t*t*0.34 + t*0.66;
+
+  function proj(x, z){
+    const k = depth(Math.max(0, Math.min(1, z/100)));
+    return {
+      x: W/2 + (x - 50)/50 * (FAR_HW + (NEAR_HW - FAR_HW)*k),
+      y: FAR_Y + (NEAR_Y - FAR_Y)*k,
+      s: 0.62 + 0.62*k,
+    };
+  }
+
+  /* Screen back to floor plan, for "run towards my finger". Inverts depth()
+     with the quadratic formula — 0.34t² + 0.66t − k = 0. */
+  function unproj(sx, sy){
+    const k = Math.max(0, Math.min(1, (sy - FAR_Y)/(NEAR_Y - FAR_Y)));
+    const t = (-0.66 + Math.sqrt(0.4356 + 1.36*k))/0.68;
+    const hw = FAR_HW + (NEAR_HW - FAR_HW)*k;
+    return { x: 50 + (sx - W/2)/hw*50, z: t*100 };
+  }
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const el = {
+    where:   document.getElementById('whereTag'),
+    meter:   document.getElementById('giggleMeter'),
+    fill:    document.getElementById('giggleFill'),
+    kidTag:  document.getElementById('kidTag'),
+    party:   document.getElementById('partyTag'),
+    slams:   document.getElementById('slams'),
+    best:    document.getElementById('best'),
+    line:    document.getElementById('catchLine'),
+    swap:    document.getElementById('swapBtn'),
+    swapFace:document.getElementById('swapFace'),
+    start:   document.getElementById('startScreen'),
+    music:   document.getElementById('music'),
+    mute:    document.getElementById('mute'),
+    padTag:  document.getElementById('padTag'),
+  };
+
+  function fit(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener('resize', fit);
+
+  const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+  const rnd = (a,b) => a + Math.random()*(b-a);
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const ease = t => { const u = clamp(t,0,1); return u*u*(3-2*u); };
+  const dist = (a,b) => Math.hypot(a.x-b.x, a.z-b.z);
+
+  function roundRect(x,y,w,h,r){
+    const rr = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+  }
+  function ellipse(x,y,rx,ry){
+    ctx.beginPath(); ctx.ellipse(x, y, Math.abs(rx), Math.abs(ry), 0, 0, 7);
+  }
+
+  /* ---------- sound (primitives live in kidkit.js) ---------- */
+  let muted = false;
+  const tone  = (f,d,type,v,slide) => { if (!muted) KidKit.audio.tone(f,d,type,v,slide); };
+  const noise = (d,v) => { if (!muted) KidKit.audio.noise(d,v); };
+  const seq = (notes, gap, dur, type, v) => notes.forEach((n,i) =>
+    setTimeout(() => tone(n, dur, type, v), i*gap));
+
+  const sfx = {
+    stomp:   ()=>{ noise(.09,.035); tone(88,.10,'sine',.05,-30); },
+    patter:  ()=>tone(rnd(560,760),.035,'triangle',.018),
+    whoosh:  ()=>{ noise(.20,.05); tone(880,.16,'triangle',.03,-560); },
+    wind:    ()=>tone(210,.26,'sawtooth',.03,190),
+    gotcha:  ()=>seq([392,523,659],55,.16,'square',.05),
+    lift:    ()=>tone(220,.34,'triangle',.04,520),
+    whump:   ()=>{
+      noise(.34,.10);
+      tone(150,.30,'sine',.09,-108);
+      setTimeout(()=>{ tone(330,.16,'triangle',.05,240); }, 90);
+    },
+    boing:   ()=>tone(300,.16,'triangle',.045,620),
+    giggle:  ()=>{ for (let i=0;i<5;i++) setTimeout(()=>tone(rnd(760,1180),.07,'triangle',.035),i*72); },
+    free:    ()=>seq([659,784,988],60,.16,'triangle',.045),
+    party:   ()=>seq([523,659,784,1047,1319,1047,1319,1568],90,.26,'triangle',.055),
+    pillow:  ()=>{ noise(.16,.045); tone(240,.14,'sine',.035,-90); },
+    swap:    ()=>seq([523,784],80,.14,'triangle',.05),
+  };
+  el.mute.addEventListener('click', e=>{
+    e.stopPropagation(); muted = !muted;
+    el.mute.textContent = muted ? '🔇' : '🔊';
+    el.mute.classList.toggle('off', muted);
+    el.mute.setAttribute('aria-label', muted ? 'Turn sound effects on' : 'Turn sound effects off');
+  });
+
+  /* ---------- music ----------
+     A cartoon chase needs to trot. Oliver Run is 132 and Emsile Fishing is
+     84; this sits at 126 with a walking bassline so it reads as "being
+     chased round the sofa" rather than "running for your life". */
+  const R = -1;
+  const TRACKS = {
+    chase: { bpm:126, drums:'light', wave:'square',
+      lead:[72,R,74,R,76,74,72,R, 69,R,72,R,74,R,R,R,
+            71,R,72,R,74,72,71,R, 67,R,69,R,71,R,R,R],
+      bass:[36,R,43,R, 36,R,43,R, 34,R,41,R, 34,R,41,R] },
+    party: { bpm:144, drums:'heavy', wave:'square',
+      lead:[76,79,81,84, 81,79,76,79, 74,77,79,82, 79,77,74,77,
+            72,76,79,84, 83,79,76,79, 81,R,79,R, 76,R,R,R],
+      bass:[40,40,47,47, 38,38,45,45, 36,36,43,43, 38,38,45,45] },
+  };
+  let musicOn = true;
+  const jukebox = KidKit.audio.music(TRACKS, {volume:.40});
+  el.music.addEventListener('click', e=>{
+    e.stopPropagation();
+    musicOn = !musicOn;
+    el.music.classList.toggle('off', !musicOn);
+    el.music.setAttribute('aria-label', musicOn ? 'Turn music off' : 'Turn music on');
+    jukebox.setEnabled(musicOn);
+  });
+
+  /* ================================================================== *
+   * furniture
+   *
+   * `rx`/`rz` are the footprint on the floor plan; anything without
+   * `pass` is solid and gets run around. The coffee table is the one you
+   * circle when Daddy is right behind you, so it sits in open floor with
+   * room on every side.
+   * ================================================================== */
+  const FURNITURE = [
+    { kind:'rug',     x:50, z:60, rx:34, rz:22, pass:true },
+    { kind:'dogbed',  x:88, z:84, rx:9,  rz:6,  pass:true, name:'the dog bed',  icon:'🐶' },
+    { kind:'couch',   x:50, z:12, rx:24, rz:8,  name:'the couch',    icon:'🛋️' },
+    { kind:'tv',      x:12, z:10, rx:11, rz:5,  name:'the telly',    icon:'📺' },
+    { kind:'lamp',    x:90, z:10, rx:4,  rz:3,  name:'the lamp',     icon:'💡' },
+    { kind:'chair',   x:88, z:30, rx:9,  rz:7,  name:'the big chair',icon:'🪑' },
+    { kind:'toybox',  x:12, z:48, rx:8,  rz:5,  name:'the toy box',  icon:'🧸' },
+    { kind:'table',   x:50, z:58, rx:12, rz:7,  name:'the table',    icon:'☕' },
+    { kind:'plant',   x:10, z:86, rx:5,  rz:4,  name:'the plant',    icon:'🪴' },
+  ];
+  const SOLID = FURNITURE.filter(f => !f.pass);
+  const LANDMARKS = FURNITURE.filter(f => f.name);
+  const LANDMARK_RANGE = 22;
+
+  /* Where the set piece happens. Daddy plants himself beside the couch so
+     he never ends up standing in front of the kid he just threw. */
+  const SLAM_SPOT = { x:38, z:24 };
+  const COUCH_LAND = { x:52, z:15 };
+  /* How high the kid rides while being carried. Clear of Daddy's head, so it
+     reads as held overhead rather than tucked under one arm. */
+  const CARRY_Y = 116;
+
+  /* ================================================================== *
+   * the cast
+   * ================================================================== */
+  const KIDS = [
+    { id:'oliver', name:'Oliver', face:'🧒',
+      skin:'#F6C99B', hair:'#7A4B2A', shirt:'#3DA9F5', shirt2:'#1E6FB0',
+      legs:'#2F4858', shoe:'#F0453A', style:'boy' },
+    { id:'emsile', name:'Emsile', face:'👧',
+      skin:'#F8D2AE', hair:'#C97B3C', shirt:'#FF6FA8', shirt2:'#D2417A',
+      legs:'#8646CE', shoe:'#FFD23D', style:'girl' },
+  ];
+  const DADDY = { skin:'#EEB88A', hair:'#4A3524', shirt:'#4FD16A', shirt2:'#2C8C4E',
+                  legs:'#3B4A6B', shoe:'#5A3B22' };
+
+  const KID_SPEED   = 0.72;
+  const DAD_WALK    = 0.53;
+  const DAD_LUNGE   = 1.28;
+  const KID_R = 4.2, DAD_R = 6.6;
+
+  function makeKid(def, x, z){
+    return {
+      def, x, z, vx:0, vz:0, dir:1, run:0, r:KID_R,
+      held:false, safe:0, hop:0, missCd:0, bob:Math.random()*6,
+    };
+  }
+  let kids, daddy;
+
+  function resetCast(){
+    kids = [ makeKid(KIDS[0], 34, 88), makeKid(KIDS[1], 66, 88) ];
+    daddy = {
+      x:50, z:34, vx:0, vz:0, dir:1, run:0, r:DAD_R,
+      mode:'walk', timer:0, lungeCd:70, lx:0, lz:1, stomp:0, flop:0,
+      chase:null, chaseCd:0, prefer:0,
+    };
+  }
+  resetCast();
+
+  /* ================================================================== *
+   * state
+   *
+   * Two states only — 'menu' and 'play' — because there is no way to lose.
+   * The chase runs behind the start screen as an attract mode, with both
+   * kids on autopilot; starting just hands one of them to the player.
+   * ================================================================== */
+  let state = 'menu';
+  let playerIdx = 0;
+  let slams = 0;
+  let best = KidKit.storage.getNumber('daddy-smash-best', 0);
+  let giggle = 0;                    // 0..100, fills the meter
+  let party = 0;                     // frames of pillow party left
+  let hunger = 0;                    // how long since Daddy caught anybody
+  let smash = null;                  // the set piece, when one is running
+  let t = 0, shake = 0, flash = 0;
+  let saveIv = null;
+
+  const savedKid = KidKit.storage.get('daddy-smash-kid', 'oliver');
+  playerIdx = Math.max(0, KIDS.findIndex(k => k.id === savedKid));
+  const player = () => kids[playerIdx];
+  const other  = () => kids[1 - playerIdx];
+
+  /* particles: dust puffs, hearts, stars, confetti, falling pillows, shouts */
+  let puffs = [], hearts = [], stars = [], confetti = [], pillows = [], pops = [];
+
+  function puffAt(x, z, n, colour){
+    for (let i = 0; i < n; i++){
+      puffs.push({ x, z, vx:rnd(-.55,.55), vz:rnd(-.35,.35), y:rnd(0,10),
+                   vy:rnd(.4,1.5), life:rnd(18,32), max:32, s:rnd(4,11),
+                   c:colour || '#FFF0D8' });
+    }
+  }
+  function heartsAt(x, z, n){
+    for (let i = 0; i < n; i++){
+      hearts.push({ x, z, y:rnd(20,52), vy:rnd(.7,1.5), vx:rnd(-.35,.35),
+                    life:rnd(40,70), max:70, s:rnd(9,17),
+                    c:['#FF6FA8','#FFD23D','#FF8A3D'][(Math.random()*3)|0] });
+    }
+  }
+  function starsAt(x, z, n){
+    for (let i = 0; i < n; i++){
+      stars.push({ x, z, y:rnd(30,60), a:rnd(0,6.3), sp:rnd(.05,.1),
+                   life:rnd(30,60), max:60, s:rnd(6,11) });
+    }
+  }
+  function confettiAt(x, z, n){
+    for (let i = 0; i < n; i++){
+      confetti.push({ x, z, y:rnd(20,70), vy:rnd(-1.2,1.6), vx:rnd(-.8,.8), vz:rnd(-.4,.4),
+                      r:rnd(0,6.3), spin:rnd(-.3,.3), life:rnd(50,95), max:95,
+                      c:['#FFD23D','#FF6FA8','#4FD16A','#3DA9F5','#FF8A3D'][(Math.random()*5)|0] });
+    }
+  }
+  function pop(x, z, text, colour, size, y){
+    pops.push({ x, z, y:y == null ? 56 : y, text, c:colour || '#FFD23D', size:size || 30, life:38, max:38 });
+  }
+
+  /* ================================================================== *
+   * HUD
+   * ================================================================== */
+  function whereIsPlayer(){
+    const p = player();
+    let bestHit = null, bestD = LANDMARK_RANGE;
+    for (const f of LANDMARKS){
+      const d = Math.hypot(f.x - p.x, f.z - p.z);
+      if (d < bestD){ bestD = d; bestHit = f; }
+    }
+    return bestHit ? bestHit.icon + ' ' + bestHit.name : '🏠 in the middle';
+  }
+
+  function updateHud(){
+    el.slams.textContent = slams;
+    el.best.textContent = best ? 'Best ' + best : '';
+    el.fill.style.width = Math.round(clamp(giggle,0,100)) + '%';
+    el.meter.classList.toggle('full', giggle >= 100 || party > 0);
+    el.kidTag.textContent = player().def.name;
+    el.swapFace.textContent = other().def.face;
+    el.swap.setAttribute('aria-label', 'Play as ' + other().def.name + ' instead');
+    el.party.hidden = party <= 0;
+    el.where.textContent = whereIsPlayer();
+  }
+
+  let lineIv = null;
+  function shout(text, ms){
+    el.line.textContent = text;
+    el.line.classList.add('show');
+    clearTimeout(lineIv);
+    lineIv = setTimeout(()=> el.line.classList.remove('show'), ms || 1600);
+  }
+
+  function saveBest(){
+    if (slams <= best) return;
+    best = slams;
+    clearTimeout(saveIv);
+    saveIv = setTimeout(()=> KidKit.storage.set('daddy-smash-best', best), 1200);
+  }
+
+  /* ================================================================== *
+   * movement helpers
+   * ================================================================== */
+
+  /* Push an entity out of anything solid. Obstacles are ellipses on the
+     floor plan, so the test is a circle in the ellipse's own squashed
+     space — cheap, and it slides you round a corner instead of sticking. */
+  function unstick(e, ignoreFurniture){
+    e.x = clamp(e.x, MIN_X, MAX_X);
+    e.z = clamp(e.z, MIN_Z, MAX_Z);
+    if (ignoreFurniture) return;
+    for (const f of SOLID){
+      const rx = f.rx + e.r, rz = f.rz + e.r;
+      const dx = (e.x - f.x)/rx, dz = (e.z - f.z)/rz;
+      const d = Math.hypot(dx, dz);
+      if (d >= 1 || d === 0) continue;
+      const push = (1 - d)/d;
+      e.x += dx*rx*push;
+      e.z += dz*rz*push;
+    }
+    e.x = clamp(e.x, MIN_X, MAX_X);
+    e.z = clamp(e.z, MIN_Z, MAX_Z);
+  }
+
+  /* Steering away from the furniture, so nobody jogs straight into the
+     couch and stays there while Daddy strolls over. */
+  function avoidance(e, reach){
+    let ax = 0, az = 0;
+    for (const f of SOLID){
+      const rx = f.rx + e.r + reach, rz = f.rz + e.r + reach;
+      const dx = (e.x - f.x)/rx, dz = (e.z - f.z)/rz;
+      const d = Math.hypot(dx, dz);
+      if (d >= 1 || d === 0) continue;
+      ax += dx/d*(1 - d);
+      az += dz/d*(1 - d);
+    }
+    // and the walls
+    ax += Math.max(0, 1 - (e.x - MIN_X)/12) - Math.max(0, 1 - (MAX_X - e.x)/12);
+    az += Math.max(0, 1 - (e.z - MIN_Z)/12) - Math.max(0, 1 - (MAX_Z - e.z)/12);
+    return { x: ax, z: az };
+  }
+
+  function move(e, sx, sz, speed, dt, ignoreFurniture){
+    const x0 = e.x, z0 = e.z;
+    const m = Math.hypot(sx, sz);
+    if (m > 0.001){
+      const nx = sx/m, nz = sz/m;
+      const step = speed*Math.min(1, m)*dt;
+      e.x += nx*step; e.z += nz*step;
+      if (Math.abs(nx) > 0.12) e.dir = nx > 0 ? 1 : -1;
+    }
+    unstick(e, ignoreFurniture);
+
+    /* Velocity is what actually happened, not what was asked for. Held
+       against a wall you are not moving, and Daddy leads his target by its
+       velocity — read the intent instead and he aims at a point inside the
+       wall and sails past you for ever, which is exactly what he did. */
+    const moved = Math.hypot(e.x - x0, e.z - z0);
+    e.vx = (e.x - x0)/Math.max(dt, .001);
+    e.vz = (e.z - z0)/Math.max(dt, .001);
+    e.run += moved*0.55 + dt*0.02;
+  }
+
+  const moving = e => Math.hypot(e.vx, e.vz) > 0.05;
+
+  /* ================================================================== *
+   * the set piece
+   *
+   *   grab    Daddy scoops the kid off the floor
+   *   carry   he marches them to the couch, kid kicking overhead
+   *   raise   held up high — wiggle the stick here and they wriggle harder
+   *   drop    thrown, tumbling, at the cushions
+   *   bounce  WHUMP, two decaying bounces, and Daddy flops down beside them
+   *   free    they spring off the couch; Daddy is left seeing stars
+   * ================================================================== */
+  function startSmash(kid){
+    smash = { kid, phase:'grab', t:0, ky:0, rot:0, wig:0, counted:false };
+    kid.held = true;
+    daddy.mode = 'carry';
+    daddy.flop = 0;
+    hunger = 0;
+    sfx.gotcha();
+    puffAt(kid.x, kid.z, 8);
+  }
+
+  function land(){
+    const k = smash.kid;
+    slams++;
+    saveBest();
+    shake = 16;
+    flash = 1;
+    sfx.whump();
+    setTimeout(()=> sfx.giggle(), 220);
+    puffAt(COUCH_LAND.x, COUCH_LAND.z + 2, 18, '#FFF6E4');
+    heartsAt(COUCH_LAND.x, COUCH_LAND.z, 7);
+    confettiAt(COUCH_LAND.x, COUCH_LAND.z, party > 0 ? 26 : 14);
+    // starts above head height, or it lands square on the kid it is about
+    pop(COUCH_LAND.x, COUCH_LAND.z, party > 0 ? 'PILLOW SMASH!' : 'WHUMP!', '#FFD23D', 38, 104);
+    shout(k.def.name + ' got smashed!');       // the CSS shouts it in caps
+    addGiggle(20);
+  }
+
+  function endSmash(){
+    const k = smash.kid;
+    k.held = false;
+    k.safe = 130;                    // a head start, so it never feels unfair
+    k.x = COUCH_LAND.x + 6;
+    k.z = 30;
+    k.hop = 16;
+    smash = null;
+    daddy.mode = 'dizzy';
+    daddy.timer = 76;
+    daddy.flop = 0;
+    daddy.prefer = 1 - kids.indexOf(k);       // the other one next
+    daddy.chase = null;
+    sfx.free();
+    starsAt(daddy.x, daddy.z, 6);
+  }
+
+  function updateSmash(dt){
+    const k = smash.kid;
+    smash.t += dt;
+
+    if (smash.phase === 'grab'){
+      // scooped off the floor and tipped on their side on the way up — the
+      // tilt eases in with the lift or the kid snaps flat in one frame
+      smash.tilt = ease(smash.t/16);
+      smash.ky = smash.tilt*CARRY_Y;
+      k.x += (daddy.x - k.x)*0.18*dt;
+      k.z += (daddy.z - k.z)*0.18*dt;
+      if (smash.t >= 16){ smash.phase = 'carry'; smash.t = 0; sfx.lift(); }
+
+    } else if (smash.phase === 'carry'){
+      const dx = SLAM_SPOT.x - daddy.x, dz = SLAM_SPOT.z - daddy.z;
+      const d = Math.hypot(dx, dz) || 1;
+      if (d > 1.4){
+        // he steps over the coffee table rather than round it — he's a dad
+        move(daddy, dx, dz, 0.62, dt, true);
+        daddy.stomp += dt;
+        if (daddy.stomp > 13){ daddy.stomp = 0; sfx.stomp(); }
+      }
+      k.x = daddy.x; k.z = daddy.z;
+      smash.ky = CARRY_Y + Math.sin(smash.t*0.3)*2.5;
+      smash.wig = Math.sin(smash.t*0.55)*0.2;
+      if (d <= 1.4 || smash.t > 170){ smash.phase = 'raise'; smash.t = 0; }
+
+    } else if (smash.phase === 'raise'){
+      smash.ky = CARRY_Y + ease(smash.t/26)*26;
+      // wiggling the controls here does nothing but make them wriggle and
+      // giggle harder, which is the entire point of it
+      const wiggle = k === player() && state === 'play' ? steerMag() : 0;
+      smash.wig = Math.sin(smash.t*(0.9 + wiggle*0.9))*(0.26 + wiggle*0.24);
+      if (wiggle > 0.5 && Math.random() < 0.10*dt){
+        heartsAt(daddy.x, daddy.z, 1);
+        addGiggle(0.5);
+      }
+      if (smash.t >= 26){ smash.phase = 'drop'; smash.t = 0; sfx.whoosh(); }
+
+    } else if (smash.phase === 'drop'){
+      const u = clamp(smash.t/13, 0, 1);
+      smash.ky = lerp(CARRY_Y + 26, 5, u*u);
+      k.x = lerp(daddy.x, COUCH_LAND.x, u);
+      k.z = lerp(daddy.z, COUCH_LAND.z, u);
+      smash.rot = u*1.5;
+      if (smash.t >= 13){ smash.phase = 'bounce'; smash.t = 0; land(); }
+
+    } else if (smash.phase === 'bounce'){
+      const u = clamp(smash.t/36, 0, 1);
+      smash.ky = Math.abs(Math.sin(u*Math.PI*2.3))*26*(1-u);
+      smash.rot *= Math.pow(0.9, dt);
+      daddy.flop = ease(smash.t/14);            // he flops down after them
+      if (smash.t > 12 && smash.t - dt <= 12) sfx.boing();
+      if (smash.t >= 36){ smash.phase = 'free'; smash.t = 0; }
+
+    } else {
+      smash.ky = Math.max(0, smash.ky*Math.pow(0.8, dt));
+      daddy.flop = Math.max(0, daddy.flop - 0.06*dt);
+      if (smash.t >= 18) endSmash();
+    }
+  }
+
+  /* ================================================================== *
+   * giggles and the pillow party
+   * ================================================================== */
+  function addGiggle(n){
+    if (party > 0) return;
+    giggle = clamp(giggle + n, 0, 100);
+    if (giggle >= 100) startParty();
+  }
+
+  function startParty(){
+    party = 660;
+    giggle = 100;
+    sfx.party();
+    jukebox.play('party');
+    shout('Pillow party!', 2000);
+    for (let i = 0; i < 16; i++) dropPillow();
+    confettiAt(50, 50, 30);
+  }
+
+  function dropPillow(){
+    pillows.push({
+      x: rnd(MIN_X, MAX_X), z: rnd(MIN_Z, MAX_Z), y: rnd(140, 260),
+      vy: rnd(1.4, 2.6), r: rnd(0, 6.3), spin: rnd(-.12,.12),
+      c: ['#FF6FA8','#FFD23D','#4FD16A','#3DA9F5','#FF8A3D','#FFF1D6'][(Math.random()*6)|0],
+      rest: 0,
+    });
+  }
+
+  /* ================================================================== *
+   * input
+   * ================================================================== */
+  const pads = KidKit.input.create({
+    element: document.getElementById('stage'),
+    steer: true,
+    onPress: () => press(),
+    onAction: () => swapKid(),                  // X / Y on a pad
+    onNav: dir => { if (state === 'menu') KidKit.input.moveFocus(dir); },
+    onGamepad: on => { el.padTag.hidden = !on; },
+  });
+
+  function press(){
+    if (state === 'menu'){ startGame(); return; }
+    // during play a tap is only ever a little hop — the game is the running
+    const p = player();
+    if (!p.held && p.hop <= 0){ p.hop = 16; sfx.boing(); }
+  }
+
+  function steerMag(){
+    const a = pads.axis();
+    const pt = pads.pointer();
+    return Math.max(a.mag, pt.active ? 1 : 0);
+  }
+
+  /* The whole control scheme: hold a finger and the kid runs to it, or push
+     a stick / hold the arrows. Nothing else to find, nothing to press. */
+  function playerSteer(){
+    const p = player();
+    const a = pads.axis();
+    let sx = a.x, sz = a.y;
+
+    const pt = pads.pointer();
+    if (pt.active){
+      const w = unproj(pt.nx*W, pt.ny*H);
+      const dx = w.x - p.x, dz = w.z - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 1.4){
+        // ease off over the last few units so they settle on the spot
+        const k = Math.min(1, d/7);
+        sx = dx/d*k; sz = dz/d*k;
+      } else if (a.mag < 0.06){
+        sx = sz = 0;
+      }
+    }
+    return { x: sx, z: sz };
+  }
+
+  function swapKid(){
+    if (state !== 'play') return;
+    playerIdx = 1 - playerIdx;
+    KidKit.storage.set('daddy-smash-kid', player().def.id);
+    sfx.swap();
+    puffAt(player().x, player().z, 6);
+    updateHud();
+  }
+  el.swap.addEventListener('click', e => { e.stopPropagation(); swapKid(); });
+
+  document.getElementById('pickOliver').addEventListener('click', e => { e.stopPropagation(); pickKid(0); });
+  document.getElementById('pickEmsile').addEventListener('click', e => { e.stopPropagation(); pickKid(1); });
+  function pickKid(i){
+    playerIdx = i;
+    KidKit.storage.set('daddy-smash-kid', KIDS[i].id);
+    document.getElementById('pickOliver').setAttribute('aria-pressed', String(i === 0));
+    document.getElementById('pickEmsile').setAttribute('aria-pressed', String(i === 1));
+    sfx.swap();
+    updateHud();
+  }
+  pickKid(playerIdx);
+
+  document.getElementById('startBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (state === 'menu') startGame();
+  });
+
+  function startGame(){
+    state = 'play';
+    el.start.hidden = true;
+    resetCast();
+    daddy.prefer = playerIdx;                 // he comes for the player first
+    slams = 0; giggle = 0; party = 0; hunger = 0; smash = null;
+    pillows = [];
+    jukebox.play('chase');
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * the kids
+   *
+   * A kid on autopilot flees, but at an angle rather than straight back —
+   * that is what turns "running away" into "running rings round the coffee
+   * table", which is the thing that actually happens in the living room.
+   * ================================================================== */
+  function kidAI(k, dt){
+    const d = dist(k, daddy);
+    let sx, sz;
+
+    if (d < 40){
+      let fx = (k.x - daddy.x)/(d||1), fz = (k.z - daddy.z)/(d||1);
+      // swirl: perpendicular to the escape, flipped now and then so they
+      // don't just orbit forever in one direction
+      if (Math.random() < 0.006*dt) k.swirl = -(k.swirl || 1);
+      const s = k.swirl || (k.swirl = Math.random() < 0.5 ? 1 : -1);
+      const near = clamp((40 - d)/34, 0, 1);
+      sx = fx + (-fz)*s*(0.55 + near*0.6);
+      sz = fz + ( fx)*s*(0.55 + near*0.6);
+    } else {
+      if (!k.roam || Math.hypot(k.roam.x - k.x, k.roam.z - k.z) < 6 || Math.random() < 0.004*dt){
+        k.roam = { x: rnd(MIN_X+4, MAX_X-4), z: rnd(MIN_Z+4, MAX_Z-4) };
+      }
+      sx = k.roam.x - k.x; sz = k.roam.z - k.z;
+      const m = Math.hypot(sx, sz) || 1;
+      sx = sx/m*0.7; sz = sz/m*0.7;
+    }
+
+    const av = avoidance(k, 5);
+    return { x: sx + av.x*1.5, z: sz + av.z*1.5 };
+  }
+
+  function updateKid(k, dt, steer){
+    if (k.safe > 0) k.safe -= dt;
+    if (k.hop > 0) k.hop -= dt;
+    if (k.missCd > 0) k.missCd -= dt;
+    if (k.held) return;
+
+    const speed = KID_SPEED*(party > 0 ? 1.14 : 1)*(k.safe > 0 ? 1.08 : 1);
+    move(k, steer.x, steer.z, speed, dt);
+
+    if (moving(k)){
+      k.patter = (k.patter || 0) + dt;
+      if (k.patter > 11){ k.patter = 0; if (k === player() && Math.random() < .5) sfx.patter(); }
+    }
+  }
+
+  /* ================================================================== *
+   * Daddy
+   *
+   * He is slower than a kid flat out, and that is on purpose: he catches
+   * you by cutting corners and by lunging, never by simply out-running
+   * you. If nobody has been caught for a while he speeds up a little —
+   * getting smashed is the reward, so a long dry spell is the failure
+   * state, not being caught.
+   * ================================================================== */
+  /* Whoever didn't get smashed last time goes first — "right, your turn". */
+  function pickTarget(){
+    const order = daddy.prefer === 1 ? [kids[1], kids[0]] : [kids[0], kids[1]];
+    for (const k of order) if (!k.held && k.safe <= 0) return k;
+    for (const k of order) if (!k.held) return k;
+    return kids[0];
+  }
+
+  function updateDaddy(dt){
+    if (daddy.mode === 'dizzy'){
+      daddy.timer -= dt;
+      daddy.run += dt*0.05;
+      daddy.x += Math.sin(t*0.11)*0.09*dt;
+      unstick(daddy);
+      if (Math.random() < 0.06*dt) starsAt(daddy.x, daddy.z, 1);
+      if (daddy.timer <= 0) daddy.mode = 'walk';
+      return;
+    }
+
+    hunger += dt;
+    const boost = 1 + Math.min(0.34, hunger/4200);
+    const slow = party > 0 ? 0.74 : 1;
+
+    /* He picks one kid and commits to them for a while, rather than always
+       lunging at whoever happens to be nearest. Two reasons: chasing one
+       child across the room past the other is what actually happens, and
+       going after the nearest meant a player who put the controller down
+       was always the closest target — so the little sister never got a go. */
+    if (!daddy.chase || daddy.chase.held || daddy.chase.safe > 0 || daddy.chaseCd <= 0){
+      daddy.chase = pickTarget();
+      daddy.chaseCd = rnd(420, 700);
+    }
+    daddy.chaseCd -= dt;
+    const target = daddy.chase;
+
+    const dx = target.x - daddy.x, dz = target.z - daddy.z;
+    const d = Math.hypot(dx, dz) || 1;
+
+    if (daddy.mode === 'walk'){
+      daddy.lungeCd -= dt;
+      if (d < 24 && daddy.lungeCd <= 0 && target.safe <= 0){
+        daddy.mode = 'wind'; daddy.timer = 20;
+        daddy.lx = dx/d; daddy.lz = dz/d;
+        sfx.wind();
+      } else {
+        // aim a little ahead of where they are going, so corners get cut
+        const lead = 9;
+        const av = avoidance(daddy, 3);
+        const ax = dx/d + target.vx*lead + av.x*1.2;
+        const az = dz/d + target.vz*lead + av.z*1.2;
+        move(daddy, ax, az, DAD_WALK*boost*slow, dt);
+      }
+    } else if (daddy.mode === 'wind'){
+      daddy.timer -= dt;
+      daddy.lx = lerp(daddy.lx, dx/d, 0.12*dt);
+      daddy.lz = lerp(daddy.lz, dz/d, 0.12*dt);
+      move(daddy, daddy.lx, daddy.lz, DAD_WALK*0.22, dt);
+      if (daddy.timer <= 0){ daddy.mode = 'lunge'; daddy.timer = 26; }
+    } else if (daddy.mode === 'lunge'){
+      daddy.timer -= dt;
+      move(daddy, daddy.lx, daddy.lz, DAD_LUNGE*slow, dt);
+      if (Math.random() < 0.3*dt) puffAt(daddy.x, daddy.z, 1, '#E8D6BE');
+      if (daddy.timer <= 0){
+        daddy.mode = 'walk';
+        daddy.lungeCd = rnd(60, 120)/boost;
+      }
+    }
+
+    if (moving(daddy)){
+      daddy.stomp += dt;
+      if (daddy.stomp > (daddy.mode === 'lunge' ? 8 : 15)){ daddy.stomp = 0; sfx.stomp(); }
+    }
+
+    // catching, and the near miss that is worth as much as the catch
+    for (const k of kids){
+      if (k.held) continue;
+      const dd = dist(daddy, k);
+      if (dd < daddy.r + k.r && k.safe <= 0){ startSmash(k); return; }
+      if (dd < 13 && k.missCd <= 0 && k.safe <= 0){
+        k.missCd = 55;
+        pop(k.x, k.z, 'WHOOSH!', '#FFF1D6', 24);
+        sfx.whoosh();
+        addGiggle(6);
+      }
+    }
+  }
+
+  /* ================================================================== *
+   * particles
+   * ================================================================== */
+  function updateBits(dt){
+    for (const p of puffs){
+      p.x += p.vx*dt; p.z += p.vz*dt; p.y += p.vy*dt; p.vy *= Math.pow(0.94, dt);
+      p.s += 0.18*dt; p.life -= dt;
+    }
+    puffs = puffs.filter(p => p.life > 0);
+
+    for (const h of hearts){ h.x += h.vx*dt; h.y += h.vy*dt; h.life -= dt; }
+    hearts = hearts.filter(h => h.life > 0);
+
+    for (const s of stars){ s.a += s.sp*dt; s.life -= dt; }
+    stars = stars.filter(s => s.life > 0);
+
+    for (const c of confetti){
+      c.x += c.vx*dt; c.z += c.vz*dt; c.y += c.vy*dt; c.vy -= 0.09*dt;
+      c.r += c.spin*dt; c.life -= dt;
+      if (c.y < 0){ c.y = 0; c.vy = 0; }
+    }
+    confetti = confetti.filter(c => c.life > 0);
+
+    for (const p of pops){ p.y += 0.55*dt; p.life -= dt; }
+    pops = pops.filter(p => p.life > 0);
+
+    for (const p of pillows){
+      if (p.y > 0){
+        p.y -= p.vy*dt; p.vy += 0.06*dt; p.r += p.spin*dt;
+        if (p.y <= 0){
+          p.y = 0; p.vy = 0; p.spin = 0;
+          p.rest = 1;
+          sfx.pillow();
+          puffAt(p.x, p.z, 3, '#FFF6E4');
+        }
+      }
+    }
+    if (party > 0 && Math.random() < 0.06*dt) dropPillow();
+    if (pillows.length > 60) pillows.splice(0, pillows.length - 60);
+  }
+
+  /* ================================================================== *
+   * update
+   * ================================================================== */
+  function update(dt){
+    t += dt;
+    if (shake > 0) shake = Math.max(0, shake - dt);
+    if (flash > 0) flash = Math.max(0, flash - 0.05*dt);
+
+    if (party > 0){
+      party -= dt;
+      if (party <= 0){
+        party = 0; giggle = 0; pillows = [];
+        jukebox.play('chase');
+      }
+    }
+
+    if (smash){
+      // hold on to who was caught: the last phase ends the set piece and
+      // clears `smash` part-way through this very frame
+      const caught = smash.kid;
+      updateSmash(dt);
+      // the kid who wasn't caught keeps running for their life
+      for (const k of kids){
+        if (k === caught) continue;
+        updateKid(k, dt, state === 'play' && k === player() ? playerSteer() : kidAI(k, dt));
+      }
+    } else {
+      for (const k of kids){
+        const steer = (state === 'play' && k === player()) ? playerSteer() : kidAI(k, dt);
+        updateKid(k, dt, steer);
+      }
+      updateDaddy(dt);
+    }
+
+    updateBits(dt);
+    if (Math.floor(t) % 6 === 0) updateHud();
+  }
+
+  /* ================================================================== *
+   * art — the room
+   * ================================================================== */
+  function drawRoom(){
+    // back wall
+    const wall = ctx.createLinearGradient(0, 0, 0, FAR_Y);
+    wall.addColorStop(0, '#F6E4C6');
+    wall.addColorStop(1, '#E7CFA9');
+    ctx.fillStyle = wall;
+    ctx.fillRect(0, 0, W, FAR_Y);
+
+    // wallpaper stripes
+    ctx.fillStyle = 'rgba(255,255,255,.28)';
+    for (let i = 0; i < 22; i++) ctx.fillRect(i*42 + 8, 0, 15, FAR_Y);
+
+    // little dots between the stripes, because it is a kid's house
+    ctx.fillStyle = 'rgba(214,150,96,.3)';
+    for (let i = 0; i < 22; i++){
+      for (let j = 0; j < 4; j++){
+        ctx.beginPath();
+        ctx.arc(i*42 + 34, 22 + j*44, 3, 0, 7);
+        ctx.fill();
+      }
+    }
+
+    // one drawing only, clear of the score in the top right corner
+    drawWindow(148, 30);
+    drawPicture(604, 36, '#F0453A', 'kid');
+
+    // skirting board
+    ctx.fillStyle = '#F4EDE1';
+    ctx.fillRect(0, FAR_Y - 16, W, 16);
+    ctx.fillStyle = 'rgba(0,0,0,.10)';
+    ctx.fillRect(0, FAR_Y - 4, W, 4);
+
+    // floor
+    const floor = ctx.createLinearGradient(0, FAR_Y, 0, H);
+    floor.addColorStop(0, '#B8834B');
+    floor.addColorStop(1, '#DFA868');
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, FAR_Y, W, H - FAR_Y);
+
+    // floorboards, converging on the vanishing point
+    ctx.strokeStyle = 'rgba(110,68,32,.30)';
+    ctx.lineWidth = 2;
+    for (let i = -9; i <= 9; i++){
+      const a = proj(50 + i*11, 0), b = proj(50 + i*11, 100);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(110,68,32,.18)';
+    ctx.lineWidth = 1.5;
+    for (let z = 10; z < 100; z += 12){
+      const y = proj(0, z).y;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    // side walls, as thin wedges at the back corners
+    ctx.fillStyle = 'rgba(120,74,36,.22)';
+    const l0 = proj(0, 0), l1 = proj(0, 100);
+    ctx.beginPath();
+    ctx.moveTo(l0.x, l0.y); ctx.lineTo(0, FAR_Y); ctx.lineTo(0, H); ctx.lineTo(l1.x, H);
+    ctx.closePath(); ctx.fill();
+    const r0 = proj(100, 0), r1 = proj(100, 100);
+    ctx.beginPath();
+    ctx.moveTo(r0.x, r0.y); ctx.lineTo(W, FAR_Y); ctx.lineTo(W, H); ctx.lineTo(r1.x, H);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawWindow(x, y){
+    const w = 132, h = 96;
+    ctx.fillStyle = '#7EC8F0';
+    roundRect(x, y, w, h, 6); ctx.fill();
+    // a bit of sky and a hill
+    ctx.fillStyle = '#9FE0A0';
+    ctx.beginPath();
+    ctx.moveTo(x, y+h); ctx.lineTo(x, y+h-26);
+    ctx.quadraticCurveTo(x+w*.4, y+h-52, x+w, y+h-22);
+    ctx.lineTo(x+w, y+h); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#FFF3C4';
+    ctx.beginPath(); ctx.arc(x+w-30, y+26, 13, 0, 7); ctx.fill();
+    // frame
+    ctx.strokeStyle = '#FFF8EC'; ctx.lineWidth = 7;
+    roundRect(x, y, w, h, 6); ctx.stroke();
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x+w/2, y); ctx.lineTo(x+w/2, y+h);
+    ctx.moveTo(x, y+h/2); ctx.lineTo(x+w, y+h/2);
+    ctx.stroke();
+    // curtains
+    ctx.fillStyle = '#E8798F';
+    for (const side of [-1, 1]){
+      const cx = side < 0 ? x - 20 : x + w + 20;
+      ctx.beginPath();
+      ctx.moveTo(cx, y - 8);
+      ctx.quadraticCurveTo(cx + side*16, y + h*.5, cx, y + h + 10);
+      ctx.quadraticCurveTo(cx - side*20, y + h*.5, cx, y - 8);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#C9566E';
+    ctx.fillRect(x - 30, y - 14, w + 60, 9);
+  }
+
+  function drawPicture(x, y, colour, kind){
+    const w = 76, h = 60;
+    ctx.fillStyle = '#8A5A32';
+    roundRect(x - 5, y - 5, w + 10, h + 10, 5); ctx.fill();
+    ctx.fillStyle = '#FFFBF0';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = colour; ctx.lineWidth = 3.5;
+    if (kind === 'kid'){
+      ctx.beginPath(); ctx.arc(x + w/2, y + 20, 9, 0, 7); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + w/2, y + 29); ctx.lineTo(x + w/2, y + 45);
+      ctx.moveTo(x + w/2 - 12, y + 36); ctx.lineTo(x + w/2 + 12, y + 36);
+      ctx.moveTo(x + w/2, y + 45); ctx.lineTo(x + w/2 - 10, y + 55);
+      ctx.moveTo(x + w/2, y + 45); ctx.lineTo(x + w/2 + 10, y + 55);
+      ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(x + w/2, y + h/2, 13, 0, 7); ctx.stroke();
+      for (let i = 0; i < 8; i++){
+        const a = i/8*6.283;
+        ctx.beginPath();
+        ctx.moveTo(x + w/2 + Math.cos(a)*18, y + h/2 + Math.sin(a)*18);
+        ctx.lineTo(x + w/2 + Math.cos(a)*24, y + h/2 + Math.sin(a)*24);
+        ctx.stroke();
+      }
+    }
+  }
+
+  /* ---------- furniture ---------- */
+  function shadow(x, z, rx, alpha){
+    const p = proj(x, z);
+    ctx.fillStyle = 'rgba(60,32,12,' + (alpha == null ? .22 : alpha) + ')';
+    ellipse(p.x, p.y, rx*p.s, rx*p.s*0.38); ctx.fill();
+  }
+
+  function drawFurniture(f){
+    const p = proj(f.x, f.z);
+    const s = p.s;
+    switch (f.kind){
+      case 'rug': {
+        const a = proj(f.x - f.rx, f.z - f.rz), b = proj(f.x + f.rx, f.z - f.rz);
+        const c = proj(f.x + f.rx, f.z + f.rz), d = proj(f.x - f.rx, f.z + f.rz);
+        ctx.fillStyle = '#6FA8A0';
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#F7E7C8'; ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(247,231,200,.5)'; ctx.lineWidth = 3;
+        const a2 = proj(f.x - f.rx*.7, f.z - f.rz*.66), b2 = proj(f.x + f.rx*.7, f.z - f.rz*.66);
+        const c2 = proj(f.x + f.rx*.7, f.z + f.rz*.66), d2 = proj(f.x - f.rx*.7, f.z + f.rz*.66);
+        ctx.beginPath();
+        ctx.moveTo(a2.x, a2.y); ctx.lineTo(b2.x, b2.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(d2.x, d2.y);
+        ctx.closePath(); ctx.stroke();
+        break;
+      }
+      case 'dogbed': {
+        ctx.fillStyle = '#B8607A';
+        ellipse(p.x, p.y, 44*s, 17*s); ctx.fill();
+        ctx.fillStyle = '#D97D95';
+        ellipse(p.x, p.y - 3*s, 34*s, 12*s); ctx.fill();
+        // a dog asleep in it, because Oliver Run has one to ride
+        const bob = Math.sin(t*0.03)*1.6*s;
+        ctx.fillStyle = '#C89A5E';
+        ellipse(p.x + 3*s, p.y - 9*s + bob, 24*s, 11*s); ctx.fill();
+        ellipse(p.x - 20*s, p.y - 12*s + bob, 11*s, 9*s); ctx.fill();
+        ctx.fillStyle = '#A97E46';
+        ellipse(p.x - 27*s, p.y - 16*s + bob, 4.5*s, 7*s); ctx.fill();
+        ctx.fillStyle = '#3A2A18';
+        ellipse(p.x - 28*s, p.y - 10*s + bob, 2.2*s, 1.6*s); ctx.fill();
+        // zzz
+        ctx.fillStyle = 'rgba(255,255,255,.75)';
+        ctx.font = '700 ' + (11*s) + 'px "Trebuchet MS", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('z', p.x - 30*s, p.y - 26*s + bob);
+        ctx.fillText('z', p.x - 24*s, p.y - 34*s + bob);
+        ctx.textAlign = 'left';
+        break;
+      }
+      case 'couch': {
+        shadow(f.x, f.z + 5, f.rx*1.05);
+        const w = f.rx*8.4*s, h = 74*s, y = p.y;
+        // back
+        ctx.fillStyle = '#C64B32';
+        roundRect(p.x - w/2, y - h - 26*s, w, h*0.72, 16*s); ctx.fill();
+        // seat
+        ctx.fillStyle = '#E0603E';
+        roundRect(p.x - w/2, y - 46*s, w, 46*s, 12*s); ctx.fill();
+        // cushions
+        ctx.fillStyle = '#F07551';
+        for (let i = -1; i <= 1; i++){
+          roundRect(p.x + i*w/3 - w/6.8, y - 52*s, w/3.6, 30*s, 9*s); ctx.fill();
+        }
+        // arms
+        ctx.fillStyle = '#B7442D';
+        roundRect(p.x - w/2 - 9*s, y - 62*s, 22*s, 62*s, 11*s); ctx.fill();
+        roundRect(p.x + w/2 - 13*s, y - 62*s, 22*s, 62*s, 11*s); ctx.fill();
+        // piping
+        ctx.strokeStyle = 'rgba(255,220,190,.5)'; ctx.lineWidth = 2.5*s;
+        roundRect(p.x - w/2, y - 46*s, w, 46*s, 12*s); ctx.stroke();
+        break;
+      }
+      case 'tv': {
+        shadow(f.x, f.z + 3, f.rx*0.9);
+        const w = 132*s, h = 78*s, y = p.y - 12*s;
+        ctx.fillStyle = '#5A4632';
+        roundRect(p.x - w*.34, y, w*.68, 26*s, 4*s); ctx.fill();
+        ctx.fillStyle = '#2B2B34';
+        roundRect(p.x - w/2, y - h, w, h, 7*s); ctx.fill();
+        ctx.fillStyle = '#3DA9F5';
+        roundRect(p.x - w/2 + 6*s, y - h + 6*s, w - 12*s, h - 12*s, 4*s); ctx.fill();
+        // cartoon on the telly
+        ctx.fillStyle = '#FFD23D';
+        ctx.beginPath(); ctx.arc(p.x - 14*s, y - h*.55, 11*s, 0, 7); ctx.fill();
+        ctx.fillStyle = '#4FD16A';
+        roundRect(p.x + 6*s, y - h*.42, 26*s, 20*s, 5*s); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2*s;
+        ctx.beginPath();
+        ctx.moveTo(p.x - w/2 + 10*s, y - h + 14*s);
+        ctx.lineTo(p.x - w/2 + 30*s, y - h + 10*s);
+        ctx.stroke();
+        break;
+      }
+      case 'lamp': {
+        shadow(f.x, f.z + 1, f.rx*1.1);
+        const y = p.y;
+        ctx.fillStyle = '#7A6448';
+        ctx.fillRect(p.x - 3*s, y - 96*s, 6*s, 96*s);
+        ellipse(p.x, y, 17*s, 6*s); ctx.fill();
+        ctx.fillStyle = '#FFE9A8';
+        ctx.beginPath();
+        ctx.moveTo(p.x - 26*s, y - 96*s);
+        ctx.lineTo(p.x + 26*s, y - 96*s);
+        ctx.lineTo(p.x + 18*s, y - 130*s);
+        ctx.lineTo(p.x - 18*s, y - 130*s);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,240,180,.30)';
+        ellipse(p.x, y - 92*s, 40*s, 16*s); ctx.fill();
+        break;
+      }
+      case 'chair': {
+        shadow(f.x, f.z + 3, f.rx*1.05);
+        const w = 78*s, y = p.y;
+        ctx.fillStyle = '#3E8E8A';
+        roundRect(p.x - w/2, y - 92*s, w, 62*s, 14*s); ctx.fill();
+        ctx.fillStyle = '#4FA9A2';
+        roundRect(p.x - w/2, y - 44*s, w, 44*s, 11*s); ctx.fill();
+        ctx.fillStyle = '#61C0B6';
+        roundRect(p.x - w/2 + 8*s, y - 50*s, w - 16*s, 26*s, 8*s); ctx.fill();
+        ctx.fillStyle = '#357B77';
+        roundRect(p.x - w/2 - 8*s, y - 58*s, 20*s, 58*s, 10*s); ctx.fill();
+        roundRect(p.x + w/2 - 12*s, y - 58*s, 20*s, 58*s, 10*s); ctx.fill();
+        break;
+      }
+      case 'toybox': {
+        shadow(f.x, f.z + 2, f.rx*1.0);
+        const w = 74*s, h = 44*s, y = p.y;
+        ctx.fillStyle = '#C97B3C';
+        roundRect(p.x - w/2, y - h, w, h, 6*s); ctx.fill();
+        ctx.fillStyle = '#E09A55';
+        roundRect(p.x - w/2, y - h - 9*s, w, 13*s, 5*s); ctx.fill();
+        // blocks spilling out of the top
+        const cols = ['#F0453A','#3DA9F5','#FFD23D','#4FD16A'];
+        for (let i = 0; i < 4; i++){
+          ctx.fillStyle = cols[i];
+          roundRect(p.x - 26*s + i*15*s, y - h - 22*s + (i%2)*7*s, 13*s, 13*s, 3*s); ctx.fill();
+        }
+        break;
+      }
+      case 'table': {
+        shadow(f.x, f.z + 2, f.rx*1.0);
+        const w = 104*s, y = p.y;
+        ctx.fillStyle = '#8A5A32';
+        ctx.fillRect(p.x - w/2 + 8*s, y - 30*s, 7*s, 30*s);
+        ctx.fillRect(p.x + w/2 - 15*s, y - 30*s, 7*s, 30*s);
+        ctx.fillStyle = '#B0743F';
+        ellipse(p.x, y - 34*s, w/2, 15*s); ctx.fill();
+        ctx.fillStyle = '#C98B52';
+        ellipse(p.x, y - 37*s, w/2, 15*s); ctx.fill();
+        // fruit bowl
+        ctx.fillStyle = '#F7E7C8';
+        ellipse(p.x, y - 42*s, 20*s, 8*s); ctx.fill();
+        ctx.fillStyle = '#F0453A';
+        ctx.beginPath(); ctx.arc(p.x - 6*s, y - 48*s, 6*s, 0, 7); ctx.fill();
+        ctx.fillStyle = '#4FD16A';
+        ctx.beginPath(); ctx.arc(p.x + 6*s, y - 47*s, 5.5*s, 0, 7); ctx.fill();
+        break;
+      }
+      case 'plant': {
+        shadow(f.x, f.z + 1, f.rx*1.0);
+        const y = p.y;
+        ctx.fillStyle = '#C8794A';
+        ctx.beginPath();
+        ctx.moveTo(p.x - 20*s, y - 34*s);
+        ctx.lineTo(p.x + 20*s, y - 34*s);
+        ctx.lineTo(p.x + 14*s, y);
+        ctx.lineTo(p.x - 14*s, y);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#3E8E4A';
+        for (let i = 0; i < 6; i++){
+          const a = -1.6 + i*0.52 + Math.sin(t*0.02 + i)*0.06;
+          ctx.save();
+          ctx.translate(p.x, y - 34*s);
+          ctx.rotate(a);
+          ellipse(0, -30*s, 11*s, 32*s); ctx.fill();
+          ctx.restore();
+        }
+        ctx.fillStyle = '#4FD16A';
+        ctx.beginPath(); ctx.arc(p.x, y - 40*s, 9*s, 0, 7); ctx.fill();
+        break;
+      }
+    }
+  }
+
+  /* ================================================================== *
+   * art — people
+   *
+   * Everything is drawn from the feet at the origin, in pixels, already
+   * scaled by the caller. `ph` is the run cycle; `pose` picks the arms.
+   * ================================================================== */
+  function limb(x1, y1, x2, y2, w, colour){
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+
+  function drawFigure(cfg, opts){
+    const o = opts || {};
+    const h = o.height || 86;                 // head to heel
+    const ph = o.ph || 0;
+    const run = o.run == null ? 1 : o.run;    // 0 standing, 1 running
+    const hipY = -h*0.44, shoulderY = -h*0.70, headR = h*0.175, headY = -h*0.855;
+    const swing = Math.sin(ph)*run;
+    const swing2 = Math.sin(ph + Math.PI)*run;
+    const bounce = Math.abs(Math.sin(ph))*run*h*0.02;
+
+    ctx.save();
+    ctx.translate(0, -bounce);
+
+    // legs
+    const legW = h*0.11;
+    limb(0, hipY, swing*h*0.20, -h*0.02, legW, cfg.legs);
+    limb(0, hipY, swing2*h*0.20, -h*0.02, legW, cfg.legs);
+    // shoes
+    ctx.fillStyle = cfg.shoe;
+    ellipse(swing*h*0.20, 0, h*0.075, h*0.042); ctx.fill();
+    ellipse(swing2*h*0.20, 0, h*0.075, h*0.042); ctx.fill();
+
+    // body
+    ctx.fillStyle = cfg.shirt;
+    if (cfg.belly){
+      ellipse(0, (hipY + shoulderY)/2, h*0.20, h*0.155); ctx.fill();
+      ctx.fillStyle = cfg.shirt2;
+      ellipse(0, hipY - h*0.02, h*0.185, h*0.075); ctx.fill();
+    } else if (cfg.style === 'girl'){
+      ctx.beginPath();
+      ctx.moveTo(-h*0.10, shoulderY);
+      ctx.lineTo(h*0.10, shoulderY);
+      ctx.lineTo(h*0.18, hipY + h*0.03);
+      ctx.lineTo(-h*0.18, hipY + h*0.03);
+      ctx.closePath(); ctx.fill();
+    } else {
+      roundRect(-h*0.115, shoulderY, h*0.23, hipY - shoulderY + h*0.03, h*0.055); ctx.fill();
+      ctx.fillStyle = cfg.shirt2;
+      ctx.fillRect(-h*0.115, shoulderY + h*0.09, h*0.23, h*0.045);
+    }
+
+    // arms
+    const armW = h*0.095;
+    if (o.pose === 'up'){
+      limb(-h*0.10, shoulderY, -h*0.20, shoulderY - h*0.34, armW, cfg.skin);
+      limb( h*0.10, shoulderY,  h*0.20, shoulderY - h*0.34, armW, cfg.skin);
+    } else if (o.pose === 'reach'){
+      limb(-h*0.10, shoulderY, -h*0.30, shoulderY - h*0.06, armW, cfg.skin);
+      limb( h*0.10, shoulderY,  h*0.30, shoulderY - h*0.06, armW, cfg.skin);
+    } else if (o.pose === 'flail'){
+      limb(-h*0.10, shoulderY, -h*0.26 + swing*h*0.10, shoulderY - h*0.26, armW, cfg.skin);
+      limb( h*0.10, shoulderY,  h*0.26 + swing2*h*0.10, shoulderY - h*0.26, armW, cfg.skin);
+    } else if (o.pose === 'down'){
+      limb(-h*0.10, shoulderY, -h*0.16, shoulderY + h*0.26, armW, cfg.skin);
+      limb( h*0.10, shoulderY,  h*0.16, shoulderY + h*0.26, armW, cfg.skin);
+    } else {
+      limb(-h*0.10, shoulderY, -h*0.10 + swing2*h*0.22, shoulderY + h*0.16, armW, cfg.skin);
+      limb( h*0.10, shoulderY,  h*0.10 + swing*h*0.22,  shoulderY + h*0.16, armW, cfg.skin);
+    }
+
+    // head
+    ctx.fillStyle = cfg.skin;
+    ctx.beginPath(); ctx.arc(0, headY, headR, 0, 7); ctx.fill();
+
+    // hair
+    ctx.fillStyle = cfg.hair;
+    if (cfg.style === 'girl'){
+      ctx.beginPath();
+      ctx.arc(0, headY - headR*0.20, headR*1.06, Math.PI, 0);
+      ctx.fill();
+      // pigtails
+      ctx.beginPath(); ctx.arc(-headR*1.12, headY - headR*0.1, headR*0.46, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc( headR*1.12, headY - headR*0.1, headR*0.46, 0, 7); ctx.fill();
+    } else if (cfg.beard){
+      ctx.beginPath();
+      ctx.arc(0, headY - headR*0.28, headR*1.02, Math.PI, 0);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, headY + headR*0.30, headR*0.86, 0, Math.PI);
+      ctx.fill();
+      ctx.fillRect(-headR*0.86, headY + headR*0.26, headR*1.72, headR*0.34);
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, headY - headR*0.24, headR*1.04, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(-headR*1.04, headY - headR*0.30, headR*2.08, headR*0.34);
+    }
+
+    // face — always delighted, never frightened
+    ctx.fillStyle = '#2A1B12';
+    const eyeY = headY - headR*0.06, eyeX = headR*0.36;
+    if (o.squint){
+      limb(-eyeX - headR*0.12, eyeY, -eyeX + headR*0.12, eyeY, headR*0.14, '#2A1B12');
+      limb( eyeX - headR*0.12, eyeY,  eyeX + headR*0.12, eyeY, headR*0.14, '#2A1B12');
+    } else {
+      ctx.beginPath(); ctx.arc(-eyeX, eyeY, headR*0.13, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc( eyeX, eyeY, headR*0.13, 0, 7); ctx.fill();
+    }
+    ctx.strokeStyle = '#2A1B12';
+    ctx.lineWidth = headR*0.13;
+    if (o.mouth === 'o'){
+      ctx.fillStyle = '#8A3A2A';
+      ctx.beginPath(); ctx.arc(0, headY + headR*0.36, headR*0.24, 0, 7); ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, headY + headR*0.18, headR*0.44, 0.32, Math.PI - 0.32);
+      ctx.stroke();
+    }
+    // cheeks
+    ctx.fillStyle = 'rgba(240,110,90,.35)';
+    ctx.beginPath(); ctx.arc(-headR*0.62, headY + headR*0.24, headR*0.20, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc( headR*0.62, headY + headR*0.24, headR*0.20, 0, 7); ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawKid(k){
+    const held = smash && smash.kid === k;
+    const p = proj(k.x, k.z);
+    const hop = k.hop > 0 ? Math.sin((1 - k.hop/16)*Math.PI)*16 : 0;
+    const lift = held ? smash.ky : 0;
+
+    if (!held || smash.phase === 'grab') shadow(k.x, k.z, 12, lift ? .12 : .26);
+
+    ctx.save();
+    ctx.translate(p.x, p.y - (hop + lift)*p.s);
+    ctx.scale(k.dir*p.s, p.s);
+
+    if (held){
+      const ph = smash.phase;
+      if (ph === 'drop' || ph === 'bounce' || ph === 'free'){
+        ctx.rotate(smash.rot*(ph === 'drop' ? 1 : 0.4));
+        const sq = ph === 'bounce' ? 1 + Math.max(0, 1 - smash.t/8)*0.3 : 1;
+        ctx.scale(sq, 1/sq);
+        drawFigure(k.def, { height:86, ph:t*0.5, run:1, pose:'flail', mouth:'o' });
+      } else {
+        // carried overhead, kicking
+        ctx.rotate(-1.45*(smash.tilt == null ? 1 : smash.tilt) + smash.wig);
+        drawFigure(k.def, { height:86, ph:t*0.55, run:1, pose:'flail', mouth:'o' });
+      }
+    } else {
+      const running = moving(k);
+      drawFigure(k.def, {
+        height: 86,
+        ph: k.run*1.5,
+        run: running ? 1 : 0,
+        pose: k.safe > 0 && Math.floor(t*0.1) % 2 ? 'up' : 'swing',
+        mouth: dist(k, daddy) < 20 ? 'o' : 'smile',
+      });
+    }
+    ctx.restore();
+
+    // a ring under whoever the player is driving, so you never lose yourself
+    if (k === player() && state === 'play' && !held){
+      ctx.strokeStyle = 'rgba(255,210,61,' + (0.55 + Math.sin(t*0.12)*0.2) + ')';
+      ctx.lineWidth = 3;
+      ellipse(p.x, p.y, 17*p.s, 6.5*p.s); ctx.stroke();
+    }
+    if (k.safe > 0 && !held){
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.30 + Math.sin(t*0.4)*0.2) + ')';
+      ctx.lineWidth = 2;
+      ellipse(p.x, p.y, 21*p.s, 8*p.s); ctx.stroke();
+    }
+  }
+
+  function drawDaddy(){
+    const p = proj(daddy.x, daddy.z);
+    const cfg = Object.assign({ belly:true, beard:true }, DADDY);
+    shadow(daddy.x, daddy.z, 17);
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.scale(daddy.dir*p.s, p.s);
+    if (daddy.flop > 0) ctx.rotate(-daddy.flop*0.45);
+
+    let pose = 'swing', mouth = 'smile', squint = false;
+    if (daddy.mode === 'carry') pose = 'up';
+    else if (daddy.mode === 'lunge'){ pose = 'reach'; mouth = 'o'; }
+    else if (daddy.mode === 'wind'){ pose = 'down'; squint = true; }
+    else if (daddy.mode === 'dizzy'){ pose = 'flail'; squint = true; }
+    if (smash && (smash.phase === 'drop' || smash.phase === 'bounce')) pose = 'down';
+
+    drawFigure(cfg, {
+      height: 126,
+      ph: daddy.run*1.35,
+      run: moving(daddy) || daddy.mode === 'dizzy' ? 1 : 0,
+      pose, mouth, squint,
+    });
+    ctx.restore();
+
+    // wind-up marker: the tell that a lunge is coming
+    if (daddy.mode === 'wind'){
+      const pulse = 1 + Math.sin(t*0.6)*0.14;
+      ctx.fillStyle = '#FFD23D';
+      ctx.font = '800 ' + (34*p.s*pulse) + 'px "Trebuchet MS", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.55)';
+      ctx.strokeText('!', p.x, p.y - 150*p.s);
+      ctx.fillText('!', p.x, p.y - 150*p.s);
+      ctx.textAlign = 'left';
+    }
+    if (daddy.mode === 'dizzy'){
+      // clear of his head, or the orbit reads as a sheriff's badge
+      for (let i = 0; i < 3; i++){
+        const a = t*0.14 + i*2.1;
+        const rx = Math.cos(a)*40*p.s, ry = Math.sin(a)*11*p.s;
+        drawStar(p.x + rx, p.y - 152*p.s + ry, 8*p.s, '#FFD23D');
+      }
+    }
+  }
+
+  function drawStar(x, y, r, colour){
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++){
+      const a = -Math.PI/2 + i*Math.PI/5;
+      const rr = i % 2 ? r*0.45 : r;
+      const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawHeart(x, y, r, colour){
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    ctx.moveTo(x, y + r*0.75);
+    ctx.bezierCurveTo(x - r*1.3, y - r*0.35, x - r*0.4, y - r*1.15, x, y - r*0.35);
+    ctx.bezierCurveTo(x + r*0.4, y - r*1.15, x + r*1.3, y - r*0.35, x, y + r*0.75);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawPillow(p){
+    const q = proj(p.x, p.z);
+    const s = q.s;
+    if (p.y > 0) shadow(p.x, p.z, 9, .14);
+    ctx.save();
+    ctx.translate(q.x, q.y - p.y*s - (p.rest ? 4*s : 12*s));
+    ctx.rotate(p.r);
+    ctx.scale(s, s);
+    ctx.fillStyle = p.c;
+    roundRect(-22, -14, 44, 28, 11); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    roundRect(-15, -9, 16, 8, 4); ctx.fill();
+    ctx.restore();
+  }
+
+  /* ================================================================== *
+   * render
+   * ================================================================== */
+  function render(){
+    ctx.save();
+    if (shake > 0){
+      ctx.translate(rnd(-1,1)*shake*0.5, rnd(-1,1)*shake*0.4);
+    }
+
+    drawRoom();
+
+    // everything that stands on the floor, painted back to front
+    const layers = [];
+    for (const f of FURNITURE){
+      if (f.pass){ drawFurniture(f); continue; }     // rug and dog bed are floor
+      layers.push({ z: f.z, draw: () => drawFurniture(f) });
+    }
+    for (const p of pillows) layers.push({ z: p.z, draw: () => drawPillow(p) });
+    for (const k of kids)    layers.push({ z: k.z, draw: () => drawKid(k) });
+    layers.push({ z: daddy.z + 0.5, draw: drawDaddy });
+    layers.sort((a, b) => a.z - b.z);
+    for (const l of layers) l.draw();
+
+    drawBits();
+
+    // the finger you are holding down, so a parent can see what a kid is doing
+    const pt = pads.pointer();
+    if (pt.active && state === 'play'){
+      const x = pt.nx*W, y = pt.ny*H;
+      ctx.strokeStyle = 'rgba(255,210,61,.75)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, 15 + Math.sin(t*0.3)*3, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.stroke();
+    }
+
+    ctx.restore();
+
+    if (party > 0){
+      ctx.fillStyle = 'rgba(255,180,220,' + (0.06 + Math.sin(t*0.1)*0.03) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+    if (flash > 0){
+      ctx.fillStyle = 'rgba(255,246,210,' + flash*0.35 + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function drawBits(){
+    for (const p of puffs){
+      const q = proj(p.x, p.z);
+      ctx.globalAlpha = clamp(p.life/p.max, 0, 1)*0.75;
+      ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(q.x, q.y - p.y*q.s, p.s*q.s, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const c of confetti){
+      const q = proj(c.x, c.z);
+      ctx.save();
+      ctx.globalAlpha = clamp(c.life/c.max, 0, 1);
+      ctx.translate(q.x, q.y - c.y*q.s);
+      ctx.rotate(c.r);
+      ctx.fillStyle = c.c;
+      ctx.fillRect(-4*q.s, -6*q.s, 8*q.s, 12*q.s);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const h of hearts){
+      const q = proj(h.x, h.z);
+      ctx.globalAlpha = clamp(h.life/h.max, 0, 1);
+      drawHeart(q.x, q.y - h.y*q.s, h.s*q.s, h.c);
+    }
+    ctx.globalAlpha = 1;
+
+    for (const s of stars){
+      const q = proj(s.x, s.z);
+      ctx.globalAlpha = clamp(s.life/s.max, 0, 1);
+      drawStar(q.x + Math.cos(s.a)*22*q.s, q.y - s.y*q.s + Math.sin(s.a)*8*q.s, s.s*q.s, '#FFD23D');
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.textAlign = 'center';
+    for (const p of pops){
+      const q = proj(p.x, p.z);
+      const k = clamp(p.life/p.max, 0, 1);
+      ctx.globalAlpha = k;
+      const size = p.size*q.s*(1 + (1-k)*0.25);
+      ctx.font = '800 ' + size + 'px "Trebuchet MS", sans-serif';
+      ctx.lineWidth = size*0.2; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+      ctx.strokeText(p.text, q.x, q.y - p.y*q.s);
+      ctx.fillStyle = p.c;
+      ctx.fillText(p.text, q.x, q.y - p.y*q.s);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+  }
+
+  /* ---------- kid lock (implementation lives in kidkit.js) ---------- */
+  const lockBtn = document.getElementById('lockBtn');
+  const toastEl = document.getElementById('toast');
+  let toastIv = null;
+  function toast(html, ms){
+    toastEl.innerHTML = html;
+    toastEl.classList.add('show');
+    clearTimeout(toastIv);
+    toastIv = setTimeout(()=> toastEl.classList.remove('show'), ms || 4200);
+  }
+  KidKit.kidLock(lockBtn, {
+    holdMs: 3000,
+    onHold: pct => {
+      lockBtn.style.background = pct
+        ? 'conic-gradient(#FFD23D '+pct+'%, rgba(255,255,255,.14) 0)' : '';
+    },
+    onChange: on => {
+      document.body.classList.toggle('locked', on);
+      lockBtn.textContent = on ? '\u{1F512}' : '\u{1F513}';
+      lockBtn.style.background = '';
+      lockBtn.setAttribute('aria-label', on
+        ? 'Kid lock is on — hold three seconds to turn off'
+        : 'Turn kid lock on');
+      toast(on ? '<em>Kid lock on.</em><br>Hold \u{1F512} for 3 seconds to exit.' : 'Kid lock off.',
+            on ? 4200 : 2200);
+    }
+  });
+
+  /* ---------- go ---------- */
+  updateHud();
+  document.getElementById('startBtn').focus();
+
+  let last = performance.now();
+  const hintEl = document.getElementById('sndHint');
+  let hintCheck = 0;
+  function frame(now){
+    let dt = (now - last)/(1000/60); last = now;
+    dt = Math.min(dt, 2.4);
+    pads.poll();
+    update(dt); render();
+    if (state !== 'menu' && ++hintCheck % 30 === 0){
+      const blocked = !KidKit.audio.running;
+      hintEl.hidden = !(blocked && (musicOn || !muted));
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

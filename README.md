@@ -10,13 +10,17 @@ sw.js                            offline cache  (bump CACHE when you change a ga
 shared/kidkit.js                 reusable: storage, input+gamepad, audio, music, kid lock
 games/oliver-run/index.html      game one — fast one-tap runner
 games/emsile-fishing/index.html  game two — slow one-tap fishing, 15 creatures to collect
-test/harness.js, test/smoke.js   headless tests for both  (node test/smoke.js)
+games/daddy-smash/index.html     game three — chase round the living room, no buttons at all
+test/harness.js, test/smoke.js   headless tests for all three  (node test/smoke.js)
 icons/                           app icons
 ```
 
-The two games are deliberately opposites. Oliver Run is fast and loud and scores
-distance; Emsile Fishing is still and quiet, runs at 84 bpm instead of 132, and
-scores a picture book you fill in. Same one button, same shared kit.
+The three games are deliberately unlike each other. Oliver Run is fast and loud
+and scores distance; Emsile Fishing is still and quiet, runs at 84 bpm instead of
+132, and scores a picture book you fill in. Daddy Smash is the odd one out on
+purpose: no button at all, just steering round one room while Daddy chases both
+kids, and **getting caught is the reward** — he body-slams you onto the couch,
+you bounce, you run off again. Nobody loses any of them.
 
 ## Putting it online
 
@@ -100,8 +104,20 @@ Everything is wired through `KidKit.input`, so every game gets all of these free
 | Almost any key | jump |
 | Arrow keys | menu navigation |
 | Gamepad A/B/bumpers/triggers/d-pad, stick up | jump |
-| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing) |
+| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing, swaps which kid you are in Daddy Smash) |
 | Gamepad Start | confirm in menus |
+
+Daddy Smash also needs to *steer*, so it opts into the kit's steering layer and
+gets these on top:
+
+| Input | Action |
+|---|---|
+| Hold a finger anywhere | run to it — the whole control scheme |
+| Arrow keys or WASD, held | run that way |
+| Left stick / d-pad, held | run that way |
+
+Holding a finger down is the one to show a three-year-old: no virtual joystick to
+find, no button to hit, the kid just runs to your fingertip.
 
 A cheap Bluetooth controller paired to a Fire TV or Android TV makes this a couch
 game. Apple TV has no browser at all — AirPlay from a phone instead.
@@ -129,6 +145,11 @@ const pads = KidKit.input.create({
   onNav:    dir => KidKit.input.moveFocus(dir)
 });
 // then call pads.poll() once per frame — that's what reads the gamepad
+
+// add steer:true and you also get held/analogue movement
+const pads = KidKit.input.create({ element: stage, steer: true, onPress: … });
+pads.axis();     // {x, y, mag} from held arrows/WASD + stick + d-pad
+pads.pointer();  // {active, nx, ny} — where a finger is being held, 0..1
 
 // sound that actually starts on iPhones
 KidKit.audio.tone(440, 0.12, 'square', 0.05);

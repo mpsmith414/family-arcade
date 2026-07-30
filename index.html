@@ -53,6 +53,7 @@
   .art{height:126px;display:flex;align-items:center;justify-content:center;font-size:52px}
   .art.run{background:linear-gradient(160deg,#3B2263,#8B4A6B 60%,#F2A65A)}
   .art.fish{background:linear-gradient(160deg,#8FD8F5,#2A8FC4 45%,#04203A)}
+  .art.smash{background:linear-gradient(160deg,#F6E4C6,#E0603E 55%,#2E1B12)}
   .art.soon{background:linear-gradient(160deg,#1F2340,#2E3357)}
   .meta{padding:13px 15px 15px}
   .meta strong{display:block;font-size:17px;letter-spacing:.02em}
@@ -97,11 +98,12 @@
     </span>
   </button>
 
-  <button class="card" disabled>
-    <span class="art soon">➕</span>
+  <button class="card" data-go="games/daddy-smash/index.html">
+    <span class="best" id="bestSmash" hidden></span>
+    <span class="art smash">🤼</span>
     <span class="meta">
-      <strong>Game Three</strong>
-      <span>Empty slot. Drop a folder in /games and add one line to this page.</span>
+      <strong>Daddy Smash</strong>
+      <span>Run round the living room. Get caught and he smashes you on the couch. Getting caught is the good bit.</span>
     </span>
   </button>
 </div>
@@ -132,6 +134,14 @@
     var fishTag = document.getElementById('bestFish');
     fishTag.textContent = '🐠 ' + species + '/15';
     fishTag.hidden = false;
+  }
+
+  // and the smash count on its card
+  var smashes = KidKit.storage.getNumber('daddy-smash-best', 0);
+  if (smashes){
+    var smashTag = document.getElementById('bestSmash');
+    smashTag.textContent = '🤼 ' + smashes;
+    smashTag.hidden = false;
   }
 
   var cards = [].slice.call(document.querySelectorAll('.card:not([disabled])'));

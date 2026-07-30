@@ -1,6 +1,6 @@
 /* Family Arcade service worker.
    Bump CACHE when you change a game, otherwise phones keep the old copy. */
-const CACHE = 'arcade-v2';
+const CACHE = 'arcade-v3';
 const FILES = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const FILES = [
   './shared/kidkit.js',
   './games/oliver-run/index.html',
   './games/emsile-fishing/index.html',
+  './games/daddy-smash/index.html',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png'

@@ -7,6 +7,8 @@
    What it gives you:
      KidKit.storage           save/load that works everywhere
      KidKit.input.create()    touch + mouse + keyboard + GAMEPAD, one handler
+     KidKit.input.create({steer:true})
+                              …plus held/analog steering: .axis() and .pointer()
      KidKit.audio             unlock-safe WebAudio, blips, noise
      KidKit.audio.music()     chiptune loop player
      KidKit.kidLock()         fullscreen / no-accidental-exit lock
@@ -15,7 +17,7 @@
 (function (global) {
   'use strict';
 
-  var KidKit = { version: '1.0.0' };
+  var KidKit = { version: '1.1.0' };
 
   /* ------------------------------------------------------------------ *
    * storage — localStorage, falling back to memory if it's unavailable
@@ -74,10 +76,21 @@
     Left: 'left', Right: 'right', Down: 'down'
   };
 
+  /* Held-direction keys, for games that steer instead of jump. Arrows and
+     WASD both, and both cases of the letters — a five-year-old leaves caps
+     lock on for weeks at a time. */
+  var STEER_KEYS = {
+    ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+    Left: [-1, 0], Right: [1, 0], Up: [0, -1], Down: [0, 1],
+    a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1],
+    A: [-1, 0], D: [1, 0], W: [0, -1], S: [0, 1]
+  };
+
   // standard gamepad mapping
   var BTN_X = 2, BTN_Y = 3, BTN_SELECT = 8, BTN_START = 9;
   var BTN_UP = 12, BTN_DOWN = 13, BTN_LEFT = 14, BTN_RIGHT = 15;
   var AXIS = 0.55;
+  var STICK_DEAD = 0.22;             // generous: cheap pads drift a long way
 
   KidKit.input = {
     create: function (opts) {
@@ -91,17 +104,75 @@
       var padsLive = 0;
       var lastSource = 'touch';
 
+      /* --- steering state (only live when opts.steer) ---------------- *
+       * keyVec  which direction keys are held down right now
+       * padVec  left stick + d-pad, refreshed by poll()
+       * ptr     where a finger is being held, 0..1 across `el`
+       * ------------------------------------------------------------- */
+      var steer = !!opts.steer;
+      var keyHeld = {};
+      var padVec = { x: 0, y: 0 };
+      var ptr = { active: false, id: null, nx: 0.5, ny: 0.5 };
+
       function onInteractive(e) {
         var t = e.target;
         return !!(t && t.closest && t.closest('button,a,input,select,textarea'));
+      }
+
+      function keyVec() {
+        var x = 0, y = 0;
+        for (var k in keyHeld) {
+          if (!Object.prototype.hasOwnProperty.call(keyHeld, k)) continue;
+          var v = STEER_KEYS[k];
+          if (v) { x += v[0]; y += v[1]; }
+        }
+        return { x: x, y: y };
+      }
+
+      function trackPointer(e) {
+        var r;
+        try { r = el.getBoundingClientRect(); } catch (er) { return; }
+        if (!r || !r.width || !r.height) return;
+        ptr.nx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+        ptr.ny = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
       }
 
       // --- touch & mouse ---
       el.addEventListener('pointerdown', function (e) {
         if (onInteractive(e)) return;
         lastSource = 'touch';
+        if (steer) {
+          ptr.active = true;
+          ptr.id = e.pointerId;
+          trackPointer(e);
+        }
         onPress('touch');
       });
+
+      if (steer) {
+        el.addEventListener('pointermove', function (e) {
+          if (!ptr.active || (ptr.id !== null && e.pointerId !== ptr.id)) return;
+          lastSource = 'touch';
+          trackPointer(e);
+        });
+        // release listens on the window as well: a finger that slides off the
+        // canvas mid-drag never sends pointerup to the element, and the kid
+        // would keep running into the wall forever.
+        ['pointerup', 'pointercancel'].forEach(function (ev) {
+          el.addEventListener(ev, endPointer);
+          global.addEventListener(ev, endPointer);
+        });
+        global.addEventListener('blur', clearHeld);
+        global.addEventListener('keyup', function (e) { delete keyHeld[e.key]; });
+        try {
+          global.document.addEventListener('visibilitychange', function () {
+            if (global.document.hidden) clearHeld();
+          });
+        } catch (e) {}
+      }
+
+      function endPointer() { ptr.active = false; ptr.id = null; }
+      function clearHeld() { keyHeld = {}; endPointer(); }
 
       // --- keyboard: almost any key jumps, so TV remotes just work ---
       global.addEventListener('keydown', function (e) {
@@ -112,6 +183,10 @@
         var a = global.document.activeElement;
         var onBtn = a && a.tagName === 'BUTTON';
         if (onBtn && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) return;
+
+        // Held direction keys feed axis() as well as doing whatever they
+        // already did, so ArrowUp still starts a game that waits on onPress.
+        if (steer && STEER_KEYS[e.key]) { lastSource = 'key'; keyHeld[e.key] = 1; }
 
         if (NAV_KEYS[e.key]) {
           // arrows navigate menus but still jump during play
@@ -138,6 +213,7 @@
 
       function poll() {
         var pads;
+        padVec.x = 0; padVec.y = 0;      // no pad, no push — never stick on
         try { pads = global.navigator && global.navigator.getGamepads ? global.navigator.getGamepads() : null; }
         catch (e) { return; }
         if (!pads) return;
@@ -168,7 +244,31 @@
           if (lNow && !st.ax.l) onNav('left');
           if (rNow && !st.ax.r) onNav('right');
           st.ax.up = upNow; st.ax.l = lNow; st.ax.r = rNow;
+
+          if (steer) {
+            var sx = Math.abs(ax[0] || 0) > STICK_DEAD ? ax[0] : 0;
+            var sy = Math.abs(ax[1] || 0) > STICK_DEAD ? ax[1] : 0;
+            if (st.b[BTN_LEFT]) sx -= 1;
+            if (st.b[BTN_RIGHT]) sx += 1;
+            if (st.b[BTN_UP]) sy -= 1;
+            if (st.b[BTN_DOWN]) sy += 1;
+            // several pads plugged in: whichever one is being pushed wins
+            if (Math.abs(sx) + Math.abs(sy) > Math.abs(padVec.x) + Math.abs(padVec.y)) {
+              padVec.x = sx; padVec.y = sy;
+            }
+            if (sx || sy) lastSource = 'pad';
+          }
         }
+      }
+
+      /* Keys and stick added together, then clamped to a unit circle so a
+         diagonal is not faster than a straight line. */
+      function axis() {
+        var k = keyVec();
+        var x = k.x + padVec.x, y = k.y + padVec.y;
+        var m = Math.sqrt(x * x + y * y);
+        if (m > 1) { x /= m; y /= m; m = 1; }
+        return { x: x, y: y, mag: m };
       }
 
       function padCount() {
@@ -182,6 +282,11 @@
       return {
         poll: poll,
         padCount: padCount,
+        axis: axis,
+        /* Where a finger is being held, 0..1 across the element. `active`
+           false means nobody is touching — not "touching the top left". */
+        pointer: function () { return { active: ptr.active, nx: ptr.nx, ny: ptr.ny }; },
+        releaseSteer: clearHeld,
         get lastSource() { return lastSource; }
       };
     },
