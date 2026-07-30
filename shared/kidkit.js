@@ -12,12 +12,13 @@
      KidKit.audio             unlock-safe WebAudio, blips, noise
      KidKit.audio.music()     chiptune loop player
      KidKit.kidLock()         fullscreen / no-accidental-exit lock
+     KidKit.focusGuard()      TV cursor wandered off the page — get it back
      KidKit.version
    ========================================================================== */
 (function (global) {
   'use strict';
 
-  var KidKit = { version: '1.1.0' };
+  var KidKit = { version: '1.2.0' };
 
   /* ------------------------------------------------------------------ *
    * storage — localStorage, falling back to memory if it's unavailable
@@ -92,6 +93,8 @@
   var AXIS = 0.55;
   var STICK_DEAD = 0.22;             // generous: cheap pads drift a long way
 
+  var createCount = 0;
+
   KidKit.input = {
     create: function (opts) {
       opts = opts || {};
@@ -137,8 +140,31 @@
         ptr.ny = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
       }
 
-      // --- touch & mouse ---
-      el.addEventListener('pointerdown', function (e) {
+      /* --- touch & mouse ---
+       * Everything binds to the document as well as to the game element. On a
+       * telly the game is a rectangle with dead space around it, and a TV
+       * browser parks a mouse cursor on screen that the stick drives around —
+       * so most of the time the cursor is sitting in that dead space, where a
+       * press used to land on nothing and look like a broken controller.
+       * The handler stamps the event so a press on the element is not counted
+       * a second time when it bubbles up to the document.
+       * The element still decides *where* the press was: trackPointer clamps
+       * to its box, so holding off to the left of the game is a hard left. */
+      var seenKey = '__kkSeen' + (++createCount);   // one stamp per input, not per page
+      function bind(type, fn) {
+        var wrapped = function (e) {
+          if (e[seenKey]) return;
+          e[seenKey] = 1;
+          fn(e);
+        };
+        el.addEventListener(type, wrapped);
+        try {
+          var doc = global.document;
+          if (doc && doc !== el && doc.addEventListener) doc.addEventListener(type, wrapped);
+        } catch (er) {}
+      }
+
+      bind('pointerdown', function (e) {
         if (onInteractive(e)) return;
         lastSource = 'touch';
         if (steer) {
@@ -149,8 +175,12 @@
         onPress('touch');
       });
 
+      // A key held down when the page loses focus never sends its keyup, so
+      // the kid comes back to a character running into the wall on its own.
+      global.addEventListener('blur', clearHeld);
+
       if (steer) {
-        el.addEventListener('pointermove', function (e) {
+        bind('pointermove', function (e) {
           if (!ptr.active || (ptr.id !== null && e.pointerId !== ptr.id)) return;
           lastSource = 'touch';
           trackPointer(e);
@@ -162,7 +192,6 @@
           el.addEventListener(ev, endPointer);
           global.addEventListener(ev, endPointer);
         });
-        global.addEventListener('blur', clearHeld);
         global.addEventListener('keyup', function (e) { delete keyHeld[e.key]; });
         try {
           global.document.addEventListener('visibilitychange', function () {
@@ -279,6 +308,10 @@
         return n;
       }
 
+      // A wandering TV cursor takes the page's focus with it; the guard is
+      // what gets it back. Opt out with {focusGuard:false}.
+      if (opts.focusGuard !== false) { try { KidKit.focusGuard(); } catch (e) {} }
+
       return {
         poll: poll,
         padCount: padCount,
@@ -309,6 +342,142 @@
       if (a && a.tagName === 'BUTTON' && !a.disabled) { a.click(); return true; }
       return false;
     }
+  };
+
+  /* ------------------------------------------------------------------ *
+   * focusGuard() — the fix for "the controller stopped working".
+   *
+   * TV browsers (Fire TV's Silk especially) draw a mouse cursor on top of
+   * the page and let the left stick push it around. Push it past the edge
+   * of the page and the browser chrome behind it takes focus. From then on
+   * keydown never fires and navigator.getGamepads() freezes — every button
+   * press does nothing, with no clue on screen as to why.
+   *
+   * A page cannot move that cursor back. What it can do is notice it has
+   * lost focus, ask for it back, and — since asking usually fails — put a
+   * big obvious target over the whole page saying "press here", so a press
+   * anywhere over the game brings focus home. Once the kid does that we
+   * have a real gesture in hand, which is the one moment fullscreen can be
+   * requested: fullscreen removes the chrome, and then there is no outside
+   * left for the cursor to get lost in.
+   *
+   * Singleton — input.create() arms it, so every game gets it for free.
+   * ------------------------------------------------------------------ */
+  var guard = null;
+
+  KidKit.focusGuard = function (opts) {
+    if (guard) return guard;
+    opts = opts || {};
+    var doc = global.document;
+    if (!doc || !doc.createElement) return null;
+
+    var DELAY = opts.delayMs == null ? 900 : opts.delayMs;   // don't flash on a quick blur
+    var panel = null, shown = false, lostFor = 0, escapes = 0, timer = null;
+    // 'pad' (default): only fill the screen when a controller is plugged in,
+    // which is the case this whole thing exists for. true = always, false = never.
+    var wantFull = opts.fullscreen == null ? 'pad' : opts.fullscreen;
+
+    function padsOn() {
+      try {
+        var p = global.navigator && global.navigator.getGamepads ? global.navigator.getGamepads() : [];
+        for (var i = 0; i < p.length; i++) if (p[i]) return true;
+      } catch (e) {}
+      return false;
+    }
+
+    function focused() {
+      try { return doc.hasFocus ? doc.hasFocus() : true; } catch (e) { return true; }
+    }
+
+    function build() {
+      if (panel || !doc.body || !doc.body.appendChild) return;
+      panel = doc.createElement('div');
+      panel.id = 'kk-focus-guard';
+      // No stylesheet: this has to work in a game that never heard of it, and
+      // the top/left/right/bottom longhands beat `inset` on old TV browsers.
+      panel.style.cssText =
+        'position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483000;' +
+        'display:none;align-items:center;justify-content:center;text-align:center;' +
+        'background:rgba(8,4,20,.82);color:#fff;cursor:pointer;padding:4vh 5vw;' +
+        'font-family:"Trebuchet MS","Avenir Next","Segoe UI",system-ui,sans-serif;' +
+        'font-weight:800;letter-spacing:.03em;line-height:1.3;' +
+        '-webkit-tap-highlight-color:transparent;touch-action:none;';
+      panel.innerHTML =
+        '<div>' +
+          '<div style="font-size:clamp(46px,11vw,120px);line-height:1">🎮</div>' +
+          '<div style="font-size:clamp(20px,4.6vw,46px);margin-top:.35em;color:#FFD23D">' +
+            'Press any button' +
+          '</div>' +
+          '<div style="font-size:clamp(13px,2.4vw,22px);margin-top:.5em;font-weight:400;opacity:.8">' +
+            'Point at the game first — the arrow has to be on this picture.' +
+          '</div>' +
+        '</div>';
+      // pointerdown fires before click and works on a telly's cursor too
+      panel.addEventListener('pointerdown', recover);
+      panel.addEventListener('click', recover);
+      doc.body.appendChild(panel);
+    }
+
+    function show() {
+      if (shown) return;
+      build();
+      if (!panel) return;
+      shown = true;
+      escapes++;
+      panel.style.display = 'flex';
+      if (opts.onShow) try { opts.onShow(); } catch (e) {}
+    }
+
+    function hide() {
+      lostFor = 0;
+      if (!shown) return;
+      shown = false;
+      if (panel) panel.style.display = 'none';
+      if (opts.onHide) try { opts.onHide(); } catch (e) {}
+    }
+
+    function goFullscreen() {
+      if (wantFull === false) return;
+      if (wantFull === 'pad' && !padsOn()) return;
+      try {
+        if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
+        var d = doc.documentElement;
+        var rf = d && (d.requestFullscreen || d.webkitRequestFullscreen || d.msRequestFullscreen);
+        if (rf) { var r = rf.call(d); if (r && r['catch']) r['catch'](function () {}); }
+      } catch (e) {}
+    }
+
+    /* Called from a real press on the panel: that press is what handed focus
+       back, and it is also the only user gesture we will get, so spend it. */
+    function recover(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      goFullscreen();
+      try { if (global.focus) global.focus(); } catch (er) {}
+      hide();
+    }
+
+    function check() {
+      if (doc.hidden) { hide(); return; }          // backgrounded is not lost
+      if (focused()) { hide(); return; }
+      lostFor += 300;
+      // ask nicely first — a few browsers do hand it back
+      try { if (global.focus) global.focus(); } catch (e) {}
+      if (lostFor >= DELAY) show();
+    }
+
+    try { global.addEventListener('focus', hide); } catch (e) {}
+    try { global.addEventListener('pointerdown', function () { if (shown) recover(); }); } catch (e) {}
+    timer = setInterval(check, 300);
+
+    guard = {
+      check: check,
+      dismiss: hide,
+      get visible() { return shown; },
+      get escapes() { return escapes; },
+      stop: function () { if (timer) { clearInterval(timer); timer = null; } hide(); }
+    };
+    return guard;
   };
 
   /* ------------------------------------------------------------------ *

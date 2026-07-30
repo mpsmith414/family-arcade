@@ -446,8 +446,15 @@ function createHarness(gameName, options) {
 
   /* ---- document ------------------------------------------------ */
   const elements = new Map();
+  const created = [];                 // createElement()'d nodes, for byId()
+  /* A TV browser drives a mouse cursor with the stick, and when that cursor
+     leaves the page the browser chrome takes focus: keys stop arriving and
+     getGamepads() freezes. loseFocus()/regainFocus() are how that gets
+     tested — hasFocus() is the only signal a page gets. */
+  let docFocused = true;
   const doc = {
     hidden: false,
+    hasFocus: () => docFocused,
     activeElement: null,
     fullscreenElement: null,
     _listeners: new Map(),
@@ -474,6 +481,7 @@ function createHarness(gameName, options) {
         const c = makeCtx(e);
         e.getContext = () => c;
       }
+      created.push(e);
       return e;
     },
     querySelectorAll(sel) { return StubElement.prototype.querySelectorAll.call({ _doc: doc }, sel); },
@@ -695,6 +703,43 @@ function createHarness(gameName, options) {
       return api;
     },
     click(id) { doc.getElementById(id).click(); return api; },
+    /* A press on the page but *outside* the game box — where a telly's cursor
+       spends most of its life, since the game is a letterboxed rectangle in
+       the middle of the screen. nx/ny are still measured across the stage, so
+       -1 is a full stage-width off to the left of it. */
+    tapPage(nx, ny) {
+      api.pageHold(nx == null ? 0.5 : nx, ny == null ? 0.5 : ny);
+      api.pageRelease();
+      return api;
+    },
+    pageHold(nx, ny, id) {
+      const el = doc.getElementById(id || 'stage');
+      doc.dispatchEvent(makeEvent('pointerdown', doc.body,
+        Object.assign({ pointerId: 1, button: 0 }, at(el, nx, ny))));
+      return api;
+    },
+    pageMove(nx, ny, id) {
+      const el = doc.getElementById(id || 'stage');
+      doc.dispatchEvent(makeEvent('pointermove', doc.body,
+        Object.assign({ pointerId: 1 }, at(el, nx, ny))));
+      return api;
+    },
+    pageRelease() {
+      winDispatch(makeEvent('pointerup', doc.body, { pointerId: 1 }));
+      return api;
+    },
+    /* The cursor wandered off the page and the browser chrome took focus. */
+    loseFocus() {
+      docFocused = false;
+      winDispatch(makeEvent('blur', null));
+      return api;
+    },
+    regainFocus() {
+      docFocused = true;
+      winDispatch(makeEvent('focus', null));
+      return api;
+    },
+    get focused() { return docFocused; },
     /* A real key press is down *and* up. Games that steer on held keys read
        as stuck-on forever otherwise, so this sends both — use keyDown/keyUp
        when you actually want the key held across frames. */
@@ -760,6 +805,13 @@ function createHarness(gameName, options) {
 
     /* --- reading --- */
     el: id => doc.getElementById(id),
+    /* Like el(), but finds nodes the page built at runtime (the kit's focus
+       guard, say) instead of conjuring an empty stub for an unknown id. */
+    byId(id) {
+      if (elements.has(id)) return elements.get(id);
+      for (const e of created) if (e.id === id) return e;
+      return null;
+    },
     text: id => String(doc.getElementById(id).textContent),
     num(id) {
       const n = parseFloat(String(doc.getElementById(id).textContent).replace(/[^\d.\-]/g, ''));

@@ -122,6 +122,25 @@ find, no button to hit, the kid just runs to your fingertip.
 A cheap Bluetooth controller paired to a Fire TV or Android TV makes this a couch
 game. Apple TV has no browser at all — AirPlay from a phone instead.
 
+### On a Fire TV, watch the cursor
+
+Silk (and most TV browsers) draws a mouse cursor over the page and lets the left
+stick shove it about. Two things follow from that, and both are handled:
+
+- The games now fill the whole screen, so there is no dead border left for the
+  cursor to sit in — a press anywhere on the page counts either way.
+- If the cursor slides off the page entirely, the browser's own chrome takes the
+  focus, and from that moment keys stop arriving and the gamepad reads as
+  frozen. Nothing in a web page can move that cursor back, so the kit notices
+  and covers the screen with **Press any button** — pressing anywhere over the
+  game hands focus back, and if a controller is connected that same press takes
+  the page fullscreen so there is no outside left to get lost in.
+
+Best of all is to press 🔒 (kid lock) at the start: it goes fullscreen straight
+away, and the cursor can never leave. **Steering with the d-pad rather than the
+left stick also avoids the cursor entirely** — the d-pad arrives as arrow keys,
+which never move it.
+
 ## Adding a game
 
 1. `games/your-game/index.html`
