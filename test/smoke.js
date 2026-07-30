@@ -68,6 +68,35 @@ function pump(h, n, each) {
 const POWER_NAMES = ['RIDE THE DOG', 'FIRE RING', 'GIANT MODE', 'TINY MODE', 'STAR MAGNET', 'ROCKET BOOTS'];
 const POWER_DURATIONS = { 'RIDE THE DOG': 900, 'FIRE RING': 750, 'GIANT MODE': 690, 'TINY MODE': 750, 'STAR MAGNET': 810, 'ROCKET BOOTS': 810 };
 
+/* REGRESSION GUARD — green before and after every task, by design. That is
+   the entire point: it proves nothing changed. Do not "fix" it into a
+   red-first test; inverting it would destroy the invariance proof.
+
+   Captured from the pre-high-road build. A run with no jump and no hold input
+   never leaves the ground, so it can never touch a platform or a gold star —
+   which means the sky lane must not perturb this by so much as one RNG draw.
+   If this test fails after a sky-lane change, the separate-PRNG rule was
+   broken somewhere, most likely in drawing code calling Math.random(). */
+const GROUND_BASELINE = { "score": 4658, "level": "Space Station", "trophies": "🏆🏆", "rng": "449869:a3ed77ff" };
+
+test('ground lane is byte-identical (Emsile regression)', note => {
+  const h = createHarness('oliver-run', { seed: 20260729 });
+  h.tap();                       // starts the game; nothing jumps after this
+  pump(h, 9000);
+  const actual = {
+    score: h.num('score'),
+    level: h.text('lvlName'),
+    trophies: h.text('trophies'),
+    rng: h.fingerprint(),
+  };
+  note(JSON.stringify(actual));
+  for (const k of Object.keys(GROUND_BASELINE)) {
+    assert(actual[k] === GROUND_BASELINE[k],
+      `${k} drifted: ${JSON.stringify(actual[k])} != ${JSON.stringify(GROUND_BASELINE[k])}`);
+  }
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * 1. it boots
  * ---------------------------------------------------------------- */

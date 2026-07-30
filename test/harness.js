@@ -529,6 +529,8 @@ function createHarness(gameName, options) {
   const baseRandom = mulberry32(opts.seed == null ? 0xC0FFEE : opts.seed);
   let randomHook = null;
   let randomCalls = 0;
+  let rngCalls = 0;                 // cumulative, never reset
+  let rngSum = 0;                   // rolling 32-bit checksum of the raw stream
   function random() {
     if (++randomCalls > RANDOM_BUDGET) {
       throw new Error(
@@ -537,6 +539,8 @@ function createHarness(gameName, options) {
         `like when the RNG is biased — see setRandomHook/bucket.`);
     }
     const v = baseRandom();
+    rngCalls++;
+    rngSum = (rngSum + Math.floor(v * 4294967296)) >>> 0;
     return randomHook ? randomHook(v) : v;
   }
 
@@ -678,13 +682,39 @@ function createHarness(gameName, options) {
     tap(id) {
       const el = doc.getElementById(id || 'stage');
       el.dispatchEvent(makeEvent('pointerdown', el, { pointerId: 1, button: 0 }));
+      el.dispatchEvent(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
+      winDispatch(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
       return api;
     },
     click(id) { doc.getElementById(id).click(); return api; },
-    key(k) {
+    keyDown(k) {
       winDispatch(makeEvent('keydown', doc.body, { key: k, code: k, repeat: false }));
       return api;
     },
+    keyUp(k) {
+      winDispatch(makeEvent('keyup', doc.body, { key: k, code: k }));
+      return api;
+    },
+    key(k) { api.keyDown(k); api.keyUp(k); return api; },
+    /* Sustained hold — unlike holdJump(), which deliberately presses and
+       releases on a cadence to generate repeated jump edges. Do not use both
+       at once. */
+    hold(on, id) {
+      const el = doc.getElementById(id || 'stage');
+      if (on) {
+        el.dispatchEvent(makeEvent('pointerdown', el, { pointerId: 1, button: 0 }));
+      } else {
+        el.dispatchEvent(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
+        winDispatch(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
+      }
+      if (pads.length) {
+        const b = pads[0].buttons[PAD_BUTTONS.a];
+        b.pressed = !!on; b.value = on ? 1 : 0; b.touched = !!on;
+      }
+      return api;
+    },
+    blur() { winDispatch(makeEvent('blur', null, {})); return api; },
+    fingerprint() { return rngCalls + ':' + (rngSum >>> 0).toString(16); },
     /* Queue a press for the next frame; the caller pumps it. */
     pad(button) { pressPadButton(button); return api; },
     /* Press, let one frame poll it, then one clear frame so the next
