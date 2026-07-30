@@ -1,0 +1,16 @@
+# This project has no build step and no dependencies on purpose — there is
+# nothing generated to ignore. Just editor and OS cruft.
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs
+*.log
+
+# Scratch space for throwaway harness experiments
+/tmp/
+*.local.js

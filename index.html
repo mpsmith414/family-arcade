@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Family Arcade</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0B0620">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<script src="shared/kidkit.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+  body{
+    background:
+      radial-gradient(90% 70% at 20% 0%, #3B2263 0%, transparent 60%),
+      radial-gradient(80% 60% at 100% 10%, #8B4A6B 0%, transparent 55%),
+      #0B0620;
+    color:#fff;font-family:"Trebuchet MS","Avenir Next","Segoe UI",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    padding:max(22px,env(safe-area-inset-top)) 18px 26px;
+    min-height:100%;
+  }
+  header{text-align:center;margin-bottom:26px}
+  .kicker{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:#FFD23D;opacity:.9}
+  h1{
+    font-size:clamp(34px,8vw,58px);font-weight:800;line-height:1;margin-top:8px;
+    text-transform:uppercase;letter-spacing:-.02em;
+    background:linear-gradient(90deg,#F0453A,#FF8A3D,#FFD23D,#4FD16A,#3DA9F5,#A86BF0);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 22px rgba(255,210,61,.3));
+  }
+  @supports not ((-webkit-background-clip:text) or (background-clip:text)){
+    h1{-webkit-text-fill-color:#FFD23D;color:#FFD23D;background:none}
+  }
+  .grid{
+    display:grid;gap:16px;width:100%;max-width:900px;
+    grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  }
+  .card{
+    position:relative;display:block;text-align:left;cursor:pointer;
+    border:3px solid rgba(255,255,255,.16);border-radius:20px;
+    background:rgba(255,255,255,.05);color:#fff;font:inherit;
+    padding:0;overflow:hidden;transition:transform .16s,border-color .16s;
+  }
+  .card:hover,.card:focus{transform:translateY(-4px);border-color:#FFD23D;outline:none}
+  .card:focus{box-shadow:0 0 0 5px rgba(255,210,61,.4)}
+  .card:active{transform:translateY(0)}
+  .art{height:126px;display:flex;align-items:center;justify-content:center;font-size:52px}
+  .art.run{background:linear-gradient(160deg,#3B2263,#8B4A6B 60%,#F2A65A)}
+  .art.soon{background:linear-gradient(160deg,#1F2340,#2E3357)}
+  .meta{padding:13px 15px 15px}
+  .meta strong{display:block;font-size:17px;letter-spacing:.02em}
+  .meta span{display:block;font-size:12px;opacity:.65;margin-top:4px;line-height:1.45}
+  .best{
+    position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);
+    border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;color:#FFD23D;
+  }
+  .card[disabled]{opacity:.45;cursor:default}
+  .card[disabled]:hover{transform:none;border-color:rgba(255,255,255,.16)}
+  footer{
+    margin-top:28px;text-align:center;font-size:11px;opacity:.5;line-height:1.7;
+    max-width:520px;letter-spacing:.04em;
+  }
+  #pad{margin-top:16px;font-size:12px;color:#8BE05A;letter-spacing:.14em;text-transform:uppercase}
+  #pad[hidden]{display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Made at home</div>
+  <h1>Family Arcade</h1>
+</header>
+
+<div class="grid" id="grid">
+  <button class="card" data-go="games/oliver-run/index.html">
+    <span class="best" id="bestRun" hidden></span>
+    <span class="art run">🦸</span>
+    <span class="meta">
+      <strong>Oliver Run</strong>
+      <span>One-tap runner. Smash everything, ride the dog, beat 18 bosses. Nobody ever loses.</span>
+    </span>
+  </button>
+
+  <button class="card" disabled>
+    <span class="art soon">➕</span>
+    <span class="meta">
+      <strong>Game Two</strong>
+      <span>Empty slot. Drop a folder in /games and add one line to this page.</span>
+    </span>
+  </button>
+</div>
+
+<div id="pad" hidden>🎮 Controller ready — press any button</div>
+
+<footer>
+  Works offline once loaded. Add to your home screen for a proper app icon.<br>
+  Tap a game, or use a controller / TV remote: arrows to move, any button to pick.
+</footer>
+
+<script>
+(function(){
+  // show the saved high score on the card
+  var best = KidKit.storage.getNumber('oliver-run-best', 0);
+  var trophies = KidKit.storage.getNumber('oliver-run-trophies', 0);
+  if (best){
+    var tag = document.getElementById('bestRun');
+    tag.textContent = 'Best ' + best + (trophies ? '  🏆' + trophies : '');
+    tag.hidden = false;
+  }
+
+  var cards = [].slice.call(document.querySelectorAll('.card:not([disabled])'));
+  cards.forEach(function(c){
+    c.addEventListener('click', function(){ location.href = c.getAttribute('data-go'); });
+  });
+  if (cards[0]) cards[0].focus();
+
+  // same input layer the games use, so a pad or remote drives the menu
+  var pads = KidKit.input.create({
+    element: document.body,
+    onPress: function(){ KidKit.input.activateFocused(); },
+    onNav: function(dir){ KidKit.input.moveFocus(dir); },
+    onGamepad: function(on){ document.getElementById('pad').hidden = !on; }
+  });
+  (function loop(){ pads.poll(); requestAnimationFrame(loop); })();
+
+  // offline support
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
