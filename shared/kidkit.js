@@ -15,7 +15,7 @@
 (function (global) {
   'use strict';
 
-  var KidKit = { version: '1.0.0' };
+  var KidKit = { version: '1.1.0' };
 
   /* ------------------------------------------------------------------ *
    * storage — localStorage, falling back to memory if it's unavailable
@@ -91,6 +91,26 @@
       var padsLive = 0;
       var lastSource = 'touch';
 
+      var onHold   = opts.onHold || function () {};
+      var keysDown = {};
+      var pointerHeld = false, padHeld = false, wasHeld = false;
+
+      function heldNow() {
+        var k;
+        for (k in keysDown) { if (keysDown[k]) return true; }
+        return pointerHeld || padHeld;
+      }
+      function syncHold(source) {
+        var now = heldNow();
+        if (now === wasHeld) return;
+        wasHeld = now;
+        onHold(now, source);
+      }
+      function releaseAll(source) {
+        keysDown = {}; pointerHeld = false; padHeld = false;
+        syncHold(source || 'blur');
+      }
+
       function onInteractive(e) {
         var t = e.target;
         return !!(t && t.closest && t.closest('button,a,input,select,textarea'));
@@ -100,8 +120,16 @@
       el.addEventListener('pointerdown', function (e) {
         if (onInteractive(e)) return;
         lastSource = 'touch';
+        pointerHeld = true;
         onPress('touch');
+        syncHold('touch');
       });
+      function pointerRelease() { pointerHeld = false; syncHold('touch'); }
+      el.addEventListener('pointerup', pointerRelease);
+      el.addEventListener('pointerleave', pointerRelease);
+      // release on the window too: a finger lifted off-element still counts
+      global.addEventListener('pointerup', pointerRelease);
+      global.addEventListener('pointercancel', pointerRelease);
 
       // --- keyboard: almost any key jumps, so TV remotes just work ---
       global.addEventListener('keydown', function (e) {
@@ -123,8 +151,16 @@
 
         if (e.preventDefault) e.preventDefault();
         lastSource = 'key';
+        keysDown[e.key] = 1;
         onPress('key');
+        syncHold('key');
       });
+
+      global.addEventListener('keyup', function (e) {
+        if (keysDown[e.key]) { delete keysDown[e.key]; syncHold('key'); }
+      });
+
+      global.addEventListener('blur', function () { releaseAll('blur'); });
 
       // --- gamepad ---
       global.addEventListener('gamepadconnected', function (e) {
@@ -141,6 +177,7 @@
         try { pads = global.navigator && global.navigator.getGamepads ? global.navigator.getGamepads() : null; }
         catch (e) { return; }
         if (!pads) return;
+        var anyDown = false;
 
         for (var i = 0; i < pads.length; i++) {
           var p = pads[i];
@@ -158,6 +195,8 @@
               else if (b === BTN_RIGHT) { onNav('right'); }
               else onPress('pad');           // A, B, bumpers, triggers, d-pad up/down
             }
+            if (down && b !== BTN_X && b !== BTN_Y && b !== BTN_START &&
+                b !== BTN_SELECT && b !== BTN_LEFT && b !== BTN_RIGHT) anyDown = true;
             st.b[b] = down;
           }
 
@@ -167,8 +206,11 @@
           if (upNow && !st.ax.up) { lastSource = 'pad'; onPress('pad'); }
           if (lNow && !st.ax.l) onNav('left');
           if (rNow && !st.ax.r) onNav('right');
+          if (upNow) anyDown = true;
           st.ax.up = upNow; st.ax.l = lNow; st.ax.r = rNow;
         }
+
+        if (anyDown !== padHeld) { padHeld = anyDown; syncHold('pad'); }
       }
 
       function padCount() {
@@ -182,7 +224,8 @@
       return {
         poll: poll,
         padCount: padCount,
-        get lastSource() { return lastSource; }
+        get lastSource() { return lastSource; },
+        get held() { return wasHeld; }
       };
     },
 

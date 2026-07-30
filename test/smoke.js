@@ -97,6 +97,47 @@ test('ground lane is byte-identical (Emsile regression)', note => {
   return h;
 });
 
+/* KidKit's input layer is shared by every game, so it gets tested directly
+   rather than through Oliver Run's behaviour. */
+test('KidKit tracks held state across key, pointer, pad and blur', note => {
+  const h = createHarness('oliver-run', { seed: 5 });
+  const seen = [];
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'),
+    onHold: (down, src) => seen.push((down ? '+' : '-') + src),
+  });
+  assert(pads.held === false, 'should start unheld');
+
+  h.keyDown('ArrowUp');
+  assert(pads.held === true, 'keydown should hold');
+  h.keyUp('ArrowUp');
+  assert(pads.held === false, 'keyup should release');
+
+  // two keys down, releasing one must NOT release the hold
+  h.keyDown('a'); h.keyDown('b');
+  h.keyUp('a');
+  assert(pads.held === true, 'still held while a second key is down');
+  h.keyUp('b');
+  assert(pads.held === false, 'released once the last key is up');
+
+  h.hold(true);
+  assert(pads.held === true, 'pointer down should hold');
+  h.hold(false);
+  assert(pads.held === false, 'pointer up should release');
+
+  // gamepad is edge-detected inside poll(), so it needs frames
+  h.hold(true); pads.poll();
+  assert(pads.held === true, 'pad button should hold');
+
+  // the case that would otherwise glide forever
+  h.blur();
+  assert(pads.held === false, 'blur must force-release everything');
+
+  note(seen.join(' '));
+  assert(seen.length > 0, 'onHold should have fired');
+  return h;
+});
+
 /* REGRESSION GUARD — hold() must own the gamepad A button for as long as
    it's held. Before the fix, any pressPadButton() call (via pad(),
    padPress(), or the holdJump() cadence) queued a pendingRelease closure
