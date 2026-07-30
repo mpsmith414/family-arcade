@@ -624,6 +624,12 @@ function createHarness(gameName, options) {
      Holding it longer is what a real stuck button looks like — one jump. */
   let pendingRelease = [];
 
+  /* Gamepad button indices currently owned by hold() (sustained press). A
+     pendingRelease closure checks this set at *fire* time, not at queue
+     time, so it stays inert for as long as hold() owns the button — even if
+     the closure was queued before hold(true) was called. */
+  const heldButtons = new Set();
+
   function step() {
     clock.now += FRAME_MS;
     randomCalls = 0;
@@ -646,7 +652,10 @@ function createHarness(gameName, options) {
     const b = pads[0].buttons[i];
     b.pressed = true; b.value = 1; b.touched = true;
     pads[0].timestamp = clock.now;
-    pendingRelease.push(() => { b.pressed = false; b.value = 0; b.touched = false; });
+    pendingRelease.push(() => {
+      if (heldButtons.has(i)) return;   // hold() owns this button — leave it pressed
+      b.pressed = false; b.value = 0; b.touched = false;
+    });
   }
 
   const api = {
@@ -696,9 +705,19 @@ function createHarness(gameName, options) {
       return api;
     },
     key(k) { api.keyDown(k); api.keyUp(k); return api; },
-    /* Sustained hold — unlike holdJump(), which deliberately presses and
-       releases on a cadence to generate repeated jump edges. Do not use both
-       at once. */
+    /* Sustained hold of the gamepad A button — unlike holdJump() or
+       pad()/padPress(), which press-and-release on a cadence to generate
+       repeated press *edges*. hold(true) takes ownership of button A for as
+       long as it's held: any pendingRelease closure queued by pad(),
+       padPress(), or the holdJump() cadence is inert against that button
+       while hold() owns it, so the press survives. hold(false) returns
+       ownership and releases the button immediately.
+
+       Do not mix hold() with pad()/padPress()/holdJump() on the SAME button
+       to try to generate repeated presses while held down — a button that
+       is already pressed cannot produce a new press edge, so those calls
+       would be no-ops for as long as hold() owns it. For a repeated
+       jump-then-glide pattern, cycle hold(true) / hold(false) instead. */
     hold(on, id) {
       const el = doc.getElementById(id || 'stage');
       if (on) {
@@ -708,8 +727,16 @@ function createHarness(gameName, options) {
         winDispatch(makeEvent('pointerup', el, { pointerId: 1, button: 0 }));
       }
       if (pads.length) {
-        const b = pads[0].buttons[PAD_BUTTONS.a];
-        b.pressed = !!on; b.value = on ? 1 : 0; b.touched = !!on;
+        const i = PAD_BUTTONS.a;
+        const b = pads[0].buttons[i];
+        if (on) {
+          heldButtons.add(i);
+          b.pressed = true; b.value = 1; b.touched = true;
+          pads[0].timestamp = clock.now;
+        } else {
+          heldButtons.delete(i);
+          b.pressed = false; b.value = 0; b.touched = false;
+        }
       }
       return api;
     },

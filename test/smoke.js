@@ -97,6 +97,34 @@ test('ground lane is byte-identical (Emsile regression)', note => {
   return h;
 });
 
+/* REGRESSION GUARD — hold() must own the gamepad A button for as long as
+   it's held. Before the fix, any pressPadButton() call (via pad(),
+   padPress(), or the holdJump() cadence) queued a pendingRelease closure
+   that unconditionally cleared button A on the very next step(), silently
+   dropping a sustained hold() one frame later. */
+test('harness: hold() survives a pad press', note => {
+  const h = createHarness('oliver-run', { seed: 1 });
+  h.tap();
+  pump(h, 30);
+
+  h.hold(true);
+  const afterHold = navigator.getGamepads()[0].buttons[0].pressed;
+  note(`A after hold(true):     ${afterHold}`);
+  assert(afterHold === true, 'hold(true) should press gamepad button A');
+
+  h.pad('a');
+  pump(h, 1);
+  const afterPad = navigator.getGamepads()[0].buttons[0].pressed;
+  note(`A after pad(a)+1 frame: ${afterPad}`);
+  assert(afterPad === true, 'hold() should still own button A after an unrelated pad() press/release cycle');
+
+  h.hold(false);
+  const afterRelease = navigator.getGamepads()[0].buttons[0].pressed;
+  assert(afterRelease === false, 'hold(false) should release button A immediately');
+
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * 1. it boots
  * ---------------------------------------------------------------- */
