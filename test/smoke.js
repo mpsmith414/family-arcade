@@ -1177,6 +1177,21 @@ test('daddy: choosing Emsile on the menu sticks across a reload', note => {
   return h;
 });
 
+test('daddy: choosing Daddy on the menu sticks across a reload', note => {
+  let h = createHarness('daddy-smash', { seed: 9 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 30);
+  assert(h.text('kidTag') === 'Daddy', `picking Daddy did not take, got "${h.text('kidTag')}"`);
+  assert(h.store['daddy-smash-kid'] === 'daddy', `storage says "${h.store['daddy-smash-kid']}"`);
+
+  h = h.reload();
+  assert(h.text('kidTag') === 'Daddy', `after reload the game forgot, showing "${h.text('kidTag')}"`);
+  assert(!h.hidden('startScreen'), 'reload should land back on the menu');
+  note('Daddy remembered across a reload');
+  return h;
+});
+
 test('daddy: best smash count survives a reload', note => {
   let h = createHarness('daddy-smash', { seed: 21 });
   assert(h.text('best') === '', `fresh install should show no best, got "${h.text('best')}"`);
