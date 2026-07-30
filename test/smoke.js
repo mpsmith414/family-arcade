@@ -125,8 +125,10 @@ test('KidKit tracks held state across key, pointer, pad and blur', note => {
   h.hold(false);
   assert(pads.held === false, 'pointer up should release');
 
-  // gamepad is edge-detected inside poll(), so it needs frames
-  h.hold(true); pads.poll();
+  // Gamepad is edge-detected inside poll(), so it needs a poll. Use padHold,
+  // NOT hold() — hold() also dispatches a pointerdown, which would satisfy
+  // this assertion via the pointer path even if pad tracking were deleted.
+  h.padHold(true, 0); pads.poll();
   assert(pads.held === true, 'pad button should hold');
 
   // the case that would otherwise glide forever
