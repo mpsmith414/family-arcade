@@ -1318,6 +1318,26 @@ test('daddy: 20000 frames as Daddy never throws', note => {
   return h;
 });
 
+/* The mirror of "20000 frames of never moving": there the kid never moves
+   and Daddy's own chase AI closes the distance regardless. Here Daddy is the
+   one nobody is steering — move(daddy, 0, 0, ...) — and nothing compensates
+   for that the way the AI does for a stationary kid, so a fully idle Daddy
+   may rack up few catches, or none at all, over the whole run. That dry
+   spell is the design working as intended (a long stretch with nobody
+   caught is the failure state the game is tuned against, not a crash), so
+   this does not assert slams > 0 — only that idle play never ends the game
+   or leaks timers. */
+test('daddy: 20000 idle frames as Daddy never throws either', note => {
+  const h = createHarness('daddy-smash', { seed: 3 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 20000);
+  assert(h.hidden('startScreen'), 'the game must never bounce back to the menu — there is no game over');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${h.num('slams')} smashes, ${h.timerCount} timers alive, entirely idle as Daddy`);
+  return h;
+});
+
 /* A blind driver: it laps the room and never reacts to where the kids are,
    so this measures "can a steered Daddy catch anybody at all", not skill —
    but it has to be a seed/budget pair the auto-lunge actually has to earn,
@@ -1369,6 +1389,86 @@ test('daddy: chasing as Daddy catches a kid, with no button pressed', note => {
     `${slams} smashes happened but no "got smashed" shout was ever seen on screen`);
   note(`${slams} smashes as Daddy, steering only (shouted for: ${[...smashed].join(', ') || 'nobody'})`);
   return h;
+});
+
+/* The raise-phase wiggle gate was widened to `(k === player() ||
+   playerIdx === 2)` so a human-driven Daddy also earns giggle credit for
+   working the stick while he holds a kid overhead — previously only the
+   `k === player()` half (a human-driven kid) was reachable. Nothing
+   exercised the new half.
+
+   Movement during the whole set piece (grab/carry/raise/drop/bounce) never
+   reads player input — only the raise phase's wiggle score does — so if two
+   runs share a seed and share their steering right up until the catch, the
+   catch lands on the exact same frame in both, no matter what either run
+   does with the stick afterwards. That makes an apples-to-apples comparison
+   possible: lap the room identically into the catch, then one run holds the
+   stick hard over through the raise and the other centres it, and read the
+   giggle meter the instant before `land()` adds its own flat +20.
+
+   Centred can only ever produce `wiggle <= 0.5`, so `addGiggle(0.5)`'s
+   Math.random() check never even runs — its contribution during the raise
+   is provably zero, not just usually zero. So the comparison only needs the
+   wiggling run to land one lucky 10%-chance tick in its ~26-frame window,
+   which a quick calibration pass below confirms it does for this seed. */
+test('daddy: wiggling the stick while Daddy holds a kid overhead fills the giggle meter faster', note => {
+  const seed = 42;
+  const legs = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+  const lap = (h, i) => {
+    if (i % 90 === 0) { const [x, y] = legs[(i / 90) % legs.length]; h.stick(x, y); }
+  };
+
+  // A reference run — lapping the room the whole way, never diverging — just
+  // to find which frame the catch resolves on for this seed/script.
+  function findLandFrame(budget) {
+    const h = createHarness('daddy-smash', { seed });
+    h.click('pickDaddy');
+    h.click('startBtn');
+    pump(h, 5);
+    let prevSlams = 0, landAt = -1;
+    for (let i = 0; i < budget && landAt === -1; i++) {
+      lap(h, i);
+      pump(h, 1);
+      if (h.num('slams') > prevSlams) landAt = i;
+      prevSlams = h.num('slams');
+    }
+    h.dispose();
+    return landAt;
+  }
+
+  const refLand = findLandFrame(3000);
+  assert(refLand > 0, 'reference run never caught anybody to calibrate the comparison against');
+  // 60 frames short of the catch is comfortably inside the fixed 16-frame
+  // grab (grab always follows immediately once the catch resolves), so
+  // switching the stick there can never be early enough to change who gets
+  // caught, when, or where.
+  const D = Math.max(0, refLand - 60);
+
+  function runBranch(branch) {
+    const h = createHarness('daddy-smash', { seed });
+    h.click('pickDaddy');
+    h.click('startBtn');
+    pump(h, 5);
+    let prevSlams = 0, landAt = -1, widthBeforeLand = null;
+    for (let i = 0; i < refLand + 50 && landAt === -1; i++) {
+      if (i < D) lap(h, i);
+      else if (i === D) h.stick(branch === 'wiggle' ? 1 : 0, branch === 'wiggle' ? 1 : 0);
+      const w = parseFloat(h.styleOf('giggleFill', 'width')) || 0;
+      pump(h, 1);
+      if (h.num('slams') > prevSlams) { landAt = i; widthBeforeLand = w; }
+      prevSlams = h.num('slams');
+    }
+    h.dispose();
+    return { landAt, widthBeforeLand };
+  }
+
+  const wiggling = runBranch('wiggle');
+  const still = runBranch('still');
+  assert(wiggling.landAt === refLand && still.landAt === refLand,
+    `both runs should catch on the same frame the reference run did (ref ${refLand}, wiggling ${wiggling.landAt}, still ${still.landAt}) — the diverging input leaked into the chase itself`);
+  assert(wiggling.widthBeforeLand > still.widthBeforeLand,
+    `wiggling through the raise should end with strictly more giggle than holding the stick still: wiggling ${wiggling.widthBeforeLand}%, still ${still.widthBeforeLand}%`);
+  note(`seed ${seed}: caught at frame ${refLand}, wiggling ${wiggling.widthBeforeLand}% giggle vs still ${still.widthBeforeLand}% going into the land`);
 });
 
 /* ================================================================ *
