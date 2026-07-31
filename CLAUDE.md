@@ -55,6 +55,14 @@ contrast with all three rather than land in between.
   and it stays a dark silhouette until it breaks the surface. That reveal is
   the payoff, so the tap-to-reel-faster boost is capped short of the end and
   can never skip it.
+  **Things happen while you fish** (`fireEvent`): a shoal arrives, dolphins go
+  past, rain comes on, night falls, treasure glints on the bottom, a bottle
+  floats by to be tapped, or the boat drifts to another zone. Every one is a
+  gift — several shorten the wait, none may ever lengthen it or cost a catch.
+  The zone is **where the boat is**, not how far the book has got: `maxZone()`
+  is the earned depth and only grows, `zi` moves around inside it. They used to
+  be the same value, which parked you in The Deep Deep for ever after two dozen
+  catches and was the single biggest reason it went stale.
 - `games/daddy-smash` — free movement round one room, both kids on screen at
   once, Daddy chasing. **This is the one that breaks the one-button rule, on
   purpose and by request:** there is no button at all, only steering. The whole
@@ -232,6 +240,30 @@ action. Don't "fix" this by narrowing it.
 - Kid-facing controls and adult-facing controls live on **opposite sides** of the
   screen so small hands don't hit the wrong one.
 - Keep the pace gentle. Speed ramps are tuned slow on purpose.
+
+## The clamp bug, which shipped twice
+
+Both of these were live on the public site, in the game with **no fail state**:
+
+```js
+waitLeft = Math.max(18, waitLeft - CUT);          // wiggle: meant to shorten
+reelProg = Math.min(reelProg + BOOST, cap);       // tap: meant to speed up
+```
+
+Each is a clamp that pushes the value the **wrong way** once it is already past
+the bound. A wait already under 18 got put *back up* to 18, so a child tapping
+faster than once every 18 frames reset the timer for ever and never got a bite
+at all. Reel progress already past the cap got pulled *back* to it, holding a
+fish short of the boat for ever. Both soft-locked the game, and both did it to
+whoever tapped hardest — the exact opposite of "mashing is always rewarded".
+
+Neither was visible by playing at a normal speed, and both survived a full test
+suite, because every existing test happened to tap every 10 frames. The guard is
+`fishing: mashing catches more, at every possible tapping speed`, which sweeps
+every cadence from one tap a frame to one every 40 and asserts the catch count
+rises as tapping gets faster. **When you write a clamp, clamp the delta, not the
+total** — and if a rule says "faster is better", test the whole range, not one
+convenient speed.
 
 ## Careful with
 

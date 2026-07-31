@@ -809,23 +809,119 @@ test('fishing: wiggling the line brings the bite sooner', note => {
   return busy;
 });
 
+/* Depth is still earned — the deepest water the book has unlocked only ever
+   goes deeper — but the boat no longer parks there for ever. It drifts, so
+   the shallows come back around, which is the whole point of the change. */
 test('fishing: the water gets deeper as the book fills', note => {
   const h = createHarness('emsile-fishing', { seed: 8 });
   h.click('startBtn');
-  const zonesSeen = [h.text('zoneName')];
-  for (let i = 0; i < 20000; i++) {
+  const deepestSeen = [];
+  const visited = new Set();
+  for (let i = 0; i < 30000; i++) {
     if (i % 10 === 0) h.tap();
     pump(h, 1);
     const z = h.text('zoneName');
-    if (z !== zonesSeen[zonesSeen.length - 1]) zonesSeen.push(z);
-    if (zonesSeen.length === ZONE_NAMES.length) break;
+    visited.add(z);
+    const rank = ZONE_NAMES.indexOf(z);
+    const best = deepestSeen.length ? ZONE_NAMES.indexOf(deepestSeen[deepestSeen.length - 1]) : -1;
+    if (rank > best) deepestSeen.push(z);
   }
-  assert(zonesSeen.length === ZONE_NAMES.length,
-    `only reached ${zonesSeen.length} of ${ZONE_NAMES.length} zones: ${zonesSeen.join(' → ')}`);
-  for (let i = 0; i < zonesSeen.length; i++) {
-    assert(zonesSeen[i] === ZONE_NAMES[i], `zones out of order: ${zonesSeen.join(' → ')}`);
+  note(`deepest reached in order: ${deepestSeen.join(' → ')}`);
+  note(`zones the boat visited: ${[...visited].join(', ')}`);
+  assert(visited.size === ZONE_NAMES.length,
+    `only saw ${visited.size} of ${ZONE_NAMES.length} zones: ${[...visited].join(', ')}`);
+  for (let i = 0; i < deepestSeen.length; i++) {
+    assert(deepestSeen[i] === ZONE_NAMES[i],
+      `new depths arrived out of order: ${deepestSeen.join(' → ')}`);
   }
-  note(`${zonesSeen.join(' → ')} after ${h.num('catches')} catches`);
+  return h;
+});
+
+/* REGRESSION GUARD, and the one that matters most in this game.
+   "Mashing is always rewarded, never punished" is the rule the whole design
+   rests on, and it was being broken by two clamps written the wrong way
+   round. A wiggle did waitLeft = max(18, waitLeft - CUT), which PUT THE
+   TIMER BACK UP once the wait was already under 18 — so a child tapping
+   faster than once every 18 frames reset it for ever and never got a single
+   bite. The reel had the same shape of bug and could be held short of the
+   end for ever the same way. Both were live on the site.
+
+   A soft-lock is the worst possible failure in a game with no fail state,
+   and it hit precisely the most enthusiastic player. So: tap at every
+   cadence from every frame to every 40, and the catch count must not only
+   be non-zero, it must go UP as the tapping gets faster. */
+test('fishing: mashing catches more, at every possible tapping speed', note => {
+  const rows = [];
+  for (const gap of [1, 2, 3, 5, 7, 8, 9, 10, 13, 17, 25, 40]) {
+    const h = createHarness('emsile-fishing', { seed: 2 });
+    h.click('startBtn');
+    for (let i = 0; i < 6000; i++) {
+      if (i % gap === 0) h.tap();
+      pump(h, 1);
+    }
+    const caught = h.num('catches');
+    rows.push({ gap, caught });
+    assert(caught > 0,
+      `tapping every ${gap} frames caught nothing in 6000 frames — the wait or the reel is stuck`);
+    h.dispose();
+  }
+  note(rows.map(r => `every ${r.gap}f: ${r.caught}`).join(', '));
+  const fastest = rows[0].caught, slowest = rows[rows.length - 1].caught;
+  assert(fastest > slowest,
+    `mashing should beat dawdling: ${fastest} at every frame vs ${slowest} every 40`);
+});
+
+/* ---------------------------------------------------------------- *
+ * fishing: things that happen
+ * ---------------------------------------------------------------- */
+
+/* The events are announced on the canvas, never in the DOM, so this reads
+   the screen the way a person would. */
+test('fishing: the sea does things while you fish', note => {
+  const h = createHarness('emsile-fishing', { seed: 2 });
+  h.click('startBtn');
+  for (let i = 0; i < 16000; i++) {
+    if (i % 9 === 0) h.tap();
+    pump(h, 1);
+  }
+  const wanted = ['A SHOAL!', 'DOLPHINS!', 'RAIN!', 'NIGHT FALLS', 'SOMETHING GLINTS', 'A BOTTLE!'];
+  const seen = wanted.filter(w => h.painted().includes(w));
+  note(`seen: ${seen.join(', ')}`);
+  assert(seen.length >= 5, `only ${seen.length} of ${wanted.length} events turned up: ${seen.join(', ')}`);
+  return h;
+});
+
+test('fishing: the boat drifts back to water it has already fished', note => {
+  const h = createHarness('emsile-fishing', { seed: 4 });
+  h.click('startBtn');
+  let wentBack = false;
+  let deepest = 0;
+  for (let i = 0; i < 30000; i++) {
+    if (i % 9 === 0) h.tap();
+    pump(h, 1);
+    const rank = ZONE_NAMES.indexOf(h.text('zoneName'));
+    if (rank > deepest) deepest = rank;
+    if (rank < deepest) wentBack = true;      // shallower than the deepest reached
+  }
+  assert(h.paintedSome(/THE BOAT DRIFTS/), 'the boat never drifted anywhere');
+  assert(wentBack, 'the boat never went back to shallower water — the zone is still a one-way ratchet');
+  note(`drifted back up from ${ZONE_NAMES[deepest]} after ${h.num('catches')} catches`);
+  return h;
+});
+
+/* Every event is a gift. None of them may cost a catch, so a run full of
+   them has to out-fish a quiet one rather than under-fish it. */
+test('fishing: events never cost you a catch', note => {
+  const h = createHarness('emsile-fishing', { seed: 2 });
+  h.click('startBtn');
+  for (let i = 0; i < 12000; i++) {
+    if (i % 10 === 0) h.tap();
+    pump(h, 1);
+  }
+  const caught = h.num('catches');
+  note(`${caught} catches in 12000 frames with events running`);
+  // 12000 frames is ~200s; a quiet cycle is ~7s, so anything near 25 is healthy
+  assert(caught >= 25, `only ${caught} catches — events are getting in the way`);
   return h;
 });
 

@@ -293,6 +293,10 @@
     reelTick:()=>tone(1250,.035,'square',.022,-320),
     surface: ()=>{ noise(.32,.09); seq([392,523,659],65,.20,'triangle',.05); },
     record:  ()=>seq([659,784,988,1319,988,1319],85,.24,'triangle',.06),
+    // events
+    leap:    ()=>{ noise(.26,.07); seq([880,1175],90,.16,'triangle',.045); },
+    patter:  ()=>noise(.5,.03),
+    dusk:    ()=>seq([392,349,294,247],150,.34,'sine',.05),
   };
   el.mute.addEventListener('click', e=>{
     e.stopPropagation(); muted = !muted;
@@ -414,12 +418,20 @@
 
   const speciesCaught = () => CREATURES.reduce((n,c)=> n + (album[c.id] ? 1 : 0), 0);
 
-  function zoneIndex(){
-    let zi = 0;
-    for (let i = 0; i < ZONES.length; i++) if (total >= ZONES[i].at) zi = i;
-    return zi;
+  /* How deep the book has earned the right to go. It only ever grows — that
+     part is the progression and it stays. */
+  function maxZone(){
+    let n = 0;
+    for (let i = 0; i < ZONES.length; i++) if (total >= ZONES[i].at) n = i;
+    return n;
   }
-  let zi = zoneIndex();
+  /* Where the boat actually is right now, which is a different thing. It used
+     to be the same thing, and that was the single biggest reason the game went
+     stale: the deepest unlocked zone won for ever, so after two dozen catches
+     you were parked in The Deep Deep and the other three were gone. Now the
+     boat drifts, and the shallows are somewhere you visit again. */
+  let zi = maxZone();
+  let deepestSeen = zi;
   const Z = () => ZONES[zi];
 
   function updateHud(){
@@ -445,11 +457,11 @@
    *   album    the fish book, drawn on the canvas so it reads on a TV
    * ================================================================== */
   const CAST_F   = 46;
-  const WAIT_MIN = 80,  WAIT_MAX = 180;
+  const WAIT_MIN = 60,  WAIT_MAX = 140;
   const BITE_F   = 80;              // 1.3s to react
   const REEL_F     = 56;           // an ordinary fish comes straight up
   const REEL_BIG_F = 124;          // a big one puts up a fight
-  const SHOW_F   = 170;
+  const SHOW_F   = 145;
   const WIGGLE_CUT = 30;           // frames a wiggle knocks off the wait
   const WIGGLE_CD  = 12;
   const REEL_BOOST = 5;            // frames of progress per tap while reeling
@@ -549,9 +561,14 @@
     let w = c.w;
     if (c.z === zi) w *= 1.8;              // whatever is new down here
     if (!album[c.id]) w *= 2.4;            // never seen before
+    if (night > .5 && c.glow) w *= 4;      // the dark belongs to the glowing ones
     return w;
   }
   function pickCreature(){
+    // a wish in a bottle, then the thing glinting on the bottom — both are
+    // promises the game made out loud, so they are kept before anything else
+    if (luckyNext){ const c = luckyNext; luckyNext = null; return c; }
+    if (glint > 0){ glint = 0; return BY_ID.chest; }
     const pool = CREATURES.filter(c => c.z <= zi);
     let sum = 0;
     for (const c of pool) sum += weightOf(c);
@@ -561,6 +578,144 @@
       if (r <= 0) return c;
     }
     return pool[pool.length - 1];
+  }
+
+  /* ================================================================== *
+   * things that happen
+   *
+   * The cycle underneath — cast, wait, bite, reel, show — is the same eight
+   * seconds every time, and that sameness was the complaint. These sit on top
+   * of it and change what the next minute is like: the light, the weather,
+   * what is swimming past, where the boat even is.
+   *
+   * Every one of them is a gift. Nothing here can cost a catch, shorten a
+   * window, or take anything away — the no-fail rule holds, and "a kid who
+   * ignores it is never worse off" holds with it. The worst case for every
+   * event below is that it looks nice and nothing else happens.
+   * ================================================================== */
+  const EV_GAP_MIN = 640, EV_GAP_MAX = 1280;
+  let evIn = 360;
+  let shoalLeft = 0;         // bites that come almost straight away
+  let hurryNext = 0;         // one bite brought forward
+  let glint = 0;             // treasure winking down on the seabed
+  let luckyNext = null;      // what the bottle promised
+  let rain = 0;
+  let night = 0, nightLeft = 0;
+  let pod = [];              // dolphins going past
+  let bottle = null;
+  const stars = Array.from({length: 46}, () => ({
+    x: rnd(0, W), y: rnd(4, SEA - 26), s: rnd(.7, 1.9), ph: rnd(0, 6.3)
+  }));
+
+  function say(text, sub){
+    banner = { text, sub: sub || '', life: 170, span: 170 };
+  }
+
+  function fireEvent(){
+    evIn = rnd(EV_GAP_MIN, EV_GAP_MAX);
+    /* Weighted by repetition into a list, then one pick. Deliberately not a
+       retry loop: the harness can bias the whole RNG stream and a rejection
+       loop would never get out. */
+    const pool = [];
+    const add = (id, n) => { for (let i = 0; i < n; i++) pool.push(id); };
+    add('shoal', 4); add('dolphins', 4); add('drift', 4);
+    add('treasure', 3); add('bottle', 3); add('rain', 3);
+    if (!nightLeft && night < .02) add('night', 3);
+    const id = pick(pool);
+
+    if (id === 'shoal'){
+      shoalLeft = 3;
+      const def = pick(CREATURES.filter(c => c.z <= zi && !c.rare)) || CREATURES[0];
+      const dir = Math.random() < .5 ? 1 : -1;
+      const y0 = rnd(SEA + 60, H - 60);
+      for (let i = 0; i < 9; i++){
+        swimmers.push({
+          def, dir,
+          x: (dir > 0 ? -70 : W + 70) - dir * i * rnd(30, 54),
+          y: y0 + Math.sin(i * 1.1) * 26,
+          sp: rnd(1.1, 1.5) * dir, wig: rnd(0, 6.3),
+          sc: rnd(.42, .62), alpha: rnd(.55, .9)
+        });
+      }
+      say('A SHOAL!', 'They are biting — keep casting');
+      sfx.wiggle();
+    }
+    else if (id === 'dolphins'){
+      pod = [];
+      for (let i = 0; i < 3; i++) pod.push({ x: -120 - i*130, ph: i * .7, sc: rnd(.8, 1.1) });
+      hurryNext = 1;
+      say('DOLPHINS!', 'They have stirred the fish up');
+      sfx.leap();
+    }
+    else if (id === 'drift'){
+      const top = maxZone();
+      const opts = [];
+      for (let i = 0; i <= top; i++) if (i !== zi) opts.push(i);
+      if (!opts.length){ evIn = 300; return; }   // nowhere else to be yet
+      zi = pick(opts);
+      makeKelp(); setMusic(Z().music);
+      splash(BOAT_X + 40, SEA, 16);
+      say('THE BOAT DRIFTS', 'Fishing the ' + Z().name + ' now');
+      sfx.zone();
+      updateHud();
+    }
+    else if (id === 'treasure'){
+      glint = 620;
+      say('SOMETHING GLINTS', 'Down on the bottom — get a line on it!');
+      sfx.plop();
+    }
+    else if (id === 'bottle'){
+      bottle = { x: W + 40, y: SEA - 10, ph: 0, opened: false };
+      say('A BOTTLE!', 'Tap it when it floats past');
+      sfx.plop();
+    }
+    else if (id === 'rain'){
+      rain = 1500;
+      say('RAIN!', 'Fish love the rain');
+      sfx.patter();
+    }
+    else {
+      nightLeft = 2600;
+      say('NIGHT FALLS', 'Watch for the glowing ones');
+      sfx.dusk();
+    }
+  }
+
+  /* The bottle is the one event with something to do. Tapping it anywhere
+     near the line opens it; ignoring it costs nothing at all, it just bobs
+     away again. */
+  function tryBottle(){
+    if (!bottle || bottle.opened) return false;
+    if (Math.abs(bottle.x - HOOK_X) > 110) return false;
+    bottle.opened = true;
+    const rares = CREATURES.filter(c => c.rare);
+    luckyNext = pick(rares) || null;
+    party(bottle.x, bottle.y - 10, 40);
+    pop(bottle.x, bottle.y - 40, 'A WISH!', '#FFD23D', 28);
+    say('A WISH IN A BOTTLE', 'Something special is coming');
+    sfx.rare();
+    return true;
+  }
+
+  function updateEvents(dt){
+    if (evIn > 0) evIn -= dt;
+    else if (state === 'wait' || state === 'cast') fireEvent();
+
+    if (glint > 0) glint -= dt;
+    if (rain > 0) rain -= dt;
+    if (nightLeft > 0) nightLeft -= dt;
+    const goal = nightLeft > 0 ? 1 : 0;
+    night += (goal - night) * .012 * dt;
+    if (night < .004 && goal === 0) night = 0;
+
+    for (const d of pod){ d.x += 3.1*dt; d.ph += dt*.055; }
+    pod = pod.filter(d => d.x < W + 160);
+
+    if (bottle){
+      bottle.x -= 1.15*dt; bottle.ph += dt*.06;
+      bottle.y = SEA - 10 + Math.sin(bottle.ph)*4;
+      if (bottle.x < -60) bottle = null;
+    }
   }
 
   /* ---------- the cycle ---------- */
@@ -577,6 +732,10 @@
   function beginWait(){
     state = 'wait'; phase = 0;
     waitLeft = Math.round(rnd(WAIT_MIN, WAIT_MAX));
+    // every one of these shortens the wait; none of them can ever lengthen it
+    if (shoalLeft > 0){ shoalLeft--; waitLeft = Math.round(rnd(16, 44)); }
+    else if (hurryNext > 0){ hurryNext--; waitLeft = Math.round(waitLeft * .45); }
+    else if (rain > 0) waitLeft = Math.round(waitLeft * .7);
     sfx.sink();
   }
 
@@ -666,11 +825,11 @@
       else if (beat){ sfx.record(); party(LAND_X, landY(), 40); }
       else party(LAND_X, landY(), 16);
 
-      const nz = zoneIndex();
-      if (nz !== zi){
-        zi = nz;
+      const top = maxZone();
+      if (top > deepestSeen){
+        deepestSeen = top; zi = top;
         makeKelp();
-        banner = { text: Z().name, life: 150 };
+        say(Z().name, 'A whole new depth to fish');
         setMusic(Z().music);
         sfx.zone();
       }
@@ -681,6 +840,8 @@
 
   function startGame(){
     el.start.hidden = true;
+    evIn = 360; shoalLeft = 0; hurryNext = 0; glint = 0; luckyNext = null;
+    rain = 0; night = 0; nightLeft = 0; pod = []; bottle = null;
     updateHud();
     setMusic(Z().music);
     beginCast();
@@ -705,16 +866,32 @@
        reveal always gets to play — the whole point of the fight is the moment
        you find out what it is. */
     if (state === 'reel'){
-      reelProg = Math.min(reelProg + REEL_BOOST, reelDur * .92);
+      /* The cap stops a tap skipping the surface reveal. It must only ever
+         cap the BOOST, never the progress already made — writing it as
+         min(prog + boost, cap) quietly pulled a fish backwards whenever prog
+         was already past the cap, and a kid tapping at the wrong cadence
+         could hold it there for ever. A soft-lock in a game with no fail
+         state, produced by tapping too fast: the exact opposite of the rule
+         that mashing is always rewarded and never punished. */
+      if (reelProg < reelDur * .92)
+        reelProg = Math.min(reelProg + REEL_BOOST, reelDur * .92);
       splash(caught.x, Math.max(SEA, caught.y), 4);
       sfx.reelTick();
       return;
     }
     if (state === 'wait' || state === 'approach'){
+      if (tryBottle()) return;
       if (wiggleCd > 0) return;
       wiggleCd = WIGGLE_CD;
       bobDip = Math.min(1, bobDip + .5);
-      waitLeft = Math.max(18, waitLeft - WIGGLE_CUT);
+      /* A wiggle may only ever bring the bite CLOSER. Written as
+         max(18, waitLeft - CUT) it did the opposite once the wait was already
+         under 18: it put the timer back up to 18, and a child tapping faster
+         than once every 18 frames reset it for ever and never got a bite at
+         all. The whole game just sat there — which is the single worst thing
+         that can happen in a game with no fail state, and it happened to
+         exactly the kid who was most enthusiastic about playing it. */
+      if (waitLeft > 18) waitLeft = Math.max(18, waitLeft - WIGGLE_CUT);
       splash(HOOK_X, SEA, 5);
       sfx.wiggle();
       // pull the nearest bystander a little closer, so the wiggle visibly works
@@ -773,7 +950,7 @@
     if (shake > 0) shake = Math.max(0, shake - .38*dt);
 
     // ambience keeps running behind the album and the menu alike
-    if (swimmers.length < 7 && Math.random() < .012*dt) spawnSwimmer();
+    if (swimmers.length < 10 && Math.random() < .018*dt) spawnSwimmer();
     for (const s of swimmers){
       s.x += s.sp*dt;
       s.wig += dt*.18*(1 + Math.abs(s.sp));
@@ -782,7 +959,7 @@
     }
     swimmers = swimmers.filter(s => s.x > -110 && s.x < W + 110);
 
-    if (Math.random() < .10*dt){
+    if (Math.random() < .16*dt){
       bubbles.push({ x: rnd(20, W-20), y: rnd(H-40, H), s: rnd(1.6, 4.6), sp: rnd(.5, 1.3), wob: rnd(0,6.3) });
     }
     for (const b of bubbles){ b.y -= b.sp*dt; b.wob += dt*.07; b.x += Math.sin(b.wob)*.4*dt; }
@@ -802,6 +979,8 @@
     pops = pops.filter(p => p.life > 0);
 
     if (banner){ banner.life -= dt; if (banner.life <= 0) banner = null; }
+
+    if (state !== 'menu') updateEvents(dt);
 
     if (state === 'menu' || state === 'album') return;
 
@@ -1634,18 +1813,69 @@
   /* ================================================================== *
    * the world
    * ================================================================== */
+  /* Blend colours. The sky is the same sky all day; night and rain just move
+     it, which is cheaper and calmer than swapping palettes.
+
+     Blending happens on [r,g,b] triples and only becomes a css string at the
+     very end, because the obvious version — take two hex strings, return
+     'rgb(...)' — cannot be nested: feeding its own output back in as the
+     first argument put 'rgb(' through a hex parse, produced NaN, and painted
+     the daytime sky solid black. */
+  function hexRgb(h){
+    const n = parseInt(h.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function mixRgb(a, b, k){
+    return [0, 1, 2].map(i => Math.round(a[i]*(1-k) + b[i]*k));
+  }
+  function cssRgb(c){ return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
+  function mixHex(a, b, k){ return cssRgb(mixRgb(hexRgb(a), hexRgb(b), k)); }
+
   function drawSky(){
+    const nk = night, rk = Math.min(1, rain / 220);
     const g = ctx.createLinearGradient(0, 0, 0, SEA);
-    g.addColorStop(0, '#8FD8F5'); g.addColorStop(1, '#DCF2FA');
+    const sky = (day, wet, dark) =>
+      cssRgb(mixRgb(mixRgb(hexRgb(day), hexRgb(wet), rk*.75), hexRgb(dark), nk));
+    g.addColorStop(0, sky('#8FD8F5', '#7C8A9C', '#0A1B33'));
+    g.addColorStop(1, sky('#DCF2FA', '#B4C0CA', '#1D3A62'));
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, SEA);
-    // sun
-    const sg = ctx.createRadialGradient(740, 44, 6, 740, 44, 60);
-    sg.addColorStop(0, 'rgba(255,246,196,.95)'); sg.addColorStop(1, 'rgba(255,235,150,0)');
-    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(740, 44, 60, 0, 7); ctx.fill();
-    ctx.fillStyle = '#FFF3C4';
-    ctx.beginPath(); ctx.arc(740, 44, 20, 0, 7); ctx.fill();
-    // a couple of soft clouds
-    ctx.fillStyle = 'rgba(255,255,255,.78)';
+
+    // stars come out as the sun goes down
+    if (nk > .04){
+      ctx.save();
+      for (const st of stars){
+        ctx.globalAlpha = nk * (.35 + Math.sin(t*.05 + st.ph)*.3 + .3);
+        ctx.fillStyle = '#FFF6E0';
+        ctx.fillRect(st.x, st.y, st.s, st.s);
+      }
+      ctx.restore();
+    }
+
+    // sun crossfading into the moon
+    if (nk < .98){
+      ctx.save(); ctx.globalAlpha = 1 - nk;
+      const sg = ctx.createRadialGradient(740, 44, 6, 740, 44, 60);
+      sg.addColorStop(0, 'rgba(255,246,196,.95)'); sg.addColorStop(1, 'rgba(255,235,150,0)');
+      ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(740, 44, 60, 0, 7); ctx.fill();
+      ctx.fillStyle = '#FFF3C4';
+      ctx.beginPath(); ctx.arc(740, 44, 20, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    if (nk > .02){
+      ctx.save(); ctx.globalAlpha = nk;
+      const mg = ctx.createRadialGradient(740, 44, 6, 740, 44, 54);
+      mg.addColorStop(0, 'rgba(233,240,255,.85)'); mg.addColorStop(1, 'rgba(200,220,255,0)');
+      ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(740, 44, 54, 0, 7); ctx.fill();
+      ctx.fillStyle = '#F2F6FF';
+      ctx.beginPath(); ctx.arc(740, 44, 18, 0, 7); ctx.fill();
+      // the bite out of it — offset well over, or it reads as an eclipse
+      ctx.fillStyle = mixHex('#8FD8F5', '#0A1B33', nk);
+      ctx.beginPath(); ctx.arc(734, 40, 13, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+
+    // a couple of soft clouds, greying over in the rain
+    ctx.fillStyle = 'rgba(255,255,255,' + (.78 - nk*.55) + ')';
     for (const [cx, cy, s] of [[150, 40, 1], [420, 26, .74], [600, 56, .56]]){
       const x = (cx + t*.06) % (W + 200) - 100;
       ctx.beginPath();
@@ -1654,17 +1884,22 @@
       ctx.arc(x + 44*s, cy, 16*s, 0, 7);
       ctx.fill();
     }
-    // gulls
-    ctx.strokeStyle = 'rgba(90,110,130,.55)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
-    for (let i = 0; i < 3; i++){
-      const gx = (300 + i*90 + t*.22) % (W + 120) - 60;
-      const gy = 22 + i*11 + Math.sin(t*.04 + i)*4;
-      const f = Math.sin(t*.14 + i*1.3)*5;
-      ctx.beginPath();
-      ctx.moveTo(gx - 8, gy + f); ctx.lineTo(gx, gy - 2); ctx.lineTo(gx + 8, gy + f);
-      ctx.stroke();
+    // gulls, who have the sense to go home after dark
+    if (nk < .6){
+      ctx.save();
+      ctx.globalAlpha = 1 - nk/.6;
+      ctx.strokeStyle = 'rgba(90,110,130,.55)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      for (let i = 0; i < 3; i++){
+        const gx = (300 + i*90 + t*.22) % (W + 120) - 60;
+        const gy = 22 + i*11 + Math.sin(t*.04 + i)*4;
+        const f = Math.sin(t*.14 + i*1.3)*5;
+        ctx.beginPath();
+        ctx.moveTo(gx - 8, gy + f); ctx.lineTo(gx, gy - 2); ctx.lineTo(gx + 8, gy + f);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.lineCap = 'butt';
     }
-    ctx.lineCap = 'butt';
 
     // faint vignette so the white HUD still reads against a bright sky
     const sc = ctx.createLinearGradient(0, 0, 0, 90);
@@ -1675,12 +1910,14 @@
 
   function drawWater(){
     const z = Z();
-    ctx.fillStyle = grad(SEA, H, z.top, z.bot);
+    const nk = night;
+    ctx.fillStyle = grad(SEA, H,
+      mixHex(z.top, '#06172B', nk*.72), mixHex(z.bot, '#01060F', nk*.72));
     ctx.fillRect(0, SEA, W, H - SEA);
 
     // light shafts
     ctx.save();
-    ctx.globalAlpha = z.ray;
+    ctx.globalAlpha = z.ray * (1 - night*.85);
     ctx.fillStyle = '#EAF9FF';
     for (let i = 0; i < 5; i++){
       const x = 90 + i*180 + Math.sin(t*.012 + i)*26;
@@ -1818,9 +2055,13 @@
     ctx.globalAlpha = 1; ctx.textAlign = 'left';
   }
 
+  /* One banner for everything that happens — a new depth, a shoal, the rain
+     coming on. The second line used to be hard-coded to the one message the
+     banner was built for; now it says whatever the moment is about. */
   function drawBanner(){
     if (!banner) return;
-    const k = Math.min(1, (150 - banner.life)/16);
+    const span = banner.span || 150;
+    const k = Math.min(1, (span - banner.life)/16);
     const out = Math.min(1, banner.life/22);
     ctx.save();
     ctx.globalAlpha = Math.min(k, out);
@@ -1830,9 +2071,12 @@
     ctx.strokeText(banner.text.toUpperCase(), W/2, H*.34);
     ctx.fillStyle = '#FFD23D';
     ctx.fillText(banner.text.toUpperCase(), W/2, H*.34);
-    ctx.font = '700 14px "Trebuchet MS", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,.85)';
-    ctx.fillText('DEEPER WATER — NEW FISH DOWN HERE', W/2, H*.34 + 26);
+    const sub = banner.sub || 'DEEPER WATER — NEW FISH DOWN HERE';
+    ctx.font = '700 15px "Trebuchet MS", sans-serif';
+    ctx.lineWidth = 5;
+    ctx.strokeText(sub.toUpperCase(), W/2, H*.34 + 27);
+    ctx.fillStyle = 'rgba(255,255,255,.92)';
+    ctx.fillText(sub.toUpperCase(), W/2, H*.34 + 27);
     ctx.textAlign = 'left';
     ctx.restore();
   }
@@ -1949,6 +2193,104 @@
   /* ================================================================== *
    * render
    * ================================================================== */
+  /* ---------- what the events look like ---------- */
+  function drawGlint(){
+    if (glint <= 0) return;
+    const gx = W*.72, gy = H - 22;
+    const tw = .45 + Math.sin(t*.22)*.45;
+    ctx.save();
+    ctx.globalAlpha = .55 + tw*.45;
+    const g = ctx.createRadialGradient(gx, gy, 1, gx, gy, 34);
+    g.addColorStop(0, 'rgba(255,244,190,.95)');
+    g.addColorStop(1, 'rgba(255,214,90,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(gx, gy, 34, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#FFF3C4'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i++){
+      const a = i*Math.PI/4 + t*.01, r = 9 + tw*9;
+      ctx.beginPath();
+      ctx.moveTo(gx - Math.cos(a)*r, gy - Math.sin(a)*r);
+      ctx.lineTo(gx + Math.cos(a)*r, gy + Math.sin(a)*r);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+    ctx.restore();
+  }
+
+  function drawPod(){
+    if (!pod.length) return;
+    for (const d of pod){
+      // a long shallow arc: out of the water, over, and back under
+      const k = Math.max(0, Math.min(1, (d.x + 120) / (W + 280)));
+      const arc = Math.sin(k * Math.PI);
+      const y = SEA + 26 - arc * 92;
+      ctx.save();
+      ctx.translate(d.x, y);
+      ctx.scale(d.sc, d.sc);
+      ctx.rotate(Math.cos(k * Math.PI) * .5);
+      ctx.fillStyle = '#7FA6C4';
+      ctx.beginPath(); ctx.ellipse(0, 0, 40, 15, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#B9D2E4';
+      ctx.beginPath(); ctx.ellipse(4, 6, 28, 8, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#7FA6C4';
+      ctx.beginPath();                                   // dorsal
+      ctx.moveTo(2, -12); ctx.lineTo(-6, -30); ctx.lineTo(12, -12); ctx.closePath(); ctx.fill();
+      ctx.beginPath();                                   // tail
+      ctx.moveTo(-36, -2); ctx.lineTo(-56, -14); ctx.lineTo(-52, 2); ctx.lineTo(-56, 14);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();                                   // beak
+      ctx.moveTo(34, 2); ctx.lineTo(52, 7); ctx.lineTo(34, 10); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1B2E3E';
+      ctx.beginPath(); ctx.arc(24, -3, 3, 0, 7); ctx.fill();
+      ctx.restore();
+      if (arc < .12 && d.x > -60) splash(d.x, SEA, 2);
+    }
+  }
+
+  function drawBottle(){
+    if (!bottle) return;
+    ctx.save();
+    ctx.translate(bottle.x, bottle.y);
+    ctx.rotate(Math.sin(bottle.ph)*.22 - .5);
+    ctx.fillStyle = 'rgba(150,205,180,.85)';
+    roundRect(-16, -8, 32, 16, 7); ctx.fill();
+    ctx.fillRect(14, -4, 9, 8);
+    ctx.fillStyle = '#C08748'; ctx.fillRect(21, -4, 5, 8);
+    ctx.fillStyle = '#FFF6DC';                            // the note inside
+    ctx.save(); ctx.rotate(.2); ctx.fillRect(-9, -5, 14, 10); ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.6;
+    roundRect(-16, -8, 32, 16, 7); ctx.stroke();
+    ctx.restore();
+    // a nudge that it wants tapping
+    if (!bottle.opened && Math.abs(bottle.x - HOOK_X) < 110){
+      ctx.save();
+      ctx.globalAlpha = .4 + Math.sin(t*.2)*.3;
+      ctx.strokeStyle = '#FFD23D'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(bottle.x, bottle.y, 30 + Math.sin(t*.12)*4, 0, 7); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawRain(){
+    if (rain <= 0) return;
+    const k = Math.min(1, rain / 220);
+    ctx.save();
+    ctx.globalAlpha = .5 * k;
+    ctx.strokeStyle = '#CFE6F5'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 90; i++){
+      const x = (i * 137 + t * 9) % (W + 60) - 30;
+      const y = (i * 71 + t * 15) % (SEA + 30);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 3, y + 13); ctx.stroke();
+    }
+    // dimples where it lands
+    ctx.globalAlpha = .35 * k;
+    for (let i = 0; i < 14; i++){
+      const x = (i * 311 + Math.floor(t * .7) * 53) % W;
+      const r = 3 + ((t * .6 + i * 9) % 14);
+      ctx.beginPath(); ctx.arc(x, SEA + 2, r, 0, 7); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function render(){
     if (state === 'album'){ drawAlbum(); return; }
 
@@ -1959,11 +2301,15 @@
 
     drawSky();
     drawWater();
+    drawGlint();
     drawSwimmers();
     drawBiter();
+    drawPod();
     drawBoat();
     drawLine();
+    drawBottle();
     drawCaught();
+    drawRain();
     drawBits();
     drawBanner();
     ctx.restore();
