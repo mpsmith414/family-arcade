@@ -1289,25 +1289,38 @@ test('daddy: 20000 frames of hard running never throws either', note => {
    Measured (first catch / total catches, after the nearest-catchable
    retargeting): 3 → 1001f/9, 9 → 1031f/11, 11 → 858f/15, 17 → 846f/13,
    23 → 1391f/13, 42 → 1901f/11, 77 → 564f/15. Worst first catch was 1901
-   frames (seed 42), under 3000, so 6000 covers that with room to spare.
-   Bumped from 6000 to 6500 for seed 23 specifically: the run is fully
-   deterministic (harness seeds Math.random), and at 6000 frames the last
-   thing to happen is a pillow party starting at frame 5280 with no catch
-   after it before the cutoff, so catchLine reads "Pillow party!" instead
-   of a smash — a false negative on a working lunge, not a broken one. The
-   next catch lands at 6258 and the next party not until 7555, so 6500
-   closes the window cleanly on a catch. */
+   frames (seed 42), so 6000 is double that with room to spare. */
 test('daddy: chasing as Daddy catches a kid, with no button pressed', note => {
-  const CHASE_FRAMES = 6500;
+  const CHASE_FRAMES = 6000;
   const h = createHarness('daddy-smash', { seed: 23 });
   h.click('pickDaddy');
   h.click('startBtn');         // the only click; h.tap() is never called again
   pump(h, 5);
-  lapTheRoom(h, CHASE_FRAMES);
+
+  // catchLine is a transient shout that other events (the pillow party, in
+  // particular) overwrite, so sampling it once at the final frame is a coin
+  // flip on whatever happens to be on screen at that instant. Collect it
+  // across the whole run instead — same approach as "both kids get smashed,
+  // not just the one you drive" above. lapTheRoom() pumps internally and
+  // gives no chance to sample in between, so its leg-changing pattern (same
+  // legs, same 90-frame cadence) is inlined here rather than reused.
+  const legs = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+  const smashed = new Set();
+  for (let i = 0; i < CHASE_FRAMES; i++) {
+    if (i % 90 === 0) {
+      const [x, y] = legs[(i / 90) % legs.length];
+      h.stick(x, y);
+    }
+    pump(h, 1);
+    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    if (m) smashed.add(m[1]);
+  }
+
   const slams = h.num('slams');
   assert(slams > 0, `${CHASE_FRAMES} frames of chasing as Daddy caught nobody`);
-  assert(/got smashed/i.test(h.text('catchLine')), `no smash shout, got "${h.text('catchLine')}"`);
-  note(`${slams} smashes as Daddy, steering only`);
+  assert(smashed.size > 0,
+    `${slams} smashes happened but no "got smashed" shout was ever seen on screen`);
+  note(`${slams} smashes as Daddy, steering only (shouted for: ${[...smashed].join(', ') || 'nobody'})`);
   return h;
 });
 
