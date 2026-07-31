@@ -218,7 +218,7 @@
 
   <div id="catchLine"></div>
 
-  <button id="swapBtn" aria-label="Play as the other kid">
+  <button id="swapBtn" aria-label="Play as somebody else">
     <b id="swapFace">🧒</b><i>🔁</i>
   </button>
 
@@ -235,7 +235,7 @@
   <div class="screen" id="startScreen">
     <div class="kicker">Nobody ever loses</div>
     <h1 class="title">Daddy Smash</h1>
-    <p class="sub">Run away from Daddy! When he catches you he smashes you on the couch — then you run free again.</p>
+    <p class="sub">Run away from Daddy — or be Daddy and chase the kids! Every catch ends in a smash on the couch, then everybody runs free again.</p>
     <div class="picker">
       <button class="pick" id="pickOliver" aria-pressed="true" aria-label="Play as Oliver"><b>🧒</b><span>Oliver</span></button>
       <button class="pick" id="pickEmsile" aria-pressed="false" aria-label="Play as Emsile"><b>👧</b><span>Emsile</span></button>
@@ -712,7 +712,9 @@
       smash.ky = CARRY_Y + ease(smash.t/26)*26;
       // wiggling the controls here does nothing but make them wriggle and
       // giggle harder, which is the entire point of it
-      const wiggle = k === player() && state === 'play' ? steerMag() : 0;
+      // holding a kid over your head counts too, so the wiggle works from
+      // whichever side of the smash the player is on
+      const wiggle = (k === player() || playerIdx === 2) && state === 'play' ? steerMag() : 0;
       smash.wig = Math.sin(smash.t*(0.9 + wiggle*0.9))*(0.26 + wiggle*0.24);
       if (wiggle > 0.5 && Math.random() < 0.10*dt){
         heartsAt(daddy.x, daddy.z, 1);
@@ -942,6 +944,7 @@
   }
 
   function updateDaddy(dt){
+    if (daddy.hop > 0) daddy.hop -= dt;
     if (daddy.mode === 'dizzy'){
       daddy.timer -= dt;
       daddy.run += dt*0.05;
@@ -1606,10 +1609,11 @@
   function drawDaddy(){
     const p = proj(daddy.x, daddy.z);
     const cfg = Object.assign({ belly:true, beard:true }, DADDY);
+    const hop = daddy.hop > 0 ? Math.sin((1 - daddy.hop/16)*Math.PI)*16 : 0;
     shadow(daddy.x, daddy.z, 17);
 
     ctx.save();
-    ctx.translate(p.x, p.y);
+    ctx.translate(p.x, p.y - hop*p.s);
     ctx.scale(daddy.dir*p.s, p.s);
     if (daddy.flop > 0) ctx.rotate(-daddy.flop*0.45);
 
@@ -1627,6 +1631,13 @@
       pose, mouth, squint,
     });
     ctx.restore();
+
+    // the same ring the kids get, so you never lose yourself
+    if (playerIdx === 2 && state === 'play'){
+      ctx.strokeStyle = 'rgba(255,210,61,' + (0.55 + Math.sin(t*0.12)*0.2) + ')';
+      ctx.lineWidth = 3;
+      ellipse(p.x, p.y, 24*p.s, 9*p.s); ctx.stroke();
+    }
 
     // wind-up marker: the tell that a lunge is coming
     if (daddy.mode === 'wind'){
