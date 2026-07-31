@@ -925,6 +925,22 @@
     return kids[0];
   }
 
+  /* Who a human Daddy is aiming at. The AI commits to one kid for a few
+     hundred frames so the little sister still gets a turn even when the
+     controller is put down; a player is looking at the screen, so aim at
+     whoever they have actually run up to. Falls back to the nearest kid at
+     all, so the caller never has to handle a null target. */
+  function nearestCatchable(){
+    let bestK = null, bestD = Infinity, anyK = null, anyD = Infinity;
+    for (const k of kids){
+      if (k.held) continue;
+      const d = dist(daddy, k);
+      if (d < anyD){ anyD = d; anyK = k; }
+      if (k.safe <= 0 && d < bestD){ bestD = d; bestK = k; }
+    }
+    return bestK || anyK || kids[0];
+  }
+
   function updateDaddy(dt){
     if (daddy.mode === 'dizzy'){
       daddy.timer -= dt;
@@ -947,12 +963,17 @@
        was always the closest target — so the little sister never got a go. */
     const human = playerIdx === 2 && state === 'play';
 
-    if (!daddy.chase || daddy.chase.held || daddy.chase.safe > 0 || daddy.chaseCd <= 0){
-      daddy.chase = pickTarget();
-      daddy.chaseCd = rnd(420, 700);
+    let target;
+    if (human){
+      target = nearestCatchable();
+    } else {
+      if (!daddy.chase || daddy.chase.held || daddy.chase.safe > 0 || daddy.chaseCd <= 0){
+        daddy.chase = pickTarget();
+        daddy.chaseCd = rnd(420, 700);
+      }
+      daddy.chaseCd -= dt;
+      target = daddy.chase;
     }
-    daddy.chaseCd -= dt;
-    const target = daddy.chase;
 
     const dx = target.x - daddy.x, dz = target.z - daddy.z;
     const d = Math.hypot(dx, dz) || 1;
