@@ -351,6 +351,7 @@
     },
     boing:   ()=>tone(300,.16,'triangle',.045,620),
     giggle:  ()=>{ for (let i=0;i<5;i++) setTimeout(()=>tone(rnd(760,1180),.07,'triangle',.035),i*72); },
+    woof:    ()=>{ tone(300,.10,'square',.06,-120); setTimeout(()=>tone(380,.12,'square',.055,-180),110); },
     free:    ()=>seq([659,784,988],60,.16,'triangle',.045),
     party:   ()=>seq([523,659,784,1047,1319,1047,1319,1568],90,.26,'triangle',.055),
     pillow:  ()=>{ noise(.16,.045); tone(240,.14,'sine',.035,-90); },
@@ -415,6 +416,34 @@
      he never ends up standing in front of the kid he just threw. */
   const SLAM_SPOT = { x:38, z:24 };
   const COUCH_LAND = { x:52, z:15 };
+
+  /* ================================================================== *
+   * the finishers
+   *
+   * The game is named after the smash, and for a long time there was
+   * exactly one of them: carried to the same spot, dropped on the same
+   * cushion, same shout, every single time. Thirty-six catches in a
+   * seven-minute run, all identical. So the couch flop is now one of five.
+   *
+   *   stand   where Daddy carries them to
+   *   land    where they end up
+   *   spin    1 = swung round at arm's length instead of held overhead
+   *   roll    1 = lands rolling rather than flat on its back
+   *   tuck    1 = curled into a ball on the way down
+   *   flop    how heavily Daddy piles on afterwards
+   * ================================================================== */
+  const SMASHES = [
+    { id:'couch',   cry:'WHUMP!',            line:'{k} got smashed!',
+      stand:SLAM_SPOT,      land:COUCH_LAND,      raiseF:26, dropF:13, flop:1 },
+    { id:'plane',   cry:'AEROPLANE!',        line:'{k} flew round the room!',
+      stand:{x:50,z:44},    land:{x:50,z:62},     raiseF:70, dropF:18, spin:1, flop:.4 },
+    { id:'cannon',  cry:'CANNONBALL!',       line:'{k} cannonballed the big chair!',
+      stand:{x:74,z:34},    land:{x:88,z:30},     raiseF:22, dropF:11, tuck:1, flop:.5 },
+    { id:'dogpile', cry:'DOGPILE!',          line:'{k} got the whole dogpile!',
+      stand:{x:78,z:78},    land:{x:88,z:84},     raiseF:20, dropF:14, flop:1.7 },
+    { id:'burrito', cry:'BLANKET BURRITO!',  line:'{k} got rolled up like a burrito!',
+      stand:{x:38,z:58},    land:{x:56,z:62},     raiseF:24, dropF:12, roll:1, flop:.3 },
+  ];
   /* How high the kid rides while being carried. Clear of Daddy's head, so it
      reads as held overhead rather than tucked under one arm. */
   const CARRY_Y = 116;
@@ -638,7 +667,8 @@
    *   free    they spring off the couch; Daddy is left seeing stars
    * ================================================================== */
   function startSmash(kid){
-    smash = { kid, phase:'grab', t:0, ky:0, rot:0, wig:0, counted:false };
+    const spec = SMASHES[(Math.random()*SMASHES.length)|0];
+    smash = { kid, spec, phase:'grab', t:0, ky:0, rot:0, wig:0, counted:false, orbit:0 };
     kid.held = true;
     daddy.mode = 'carry';
     daddy.flop = 0;
@@ -649,28 +679,30 @@
   }
 
   function land(){
-    const k = smash.kid;
+    const k = smash.kid, sp = smash.spec, at = sp.land;
     slams++;
     saveBest();
     shake = 16;
     flash = 1;
     sfx.whump();
     setTimeout(()=> sfx.giggle(), 220);
-    puffAt(COUCH_LAND.x, COUCH_LAND.z + 2, 18, '#FFF6E4');
-    heartsAt(COUCH_LAND.x, COUCH_LAND.z, 7);
-    confettiAt(COUCH_LAND.x, COUCH_LAND.z, party > 0 ? 26 : 14);
+    puffAt(at.x, at.z + 2, 18, '#FFF6E4');
+    heartsAt(at.x, at.z, 7);
+    confettiAt(at.x, at.z, party > 0 ? 26 : 14);
     // starts above head height, or it lands square on the kid it is about
-    pop(COUCH_LAND.x, COUCH_LAND.z, party > 0 ? 'PILLOW SMASH!' : 'WHUMP!', '#FFD23D', 38, 104);
-    shout(k.def.name + ' got smashed!');       // the CSS shouts it in caps
+    pop(at.x, at.z, party > 0 ? 'PILLOW SMASH!' : sp.cry, '#FFD23D', 38, 104);
+    shout(sp.line.replace('{k}', k.def.name));   // the CSS shouts it in caps
     addGiggle(20);
+    if (sp.id === 'dogpile') wakeDog(520);       // he is not missing this
   }
 
   function endSmash(){
     const k = smash.kid;
     k.held = false;
     k.safe = 130;                    // a head start, so it never feels unfair
-    k.x = COUCH_LAND.x + 6;
-    k.z = 30;
+    const at = smash.spec.land;
+    k.x = clamp(at.x + 6, MIN_X + 4, MAX_X - 4);
+    k.z = clamp(at.z + 15, MIN_Z + 4, MAX_Z - 4);
     k.hop = 16;
     smash = null;
     daddy.mode = 'dizzy';
@@ -696,7 +728,7 @@
       if (smash.t >= 16){ smash.phase = 'carry'; smash.t = 0; sfx.lift(); }
 
     } else if (smash.phase === 'carry'){
-      const dx = SLAM_SPOT.x - daddy.x, dz = SLAM_SPOT.z - daddy.z;
+      const dx = smash.spec.stand.x - daddy.x, dz = smash.spec.stand.z - daddy.z;
       const d = Math.hypot(dx, dz) || 1;
       if (d > 1.4){
         // he steps over the coffee table rather than round it — he's a dad
@@ -710,32 +742,53 @@
       if (d <= 1.4 || smash.t > 170){ smash.phase = 'raise'; smash.t = 0; }
 
     } else if (smash.phase === 'raise'){
-      smash.ky = CARRY_Y + ease(smash.t/26)*26;
+      const sp = smash.spec, F = sp.raiseF;
+      smash.ky = CARRY_Y + ease(smash.t/Math.min(F, 26))*26;
       // wiggling the controls here does nothing but make them wriggle and
       // giggle harder, which is the entire point of it
       // holding a kid over your head counts too, so the wiggle works from
       // whichever side of the smash the player is on
       const wiggle = (k === player() || playerIdx === 2) && state === 'play' ? steerMag() : 0;
       smash.wig = Math.sin(smash.t*(0.9 + wiggle*0.9))*(0.26 + wiggle*0.24);
-      if (wiggle > 0.5 && Math.random() < 0.10*dt){
+      if (wiggle > 0.5 && Math.random() < 0.14*dt){
         heartsAt(daddy.x, daddy.z, 1);
-        addGiggle(0.5);
+        addGiggle(1.2);
       }
-      if (smash.t >= 26){ smash.phase = 'drop'; smash.t = 0; sfx.whoosh(); }
+      /* The aeroplane: swung round at arm's length instead of held still,
+         faster and faster, with Daddy turning under them. */
+      if (sp.spin){
+        smash.orbit += dt*(0.055 + smash.t*0.0022);
+        k.x = clamp(daddy.x + Math.cos(smash.orbit)*13, MIN_X+2, MAX_X-2);
+        k.z = clamp(daddy.z + Math.sin(smash.orbit)*9,  MIN_Z+2, MAX_Z-2);
+        smash.rot = smash.orbit;
+        daddy.dir = Math.cos(smash.orbit) >= 0 ? 1 : -1;
+        smash.ky = CARRY_Y*0.72;
+        if (smash.t % 18 < dt) sfx.whoosh();
+      } else {
+        k.x = daddy.x; k.z = daddy.z;
+      }
+      if (sp.tuck) smash.tuckK = ease(smash.t/F);   // curling into a ball
+      if (smash.t >= F){
+        smash.phase = 'drop'; smash.t = 0; sfx.whoosh();
+        smash.fromX = k.x; smash.fromZ = k.z; smash.ky0 = smash.ky + 26;
+      }
 
     } else if (smash.phase === 'drop'){
-      const u = clamp(smash.t/13, 0, 1);
-      smash.ky = lerp(CARRY_Y + 26, 5, u*u);
-      k.x = lerp(daddy.x, COUCH_LAND.x, u);
-      k.z = lerp(daddy.z, COUCH_LAND.z, u);
-      smash.rot = u*1.5;
-      if (smash.t >= 13){ smash.phase = 'bounce'; smash.t = 0; land(); }
+      const sp = smash.spec, F = sp.dropF;
+      const u = clamp(smash.t/F, 0, 1);
+      smash.ky = lerp(smash.ky0 == null ? CARRY_Y + 26 : smash.ky0, 5, u*u);
+      k.x = lerp(smash.fromX == null ? daddy.x : smash.fromX, sp.land.x, u);
+      k.z = lerp(smash.fromZ == null ? daddy.z : smash.fromZ, sp.land.z, u);
+      smash.rot = sp.roll ? u*7 : sp.spin ? smash.orbit + u*3 : u*1.5;
+      if (smash.t >= F){ smash.phase = 'bounce'; smash.t = 0; land(); }
 
     } else if (smash.phase === 'bounce'){
+      const sp = smash.spec;
       const u = clamp(smash.t/36, 0, 1);
-      smash.ky = Math.abs(Math.sin(u*Math.PI*2.3))*26*(1-u);
-      smash.rot *= Math.pow(0.9, dt);
-      daddy.flop = ease(smash.t/14);            // he flops down after them
+      // a cannonball comes down harder and bounces higher off the cushion
+      smash.ky = Math.abs(Math.sin(u*Math.PI*2.3))*(sp.tuck ? 38 : 26)*(1-u);
+      smash.rot = sp.roll ? smash.rot + (1-u)*0.5*dt : smash.rot*Math.pow(0.9, dt);
+      daddy.flop = ease(smash.t/14)*(sp.flop == null ? 1 : sp.flop);
       if (smash.t > 12 && smash.t - dt <= 12) sfx.boing();
       if (smash.t >= 36){ smash.phase = 'free'; smash.t = 0; }
 
@@ -772,6 +825,136 @@
       c: ['#FF6FA8','#FFD23D','#4FD16A','#3DA9F5','#FF8A3D','#FFF1D6'][(Math.random()*6)|0],
       rest: 0,
     });
+  }
+
+  /* ================================================================== *
+   * things that happen
+   *
+   * The pillow party was the only thing that ever interrupted the chase.
+   * These four join it. All of them are gifts and none of them may make a
+   * catch rarer — that is the one rule this game cannot bend, because being
+   * caught IS the reward. Where an event would otherwise get in Daddy's way
+   * (the dark), he is given a little help to make up for it.
+   * ================================================================== */
+  const EV_GAP_MIN = 850, EV_GAP_MAX = 1600;
+  let evIn = 540;
+  /* The dog lives here whatever happens — asleep in his bed, ears twitching.
+     The event is him waking up, which is why he is not created by it. */
+  let dog = { x:88, z:84, vx:0, vz:0, run:0, dir:-1, awake:0, lick:0, bark:0, r:3.6 };
+  let dark = 0, darkLeft = 0;
+  let balloons = [];
+  let comeGet = 0;
+
+  function wakeDog(frames){
+    if (dog.awake < frames) dog.awake = frames;
+  }
+
+  function fireEvent(){
+    evIn = rnd(EV_GAP_MIN, EV_GAP_MAX);
+    const pool = [];
+    const add = (id, n) => { for (let i = 0; i < n; i++) pool.push(id); };
+    add('dog', 4); add('balloons', 4); add('comeget', 3);
+    if (!darkLeft) add('dark', 3);
+    const id = pool[(Math.random()*pool.length)|0];
+
+    if (id === 'dog'){
+      wakeDog(1100);
+      dog.bark = 1;
+      sfx.woof();
+      shout('The dog wants to play!', 1800);
+    } else if (id === 'balloons'){
+      for (let i = 0; i < 11; i++){
+        balloons.push({
+          x: rnd(MIN_X+6, MAX_X-6), z: rnd(MIN_Z+6, MAX_Z-6),
+          y: rnd(150, 300), vy: rnd(.5, 1.1), ph: rnd(0, 6.3),
+          c: ['#FF6FA8','#FFD23D','#4FD16A','#3DA9F5','#FF8A3D','#B274EB'][(Math.random()*6)|0],
+        });
+      }
+      sfx.party();
+      shout('Balloons!', 1800);
+    } else if (id === 'comeget'){
+      comeGet = 420;
+      sfx.wind();
+      shout('Daddy says COME AND GET ME!', 2200);
+    } else {
+      darkLeft = 760;
+      sfx.wind();
+      shout('Lights out!', 1800);
+    }
+  }
+
+  function updateDog(dt){
+    if (dog.lick > 0) dog.lick -= dt;
+    if (dog.awake <= 0){
+      // asleep in his bed, drifting home if he was left out in the room
+      dog.x += (88 - dog.x)*0.02*dt;
+      dog.z += (84 - dog.z)*0.02*dt;
+      dog.vx = dog.vz = 0;
+      return;
+    }
+    dog.awake -= dt;
+    if (dog.bark > 0){ dog.bark -= dt*0.02; }
+
+    // he chases whoever Daddy is after, which puts him in the same scrum
+    let target = null, best = 1e9;
+    for (const k of kids){
+      if (k.held) continue;
+      const d = dist(dog, k);
+      if (d < best){ best = d; target = k; }
+    }
+    if (!target){ dog.vx = dog.vz = 0; return; }
+    const dx = target.x - dog.x, dz = target.z - dog.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const av = avoidance(dog, 3);
+    move(dog, dx/d + av.x*1.2, dz/d + av.z*1.2, 0.62, dt);
+    dog.run += dt*0.24;
+    if (Math.abs(dog.vx) > 0.01) dog.dir = dog.vx > 0 ? 1 : -1;
+
+    /* A lick, never a catch. The dog cannot take a kid out of the chase —
+       he just gets in the way and makes everybody laugh. */
+    if (d < dog.r + target.r + 2 && dog.lick <= 0){
+      dog.lick = 90;
+      target.hop = 14;
+      heartsAt(target.x, target.z, 4);
+      pop(target.x, target.z, 'SLURP!', '#FFD6EC', 24);
+      sfx.giggle();
+      addGiggle(5);
+    }
+  }
+
+  function updateEvents(dt){
+    if (evIn > 0) evIn -= dt;
+    else if (state === 'play' && !smash) fireEvent();
+
+    updateDog(dt);
+
+    if (darkLeft > 0) darkLeft -= dt;
+    dark += ((darkLeft > 0 ? 1 : 0) - dark)*0.03*dt;
+    if (dark < .004 && darkLeft <= 0) dark = 0;
+
+    if (comeGet > 0) comeGet -= dt;
+
+    for (const b of balloons){
+      b.y -= b.vy*dt;
+      b.ph += dt*0.05;
+      b.x += Math.sin(b.ph)*0.06*dt;
+    }
+    balloons = balloons.filter(b => b.y > -30 && !b.gone);
+    // popped by running through one — anybody can, Daddy included
+    for (const b of balloons){
+      if (b.y > 90) continue;                       // still too high to reach
+      for (const e of [kids[0], kids[1], daddy]){
+        if (e.held) continue;
+        if (Math.hypot(e.x - b.x, e.z - b.z) < 7){
+          b.gone = true;
+          confettiAt(b.x, b.z, 10);
+          pop(b.x, b.z, 'POP!', b.c, 22);
+          sfx.boing();
+          addGiggle(3);
+          break;
+        }
+      }
+    }
   }
 
   /* ================================================================== *
@@ -858,6 +1041,8 @@
     // he comes for the player first — unless the player is him
     daddy.prefer = playerIdx === 2 ? 0 : playerIdx;
     slams = 0; giggle = 0; party = 0; hunger = 0; smash = null;
+    evIn = 540; darkLeft = 0; dark = 0; comeGet = 0; balloons = [];
+    dog.awake = 0; dog.lick = 0; dog.x = 88; dog.z = 84;
     pillows = [];
     jukebox.play('chase');
     updateHud();
@@ -955,9 +1140,24 @@
       return;
     }
 
+    /* Arms out, standing still, daring them to come to him. Touching him
+       is an instant smash, so this makes catches MORE likely, never less. */
+    if (comeGet > 0){
+      daddy.mode = 'walk';
+      daddy.vx = daddy.vz = 0;
+      daddy.run += dt*0.02;
+      if (Math.random() < 0.04*dt) heartsAt(daddy.x, daddy.z, 1);
+      for (const k of kids){
+        if (!k.held && k.safe <= 0 && dist(daddy, k) < daddy.r + k.r + 3){ startSmash(k); return; }
+      }
+      return;
+    }
+
     hunger += dt;
     const boost = 1 + Math.min(0.34, hunger/4200);
-    const slow = party > 0 ? 0.74 : 1;
+    // in the dark he gets a little help, so the lights going out can never
+    // mean fewer catches
+    const slow = (party > 0 ? 0.74 : 1) * (1 + dark*0.16);
 
     /* He picks one kid and commits to them for a while, rather than always
        lunging at whoever happens to be nearest. Two reasons: chasing one
@@ -1110,6 +1310,7 @@
       updateDaddy(dt);
     }
 
+    updateEvents(dt);
     updateBits(dt);
     if (Math.floor(t) % 6 === 0) updateHud();
   }
@@ -1573,9 +1774,11 @@
     if (held){
       const ph = smash.phase;
       if (ph === 'drop' || ph === 'bounce' || ph === 'free'){
-        ctx.rotate(smash.rot*(ph === 'drop' ? 1 : 0.4));
+        const roll = smash.spec && smash.spec.roll;
+        ctx.rotate(smash.rot*(ph === 'drop' || roll ? 1 : 0.4));
         const sq = ph === 'bounce' ? 1 + Math.max(0, 1 - smash.t/8)*0.3 : 1;
-        ctx.scale(sq, 1/sq);
+        const tuck = 1 - (smash.tuckK || 0)*0.22;   // curled up small
+        ctx.scale(sq*tuck, tuck/sq);
         drawFigure(k.def, { height:86, ph:t*0.5, run:1, pose:'flail', mouth:'o' });
       } else {
         // carried overhead, kicking
@@ -1700,6 +1903,116 @@
   /* ================================================================== *
    * render
    * ================================================================== */
+  /* ---------- the dog ---------- */
+  function drawDog(){
+    const p = proj(dog.x, dog.z);
+    const asleep = dog.awake <= 0;
+    shadow(dog.x, dog.z, 8, .22);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.scale(dog.dir*p.s, p.s);
+
+    const BR = '#B5793F', DK = '#7A4B22', WH = '#F3EFE8';
+    if (asleep){
+      // curled up in his bed, one ear twitching
+      ctx.fillStyle = BR;
+      ctx.beginPath(); ctx.ellipse(0, -9, 17, 10, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(12, -13, 8, 7, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = DK;
+      ctx.beginPath();
+      ctx.ellipse(15 + Math.sin(t*0.06)*1.5, -18, 3.4, 6, .3, 0, 7); ctx.fill();
+      ctx.fillStyle = WH;
+      ctx.beginPath(); ctx.ellipse(-8, -5, 9, 5, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = DK; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(17, -12, 2, 0, 7); ctx.stroke();     // shut eye
+      // zzz
+      ctx.fillStyle = 'rgba(255,255,255,.8)';
+      ctx.font = '700 11px "Trebuchet MS", sans-serif';
+      for (let i = 0; i < 3; i++){
+        const k = ((t*0.012 + i*0.33) % 1);
+        ctx.globalAlpha = (1 - k)*0.8;
+        ctx.fillText('z', 20 + k*10, -24 - k*18);
+      }
+      ctx.globalAlpha = 1;
+    } else {
+      const gait = dog.run*2;
+      const sw = Math.sin(gait)*5;
+      ctx.strokeStyle = DK; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+      for (const [ox, ph] of [[-9, 0], [8, 2.1]]){
+        ctx.beginPath();
+        ctx.moveTo(ox, -11); ctx.lineTo(ox + Math.sin(gait + ph)*5, -1); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+      ctx.fillStyle = BR;
+      ctx.beginPath(); ctx.ellipse(-1, -14, 15, 8, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(13, -21, 8, 7, 0, 0, 7); ctx.fill();   // head
+      ctx.fillStyle = WH;
+      ctx.beginPath(); ctx.ellipse(-4, -11, 8, 4.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = DK;                                                 // ear
+      ctx.beginPath(); ctx.ellipse(10, -25, 3.4, 6, .2 + sw*.02, 0, 7); ctx.fill();
+      ctx.beginPath();                                                    // tail, wagging
+      ctx.ellipse(-16 - Math.abs(sw)*.3, -18 + sw*.5, 6, 2.4, -.5 + sw*.06, 0, 7); ctx.fill();
+      ctx.fillStyle = '#22182E';
+      ctx.beginPath(); ctx.arc(16, -22, 1.8, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(20, -19, 2.2, 0, 7); ctx.fill();           // nose
+      ctx.fillStyle = '#E86A7C';                                          // tongue
+      ctx.beginPath(); ctx.ellipse(19, -15 + Math.sin(gait*1.6)*1.5, 2.4, 3.6, -.3, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    if (dog.bark > 0){
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, dog.bark);
+      ctx.fillStyle = '#FFF';
+      ctx.font = '800 16px "Trebuchet MS", sans-serif';
+      ctx.fillText('WOOF!', p.x + 16, p.y - 40*p.s);
+      ctx.restore();
+    }
+  }
+
+  function drawBalloons(){
+    for (const b of balloons){
+      const p = proj(b.x, b.z);
+      const y = p.y - b.y*p.s;
+      const sway = Math.sin(b.ph)*4;
+      ctx.save();
+      ctx.translate(p.x + sway, y);
+      ctx.scale(p.s, p.s);
+      ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(0, 15); ctx.quadraticCurveTo(sway*.6, 30, -sway*.4, 44); ctx.stroke();
+      ctx.fillStyle = b.c;
+      ctx.beginPath(); ctx.ellipse(0, 0, 12, 15, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-3, 14); ctx.lineTo(3, 14); ctx.lineTo(0, 19); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.beginPath(); ctx.ellipse(-4, -5, 3.4, 4.6, -.4, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /* Lights out. A torch follows whoever you are driving; everybody else is
+     a shape in the dark, which is the fun of it. Daddy is quietly quicker
+     while it lasts so the dark never costs anybody a catch. */
+  function drawDark(){
+    if (dark <= 0.01) return;
+    /* player(), not whereIsPlayer() — the latter returns the HUD's landmark
+       caption ("🛋️ the couch"), and feeding a string's undefined .x into
+       proj() produced NaN gradient coordinates. The harness paints through a
+       proxy of no-ops and never noticed; a real browser throws IndexSizeError
+       out of the render loop and the canvas freezes on its last good frame. */
+    const me = player();
+    const p = proj(me.x, me.z);
+    if (!isFinite(p.x) || !isFinite(p.y)) return;
+    ctx.save();
+    ctx.globalAlpha = dark*0.82;
+    const g = ctx.createRadialGradient(p.x, p.y - 40, 30, p.x, p.y - 40, 250);
+    g.addColorStop(0, 'rgba(6,10,26,0)');
+    g.addColorStop(.55, 'rgba(6,10,26,.55)');
+    g.addColorStop(1, 'rgba(6,10,26,.95)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
   function render(){
     ctx.save();
     if (shake > 0){
@@ -1717,9 +2030,12 @@
     for (const p of pillows) layers.push({ z: p.z, draw: () => drawPillow(p) });
     for (const k of kids)    layers.push({ z: k.z, draw: () => drawKid(k) });
     layers.push({ z: daddy.z + 0.5, draw: drawDaddy });
+    layers.push({ z: dog.z - 0.5, draw: drawDog });
     layers.sort((a, b) => a.z - b.z);
     for (const l of layers) l.draw();
 
+    drawBalloons();
+    drawDark();
     drawBits();
 
     // the finger you are holding down, so a parent can see what a kid is doing

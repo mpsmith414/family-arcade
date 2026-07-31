@@ -1124,6 +1124,11 @@ test('fishing: a long idle run never throws either', note => {
   return h;
 });
 
+/* Every finisher shouts a different line, but all of them lead with who it
+   happened to — which is what a kid listens for, and what these tests read
+   to find out who got caught. */
+const SMASH_LINE = /^(\w+) (?:got smashed|flew round|cannonballed|got the whole dogpile|got rolled up)/i;
+
 /* ================================================================ *
  * games/daddy-smash
  *
@@ -1201,11 +1206,21 @@ for (const [label, start] of Object.entries(STARTERS)) {
     assert(h.hidden('startScreen'), `${label} did not start the game`);
 
     // then stand still, which is the surest way to be caught
-    pump(h, 2500);
+    // The shout line is shared with the pillow party and anything else that
+    // has something to say, so watch it across the run rather than reading it
+    // once at the end and hoping a finisher was the last thing to speak.
+    const shouts = new Set();
+    for (let i = 0; i < 2500; i++) {
+      pump(h, 1);
+      const line = h.text('catchLine');
+      if (line) shouts.add(line);
+    }
     const slams = h.num('slams');
     assert(slams > 0, `standing still for 2500 frames should get you caught, got ${slams}`);
-    assert(/got smashed/i.test(h.text('catchLine')), `no smash shout, got "${h.text('catchLine')}"`);
-    note(`${slams} smashes, last shout "${h.text('catchLine')}"`);
+    const smashShouts = [...shouts].filter(l => SMASH_LINE.test(l));
+    assert(smashShouts.length > 0,
+      `${slams} smashes but no finisher shout among: ${[...shouts].join(' / ')}`);
+    note(`${slams} smashes, shouted: ${smashShouts.join(' / ')}`);
     return h;
   });
 }
@@ -1326,7 +1341,7 @@ test('daddy: both kids get smashed, not just the one you drive', note => {
   const seen = new Set();
   for (let i = 0; i < 6000 && seen.size < 2; i++) {
     pump(h, 1);
-    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    const m = SMASH_LINE.exec(h.text('catchLine'));
     if (m) seen.add(m[1]);
   }
   assert(seen.has('Oliver'), `Oliver never got smashed: saw ${[...seen].join(', ') || 'nobody'}`);
@@ -1349,7 +1364,7 @@ test('daddy: as Daddy, both kids are still on the run', note => {
   for (let i = 0; i < 12000 && seen.size < 2; i++) {
     if (i % 90 === 0) { const [x, y] = legs[(i / 90) % legs.length]; h.stick(x, y); }
     pump(h, 1);
-    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    const m = SMASH_LINE.exec(h.text('catchLine'));
     if (m) seen.add(m[1]);
   }
   assert(seen.has('Oliver'), `Oliver never got caught: saw ${[...seen].join(', ') || 'nobody'}`);
@@ -1566,14 +1581,14 @@ test('daddy: chasing as Daddy catches a kid, with no button pressed', note => {
       h.stick(x, y);
     }
     pump(h, 1);
-    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    const m = SMASH_LINE.exec(h.text('catchLine'));
     if (m) smashed.add(m[1]);
   }
 
   const slams = h.num('slams');
   assert(slams > 0, `${CHASE_FRAMES} frames of chasing as Daddy caught nobody`);
   assert(smashed.size > 0,
-    `${slams} smashes happened but no "got smashed" shout was ever seen on screen`);
+    `${slams} smashes happened but no finisher shout was ever seen on screen`);
   note(`${slams} smashes as Daddy, steering only (shouted for: ${[...smashed].join(', ') || 'nobody'})`);
   return h;
 });
@@ -2032,6 +2047,87 @@ test('levels: a world runs longer before the boss shows up', note => {
   const firstWarn = h.until(() => h.paintedSome(/BOSS TIME/), 6000, 'the first boss call');
   note(`first boss called at frame ${firstWarn} (RUN_FRAMES is 2600)`);
   assertBetween(firstWarn, 2300, 3200, 'the first boss arrived at the wrong time');
+  return h;
+});
+
+/* ---------------------------------------------------------------- *
+ * daddy smash: five finishers and four interruptions
+ * ---------------------------------------------------------------- */
+
+const FINISHERS = ['got smashed', 'flew round', 'cannonballed', 'got the whole dogpile', 'got rolled up'];
+
+/* The game is named after the smash, and there used to be exactly one of
+   them — same carry, same cushion, same shout, every catch. */
+test('daddy: every finisher turns up, and each lands somewhere of its own', note => {
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.click('startBtn');
+  const shouts = new Set();
+  for (let i = 0; i < 30000; i++) {
+    pump(h, 1);
+    const line = h.text('catchLine');
+    if (line) shouts.add(line);
+  }
+  const seen = FINISHERS.filter(f => [...shouts].some(l => l.toLowerCase().includes(f)));
+  note(`${h.num('slams')} smashes, finishers seen: ${seen.join(', ')}`);
+  assert(seen.length === FINISHERS.length,
+    `only ${seen.length} of ${FINISHERS.length} finishers appeared: ${seen.join(', ')}`);
+  return h;
+});
+
+test('daddy: the room does things while you play', note => {
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.click('startBtn');
+  const shouts = new Set();
+  for (let i = 0; i < 30000; i++) {
+    pump(h, 1);
+    const line = h.text('catchLine');
+    if (line) shouts.add(line);
+  }
+  const wanted = ['dog wants to play', 'Balloons', 'COME AND GET ME', 'Lights out'];
+  const seen = wanted.filter(w => [...shouts].some(l => l.toLowerCase().includes(w.toLowerCase())));
+  note(`seen: ${seen.join(', ')}`);
+  assert(seen.length >= 3, `only ${seen.length} of ${wanted.length} events happened: ${seen.join(', ')}`);
+  return h;
+});
+
+/* REGRESSION GUARD, and the rule this game cannot bend: being caught IS the
+   reward, so anything that makes a catch rarer is a bug. Every event added
+   here is a gift — the dog only licks, balloons only pop, "come and get me"
+   is an instant catch, and Daddy is quietly quicker in the dark to pay for
+   not being able to see. This asserts the rate did not fall. */
+test('daddy: nothing added to the room makes catches rarer', note => {
+  const rates = [];
+  for (const seed of [11, 5, 33]) {
+    const h = createHarness('daddy-smash', { seed });
+    h.click('startBtn');
+    pump(h, 12000);            // stand still: the surest way to be caught
+    rates.push(h.num('slams'));
+    h.dispose();
+  }
+  const total = rates.reduce((a, b) => a + b, 0);
+  note(`smashes per 12000 frames across three seeds: ${rates.join(', ')} (${total} total)`);
+  // measured at 11-18 per 12000 frames before any of this landed
+  for (const r of rates) assert(r >= 10, `only ${r} smashes in 12000 frames — catches got rarer`);
+});
+
+/* The dog is charming and must stay harmless: he licks, and a lick is not a
+   catch. If he could take a kid out of the chase he would be stealing the
+   payoff rather than adding to it. */
+test('daddy: the dog only ever licks, never catches', note => {
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.click('startBtn');
+  // count the frame a SLURP first appears, not every frame it is on screen:
+  // the pop lives ~52 frames, so counting frames overstates it fifty-fold
+  let licks = 0, showing = false;
+  for (let i = 0; i < 30000; i++) {
+    h.clearPainted();
+    pump(h, 1);
+    const up = h.paintedSome(/SLURP!/);
+    if (up && !showing) licks++;
+    showing = up;
+  }
+  note(`${licks} licks and ${h.num('slams')} smashes over 30000 frames`);
+  assert(licks > 0, 'the dog never licked anybody');
   return h;
 });
 

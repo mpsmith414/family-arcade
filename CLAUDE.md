@@ -71,6 +71,16 @@ contrast with all three rather than land in between.
   Getting smashed on the couch is the payoff the game is named after, so
   anything that makes catches rarer is a bug and anything that makes them
   feel like a punishment is a worse one.
+  There are five finishers (`SMASHES`), not one — couch flop, aeroplane,
+  cannonball, dogpile, blanket burrito — each with its own carry, landing
+  spot and shout, and every shout leads with the name of whoever it happened
+  to. **Things happen in the room too** (`fireEvent`): the dog wakes up and
+  joins in, balloons drift down to be popped, the lights go out with a torch
+  on the player, or Daddy stands still and dares them to come and get him.
+  Each one has to be a gift — the dog only licks, "come and get me" is an
+  instant catch, and Daddy is quietly quicker in the dark to pay for nobody
+  being able to see him. `daddy: nothing added to the room makes catches
+  rarer` is the guard on that.
 
 ## Hard constraints — do not break these
 
@@ -116,6 +126,13 @@ For that, serve the folder and screenshot it in a real browser; Chromium and
 Playwright are already on the box. Doing that caught two things the tests could
 not: the fish book's bottom row sitting under the on-screen buttons, and every
 uncaught silhouette leaking its hard-coded highlights.
+
+**The proxy hides thrown canvas calls**, which is a sharper version of the same
+point. `ctx` is a Proxy of no-ops, so a call a real browser rejects — a gradient
+built on NaN coordinates, say — does nothing at all in the harness and throws
+`IndexSizeError` out of the render loop in Chromium, freezing the canvas on its
+last good frame. The tests stayed green while the game was dead on screen. Any
+new drawing code wants one look in a browser before you believe it.
 
 The harness takes a folder name and works for any game under `games/`: it
 walks that game's `<script>` tags in order, evals `src=` ones off disk (which
