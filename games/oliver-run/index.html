@@ -247,7 +247,7 @@
       <button class="cta" id="startBtn">Adventure</button>
       <button class="cta alt" id="rushBtn">Boss Rush</button>
     </div>
-    <p class="hint">Boss Rush: 18 bosses, random order, back to back.<br>Tap 🔓 for kid lock.</p>
+    <p class="hint">Adventure: 14 worlds, a different order every time.<br>Boss Rush: 18 bosses, back to back. Tap 🔓 for kid lock.</p>
   </div>
 </div>
 
@@ -274,6 +274,18 @@
     goldPoints:    50,           // a normal star is 10
     goldCharge:    5,            // a normal star is 2
     skySeed:       20260729,
+    /* The high road during a boss fight. Shorter clusters arriving more often
+       than on the run, so there is nearly always a pad to leap from without
+       the arena turning into a staircase. Every boss-lane pad carries a star:
+       that is charge, and charge is what turns into SUPER mid-fight. */
+    bossFirst:     120,          // frames after the boss lands before the first pad
+    bossClusterMin:1,
+    bossClusterMax:2,
+    bossGapMin:    230,
+    bossGapMax:    370,
+    bossDrift:     .34,          // boss-lane pads hang back, so you can use them
+    skySmash:      120,          // bonus for dropping onto a boss from above
+    wxSeed:        20260731,
   };
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -357,6 +369,48 @@
       lead:[69,69,R,69, 72,R,71,R, 69,69,R,69, 76,R,74,R,
             72,72,R,72, 74,R,72,R, 71,R,69,R, 68,R,R,R],
       bass:[33,33,33,33, 33,33,33,33, 36,36,36,36, 31,31,31,31] },
+
+    /* one per new world — the tempo does as much of the work as the tune */
+    candy: { bpm:138, drums:'light', wave:'square',
+      lead:[84,R,81,R, 79,81,84,R, 86,R,84,R, 81,R,79,R,
+            77,R,79,R, 81,84,86,R, 88,86,84,81, 79,R,R,R],
+      bass:[48,55,52,55, 45,52,48,52, 50,57,53,57, 43,50,47,50] },
+    ice: { bpm:116, drums:'soft', wave:'triangle',
+      lead:[79,R,R,84, R,83,R,79, 81,R,R,86, R,84,R,81,
+            83,R,R,88, R,86,R,83, 84,R,81,R, 79,R,R,R],
+      bass:[40,R,47,R, 45,R,52,R, 43,R,50,R, 47,R,54,R] },
+    lava: { bpm:150, drums:'heavy', wave:'sawtooth',
+      lead:[65,R,68,R, 70,68,65,R, 63,R,65,R, 68,R,R,R,
+            70,70,R,72, 73,R,70,R, 68,R,65,R, 63,R,R,R],
+      bass:[29,29,36,29, 31,31,38,31, 33,33,40,33, 29,29,36,36] },
+    spooky: { bpm:104, drums:'soft', wave:'triangle',
+      lead:[69,R,72,R, 74,R,75,R, 74,R,72,R, 69,R,R,R,
+            68,R,71,R, 74,R,75,74, 72,R,69,R, 68,R,R,R],
+      bass:[33,R,R,40, 34,R,R,41, 33,R,R,40, 32,R,R,39] },
+    sky: { bpm:110, drums:'soft', wave:'triangle',
+      lead:[72,R,76,R, 79,R,83,R, 84,R,79,R, 76,R,R,R,
+            74,R,77,R, 81,R,84,R, 86,R,81,R, 77,R,R,R],
+      bass:[36,R,43,R, 41,R,48,R, 38,R,45,R, 43,R,50,R] },
+    factory: { bpm:146, drums:'heavy', wave:'square',
+      lead:[64,64,R,67, 64,R,71,R, 64,64,R,67, 69,R,67,R,
+            66,66,R,69, 66,R,73,R, 71,R,69,R, 67,R,R,R],
+      bass:[28,28,R,28, 35,R,28,R, 30,30,R,30, 37,R,30,R] },
+    desert: { bpm:124, drums:'light', wave:'square',
+      lead:[76,77,R,76, 74,R,72,R, 70,72,74,R, 72,R,R,R,
+            76,77,79,77, 76,R,74,R, 72,R,70,R, 69,R,R,R],
+      bass:[45,R,45,52, 48,R,48,55, 43,R,43,50, 45,R,52,R] },
+    fungus: { bpm:128, drums:'light', wave:'triangle',
+      lead:[74,R,78,R, 81,R,78,R, 76,R,79,R, 83,R,79,R,
+            74,78,81,83, 85,R,83,R, 81,R,78,R, 74,R,R,R],
+      bass:[38,45,42,45, 40,47,43,47, 42,49,45,49, 38,45,42,42] },
+    neon: { bpm:158, drums:'heavy', wave:'square',
+      lead:[81,85,88,85, 81,85,88,90, 88,85,81,85, 83,86,90,86,
+            85,88,92,88, 85,88,92,93, 90,86,83,86, 81,R,R,R],
+      bass:[33,33,40,33, 37,37,44,37, 35,35,42,35, 38,38,45,38] },
+    pirate: { bpm:120, drums:'light', wave:'square',
+      lead:[69,R,72,74, 76,R,74,72, 69,R,72,74, 76,R,R,R,
+            77,R,76,74, 72,R,74,R, 76,R,72,R, 69,R,R,R],
+      bass:[45,45,52,45, 41,41,48,41, 43,43,50,43, 45,45,52,52] },
   };
 
   let musicOn = true;
@@ -455,6 +509,199 @@
       ],
       bits:['#FF7FA8','#FFAE5C','#B5793F','#8FE0D6'],
     },
+
+    /* ---- the ten later worlds ----
+       Each one owns four things a kid actually notices: a palette, a backdrop
+       shape, weather blowing through it, and how heavy the jump feels.
+
+       `grav` and `jump` always come as a pair with jump = sqrt(2*grav*152),
+       because 152px is the apex the sky lane is built around — Cloud Castle
+       floats and Volcano Rush is snappy, but the same platform is reachable in
+       both. Change one without the other and the high road breaks.
+       `pace` is a gentle multiplier on top speed: the speedway hurries, the
+       haunted wood dawdles. Keep it inside about 0.9–1.15. */
+    {
+      name:'Candy Kingdom', music:'candy', banner:'CANDY KINGDOM', night:false, celestial:'sun', decor:'candy',
+      wx:'petals', wxTint:['#FF8AD8','#FFF3D6','#8BE05A','#7CD1F5'],
+      grav:.66, jump:-14.2, pace:.98,
+      sky:[[0,'#FF9AD5'],[.45,'#FFC2E5'],[.8,'#FFE3C2'],[1,'#FFF6D8']],
+      far:'#F5A3D4', near:'#D46BAE',
+      ground:'#C4527F', line:'#FFF3D6', dash:'rgba(255,255,255,.22)',
+      pest:'gummy', pestName:'Gummy Bear', walker:'blocks', walkerName:'Gingerbread Golem',
+      boss:{kind:'balloon', name:'Balloon Baron', plate:'#FF8AD8'},
+      block:{a:'#FF8AD8', b:'#C43F72'},
+      smash:[
+        {shape:'gumdrop',w:44,h:46, a:'#FF6FA8', b:'#C43F72'},
+        {shape:'cane',   w:40,h:60, a:'#FFFFFF', b:'#F0453A'},
+        {shape:'crate',  w:82,h:42, a:'#7CD1F5', b:'#3D86B5'},
+        {shape:'gumdrop',w:54,h:82, a:'#B274EB', b:'#6B2BA8', big:true},
+      ],
+      bits:['#FF8AD8','#FFF3D6','#8BE05A','#7CD1F5'],
+    },
+    {
+      name:'Frozen Peaks', music:'ice', banner:'FROZEN PEAKS', night:false, celestial:'sun', decor:'mountains',
+      wx:'snow',
+      grav:.62, jump:-13.7, pace:1.04,
+      sky:[[0,'#2B5C9E'],[.45,'#79B8E8'],[.8,'#C4E6F5'],[1,'#EAF7FF']],
+      far:'#8FB8D9', near:'#5B84B0',
+      ground:'#DCEFFA', line:'#4FA8D6', dash:'rgba(110,170,210,.30)',
+      pest:'penguin', pestName:'Snow Penguin', walker:'bones', walkerName:'Ice Skeleton',
+      boss:{kind:'frost', name:'Frostbite', plate:'#BFE8FF'},
+      block:{a:'#BFE8FF', b:'#5F93BE'},
+      smash:[
+        {shape:'ice',    w:44,h:48, a:'#BFE8FF', b:'#5F93BE'},
+        {shape:'crystal',w:42,h:56, a:'#8FD8F5', b:'#3E7FB5'},
+        {shape:'crate',  w:82,h:42, a:'#9BB6CC', b:'#5A7386'},
+        {shape:'ice',    w:52,h:82, a:'#E6F7FF', b:'#6FA8D0', big:true},
+      ],
+      bits:['#BFE8FF','#FFFFFF','#8FD8F5','#5F93BE'],
+    },
+    {
+      name:'Volcano Rush', music:'lava', banner:'VOLCANO RUSH', night:false, celestial:'ember', decor:'volcano',
+      wx:'embers',
+      grav:.76, jump:-15.2, pace:1.08,
+      sky:[[0,'#2A0714'],[.4,'#701A20'],[.75,'#C4441F'],[1,'#F5A03D']],
+      far:'#5A1B1E', near:'#331013',
+      ground:'#241012', line:'#FF6A2B', dash:'rgba(255,120,40,.22)',
+      pest:'ember', pestName:'Emberling', walker:'blocks', walkerName:'Cinder Golem',
+      boss:{kind:'lava', name:'Lava Lump', plate:'#FFB03D'},
+      block:{a:'#8A3A22', b:'#4A1A10'},
+      smash:[
+        {shape:'rock',  w:48,h:44, a:'#6B3A2E', b:'#3A1D16'},
+        {shape:'barrel',w:42,h:56, a:'#C4441F', b:'#7A2510'},
+        {shape:'crate', w:82,h:42, a:'#7A4630', b:'#43231A'},
+        {shape:'rock',  w:56,h:80, a:'#FF6A2B', b:'#9E2E12', big:true},
+      ],
+      bits:['#FF6A2B','#FFD23D','#8A3A22','#F5A03D'],
+    },
+    {
+      name:'Haunted Hollow', music:'spooky', banner:'HAUNTED HOLLOW', night:true, celestial:'moon', decor:'deadtrees',
+      wx:'leaves', wxTint:['#8BE05A','#B49BE0','#5A3A2B'],
+      grav:.60, jump:-13.5, pace:.94,
+      sky:[[0,'#0A0718'],[.45,'#221340'],[.8,'#43215C'],[1,'#7A3F6B']],
+      far:'#2A1740', near:'#170C26',
+      ground:'#120A1E', line:'#8BE05A', dash:'rgba(139,224,90,.14)',
+      pest:'bat', pestName:'Batty', walker:'bones', walkerName:'Rattlebones',
+      boss:{kind:'ghost', name:'Spooky Sam', plate:'#E6E0FF'},
+      block:{a:'#4B3A6B', b:'#241A3A'},
+      smash:[
+        {shape:'pumpkin',w:48,h:44, a:'#FF8A3D', b:'#B5541F'},
+        {shape:'pot',    w:44,h:50, a:'#6B4E8A', b:'#3A2854'},
+        {shape:'crate',  w:82,h:42, a:'#5A4A3A', b:'#332920'},
+        {shape:'pumpkin',w:58,h:80, a:'#FFB03D', b:'#C4661F', big:true},
+      ],
+      bits:['#8BE05A','#FF8A3D','#B49BE0','#E6E0FF'],
+    },
+    {
+      name:'Cloud Castle', music:'sky', banner:'CLOUD CASTLE', night:false, celestial:'sun', decor:'clouds',
+      wx:'snow', wxTint:['#FFFFFF','#FFF3D6','#CFE8FF'],
+      grav:.55, jump:-12.9, pace:.96,
+      sky:[[0,'#3D86D6'],[.45,'#7FC4F0'],[.8,'#C8E9FA'],[1,'#FFF3D6']],
+      far:'#DCEBFA', near:'#B7D4F0',
+      ground:'#EFE3C4', line:'#FFD23D', dash:'rgba(190,170,120,.35)',
+      pest:'birdie', pestName:'Cloud Birdie', walker:'metal', walkerName:'Wind-Up Cherub',
+      boss:{kind:'snoozer', name:'The Snoozer', plate:'#FFFFFF'},
+      block:{a:'#F2E9D0', b:'#B5A47E'},
+      smash:[
+        {shape:'crate',  w:44,h:44, a:'#F2E9D0', b:'#B5A47E'},
+        {shape:'crystal',w:42,h:56, a:'#FFE9A8', b:'#D9A93D'},
+        {shape:'crate',  w:82,h:42, a:'#E0D4B5', b:'#9E8E6B'},
+        {shape:'crystal',w:52,h:84, a:'#FFF3D6', b:'#D9BE6B', big:true},
+      ],
+      bits:['#FFF3D6','#FFD23D','#CFE8FF','#FFFFFF'],
+    },
+    {
+      name:'Robot Factory', music:'factory', banner:'ROBOT FACTORY', night:true, celestial:'none', decor:'gears',
+      wx:'sparks',
+      grav:.70, jump:-14.6, pace:1.06,
+      sky:[[0,'#101826'],[.45,'#1E2E42'],[.8,'#3A4A5E'],[1,'#7A6A4A']],
+      far:'#26364A', farWin:'rgba(255,180,80,.35)',
+      near:'#161F2E', nearWin:'rgba(120,230,255,.42)',
+      ground:'#0E141E', line:'#FFB03D', dash:'rgba(255,176,61,.16)',
+      pest:'drone', pestName:'Buzz Drone', walker:'metal', walkerName:'Robo-Walker',
+      boss:{kind:'spider', name:'Mecha Spider', plate:'#FF6A4D'},
+      block:{a:'#5C6784', b:'#333B52'},
+      smash:[
+        {shape:'gear',  w:46,h:46, a:'#8D98B5', b:'#4A5470'},
+        {shape:'barrel',w:42,h:56, a:'#C4642B', b:'#7A3A15'},
+        {shape:'crate', w:82,h:42, a:'#4A5470', b:'#2A3145'},
+        {shape:'gear',  w:58,h:80, a:'#C3CCE0', b:'#5C6784', big:true},
+      ],
+      bits:['#FFB03D','#8D98B5','#6EE7F5','#C4642B'],
+    },
+    {
+      name:'Golden Dunes', music:'desert', banner:'GOLDEN DUNES', night:false, celestial:'sun', decor:'dunes',
+      wx:'sand',
+      grav:.72, jump:-14.8, pace:1.02,
+      sky:[[0,'#E8A93D'],[.4,'#F5C96B'],[.75,'#FAE0A8'],[1,'#FFF3D6']],
+      far:'#D9A54F', near:'#B57E33',
+      ground:'#E8C078', line:'#B5793F', dash:'rgba(160,110,50,.28)',
+      pest:'scarab', pestName:'Scarab', walker:'bones', walkerName:'Mummy Bones',
+      boss:{kind:'rocky', name:'Rocky Rumble', plate:'#C9B48A'},
+      block:{a:'#C9A05E', b:'#8A6432'},
+      smash:[
+        {shape:'pot',   w:44,h:48, a:'#D98A4A', b:'#8A4E22'},
+        {shape:'cactus',w:42,h:60, a:'#4FA85E', b:'#2A6B38'},
+        {shape:'crate', w:82,h:42, a:'#B5905E', b:'#755A33'},
+        {shape:'cactus',w:52,h:84, a:'#6BC47A', b:'#33804A', big:true},
+      ],
+      bits:['#FFD23D','#D98A4A','#4FA85E','#E8C078'],
+    },
+    {
+      name:'Mushroom Forest', music:'fungus', banner:'MUSHROOM FOREST', night:true, celestial:'moons', decor:'mushrooms',
+      wx:'spores',
+      grav:.58, jump:-13.3, pace:.95,
+      sky:[[0,'#12143A'],[.45,'#2B2160'],[.8,'#4A2F7A'],[1,'#7A4FA8']],
+      far:'#3A2A66', near:'#241847',
+      ground:'#1C1233', line:'#7CF5D0', dash:'rgba(124,245,208,.16)',
+      pest:'gremlin', pestName:'Forest Imp', walker:'bones', walkerName:'Twig Skeleton',
+      boss:{kind:'chompy', name:'Chompy', plate:'#8BE05A'},
+      block:{a:'#7A4FA8', b:'#432766'},
+      smash:[
+        {shape:'mushroom',w:46,h:48, a:'#FF6FA8', b:'#B53A6B'},
+        {shape:'pot',     w:44,h:50, a:'#7CF5D0', b:'#2E9E80'},
+        {shape:'crate',   w:82,h:42, a:'#6B4E8A', b:'#3A2854'},
+        {shape:'mushroom',w:58,h:84, a:'#FFD23D', b:'#B5851F', big:true},
+      ],
+      bits:['#7CF5D0','#FF6FA8','#FFD23D','#B274EB'],
+    },
+    {
+      name:'Neon Speedway', music:'neon', banner:'NEON SPEEDWAY', night:true, celestial:'aurora', decor:'city',
+      wx:'sparks', wxTint:['#FF3DAE','#3DF5FF','#FFD23D'],
+      grav:.70, jump:-14.6, pace:1.12,
+      sky:[[0,'#0A0326'],[.45,'#2A0A5C'],[.8,'#6B1470'],[1,'#F03D8A']],
+      far:'#2E0F5C', farWin:'rgba(61,245,255,.45)',
+      near:'#190833', nearWin:'rgba(255,61,174,.50)',
+      ground:'#0D0322', line:'#3DF5FF', dash:'rgba(255,61,174,.24)',
+      pest:'alien', pestName:'Glitch Blob', walker:'metal', walkerName:'Neon Bot',
+      boss:{kind:'zappy', name:'Zappy', plate:'#FFF07A'},
+      block:{a:'#B02BD6', b:'#5E1470'},
+      smash:[
+        {shape:'crystal',w:42,h:50, a:'#3DF5FF', b:'#1A7A8A'},
+        {shape:'barrel', w:42,h:56, a:'#FF3DAE', b:'#8A1A5C'},
+        {shape:'crate',  w:82,h:42, a:'#5E2BA8', b:'#31145C'},
+        {shape:'crystal',w:52,h:84, a:'#FFF07A', b:'#B58A1F', big:true},
+      ],
+      bits:['#3DF5FF','#FF3DAE','#FFF07A','#B274EB'],
+    },
+    {
+      name:'Pirate Cove', music:'pirate', banner:'PIRATE COVE', night:true, celestial:'storm', decor:'ships',
+      wx:'rain',
+      grav:.70, jump:-14.6, pace:1.00,
+      sky:[[0,'#0B1A2E'],[.45,'#1E3A56'],[.8,'#3E6480'],[1,'#8AA8B5']],
+      far:'#2A4358', near:'#17293A',
+      ground:'#3E5464', line:'#FFD23D', dash:'rgba(255,255,255,.14)',
+      pest:'crab', pestName:'Dock Crab', walker:'bones', walkerName:'Skeleton Pirate',
+      boss:{kind:'squid', name:'Captain Squid', plate:'#7CF5D0'},
+      block:{a:'#8A5A2B', b:'#4E3320'},
+      smash:[
+        {shape:'chest', w:52,h:44, a:'#B5793F', b:'#7A4B22'},
+        {shape:'barrel',w:42,h:56, a:'#7A5230', b:'#432C1A'},
+        {shape:'crate', w:84,h:42, a:'#6B5A4A', b:'#3A3028'},
+        {shape:'chest', w:60,h:80, a:'#D9A93D', b:'#8A6420', big:true},
+      ],
+      bits:['#FFD23D','#B5793F','#7CF5D0','#8AA8B5'],
+    },
   ];
   /* ---------- boss roster ----------
      art:'generic' composes from body/face/limb flags; the four named ones
@@ -526,6 +773,25 @@
     return bag.pop();
   }
 
+  /* Adventure visits the worlds in a shuffled order, a full bag before any
+     repeat, and never the same one twice across the seam where the bag
+     refills. Fourteen worlds is far more than one sitting, so the shuffle is
+     what makes the second run of the day look nothing like the first. */
+  let lvlBag = [];
+  function nextLevel(){
+    if (!lvlBag.length){
+      lvlBag = LEVELS.map((_,i)=>i);
+      for (let i=lvlBag.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [lvlBag[i],lvlBag[j]] = [lvlBag[j],lvlBag[i]];
+      }
+      const last = lvlBag.length-1;
+      if (lvlBag.length>1 && lvlBag[last]===lvlIndex)
+        [lvlBag[last],lvlBag[0]] = [lvlBag[0],lvlBag[last]];
+    }
+    return lvlBag.pop();
+  }
+
   const RUN_FRAMES = 1500;   // ~25s of running, then the boss shows up
   let lvlIndex = 0, lvlTimer = 0;
   let banner = 0, bannerText = '', bannerSub = '', bannerBig = false;
@@ -548,14 +814,121 @@
       blocks.push({x, w:70+r()*40, h, lean:(r()-.5)*10, ph:r()*6.28}); x += 62+r()*54; }
     return {blocks, span:x};
   }
-  const far  = {city:makeSkyline(7,90,190,W*2),  trees:makeOrganic(11,110,200,W*2), kelp:makeOrganic(41,120,220,W*2)};
-  const near = {city:makeSkyline(23,50,120,W*2), trees:makeOrganic(31,70,140,W*2),  kelp:makeOrganic(53,80,160,W*2)};
+  /* Overlapping wedges: x advances by less than a full width so the peaks
+     interlock into a range instead of standing apart like teeth. */
+  function makeRidge(seed,minH,maxH,span){
+    const r = rnd(seed), blocks = []; let x = 0;
+    while (x<span){ const w = 150+r()*170, h = minH+r()*(maxH-minH);
+      blocks.push({x, w, h, lean:(r()-.5)*40, ph:r()*6.28, lit:r()}); x += w*.62; }
+    /* Which tips are actually visible. A peak shorter than both its
+       neighbours is buried inside them, and anything drawn on its summit —
+       a snowcap, a lava flow — floats in the middle of the mountain face
+       instead of sitting on a mountain. Only local maxima get decorated. */
+    for (let i=0;i<blocks.length;i++){
+      const prev = blocks[(i-1+blocks.length)%blocks.length];
+      const next = blocks[(i+1)%blocks.length];
+      blocks[i].top = blocks[i].h > prev.h && blocks[i].h > next.h;
+    }
+    return {blocks, span:x};
+  }
+  /* Hulls are wide and set well apart — a harbour, not a forest of masts. */
+  function makeFleet(seed,minH,maxH,span){
+    const r = rnd(seed), blocks = []; let x = 0;
+    while (x<span){ const w = 150+r()*90, h = minH+r()*(maxH-minH);
+      blocks.push({x, w, h, lean:0, ph:r()*6.28, lit:r()}); x += w + 90+r()*130; }
+    return {blocks, span:x};
+  }
+  const far  = {city:makeSkyline(7,90,190,W*2),  trees:makeOrganic(11,110,200,W*2), kelp:makeOrganic(41,120,220,W*2),
+                ridge:makeRidge(61,140,250,W*2), pods:makeOrganic(71,120,210,W*2),  ships:makeFleet(89,140,205,W*2)};
+  const near = {city:makeSkyline(23,50,120,W*2), trees:makeOrganic(31,70,140,W*2),  kelp:makeOrganic(53,80,160,W*2),
+                ridge:makeRidge(67,80,170,W*2),  pods:makeOrganic(79,70,150,W*2),   ships:makeFleet(97,105,155,W*2)};
   const skyDots = Array.from({length:80},(_,i)=>{const r=rnd(i*97+5);
     return {x:r()*W, y:r()*240, s:.6+r()*1.6, p:r()*6.28};});
   const clouds = Array.from({length:7},(_,i)=>{const r=rnd(i*311+3);
     return {x:r()*W*1.5, y:30+r()*120, s:.6+r()*.9};});
   let bubbles = Array.from({length:26},(_,i)=>{const r=rnd(i*77+9);
     return {x:r()*W, y:r()*H, s:2+r()*7, sp:.5+r()*1.1, p:r()*6.28};});
+
+  /* ---------- weather ----------
+     One pool of specks, re-flown per level by `wx` on the level. Snow drifts,
+     embers climb, sand rips past sideways: it is the cheapest way to make two
+     worlds that share a layout feel nothing alike.
+
+     It runs off its own PRNG for the same reason the sky lane does — a level's
+     decoration must never nudge the Math.random() stream that the ground-lane
+     regression test measures. Nothing in here may call Math.random(). */
+  let wxRnd = rnd(TUNE.wxSeed);
+  const WX_TINT = {
+    snow:   ['#FFFFFF','#EAF6FF'],
+    petals: ['#FF8AD8','#FFF3D6','#8BE05A'],
+    embers: ['#FF6A2B','#FFD23D','#FF3D1F'],
+    leaves: ['#8BE05A','#B49BE0','#5A3A2B'],
+    sand:   ['#F5DFA8','#E8C078','#FFF3D6'],
+    rain:   ['#BFD8FF','#8AA8B5'],
+    sparks: ['#FFD23D','#6EE7F5','#FFFFFF'],
+    spores: ['#7CF5D0','#B274EB','#FFD23D'],
+  };
+  const wxBits = Array.from({length:70},()=>
+    ({x:wxRnd()*W, y:wxRnd()*H, p:wxRnd()*6.28, v:wxRnd(), c:wxRnd(), r:wxRnd()*6.28}));
+
+  function updateWeather(dt){
+    const k = L().wx; if (!k) return;
+    for (const f of wxBits){
+      if (k==='embers' || k==='spores'){
+        f.y -= (.5 + f.v*1.5)*dt;
+        f.x += (Math.sin(t*.03 + f.p)*.9 - speed*.05)*dt;
+        f.r += dt*.04;
+        if (f.y < -14){ f.y = H + 12; f.x = wxRnd()*W; }
+      } else if (k==='sand'){
+        f.x -= (5 + f.v*8 + speed*.5)*dt;
+        f.y += Math.sin(t*.06 + f.p)*.7*dt;
+        if (f.x < -30){ f.x = W + 30; f.y = wxRnd()*GROUND; }
+      } else if (k==='rain'){
+        f.y += (12 + f.v*8)*dt; f.x -= (2.6 + f.v*1.6)*dt;
+        if (f.y > H){ f.y = -24; f.x = wxRnd()*(W+220); }
+      } else if (k==='sparks'){
+        f.x -= (6 + f.v*10 + speed*.4)*dt;
+        f.y += (f.v - .5)*1.4*dt;
+        if (f.x < -30){ f.x = W + 30; f.y = wxRnd()*(GROUND-20); }
+      } else {                                   // snow, petals, leaves
+        const sway = k==='leaves' ? 2.4 : k==='petals' ? 1.3 : .8;
+        f.y += (.9 + f.v*1.9)*dt;
+        f.x += (Math.sin(t*.02 + f.p)*sway - speed*.10)*dt;
+        f.r += dt*(k==='snow' ? .01 : .06);
+        if (f.y > H+12 || f.x < -30){ f.y = -14; f.x = wxRnd()*(W+180); }
+      }
+    }
+  }
+  /* Half the specks sit behind the action and half in front, which is what
+     sells the depth — one pool, drawn twice, alternating. */
+  function drawWeather(front){
+    const lv = L(), k = lv.wx; if (!k) return;
+    const tint = lv.wxTint || WX_TINT[k] || ['#FFFFFF'];
+    ctx.save();
+    ctx.globalAlpha = front ? .85 : .45;
+    for (let i=0;i<wxBits.length;i++){
+      if ((i%2===0) === !!front) continue;
+      const f = wxBits[i], c = tint[Math.floor(f.c*tint.length)%tint.length];
+      const sc = front ? 1 : .62;
+      if (k==='rain'){
+        ctx.strokeStyle = c; ctx.lineWidth = 1.6*sc;
+        ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x-3, f.y+14*sc); ctx.stroke();
+      } else if (k==='sand' || k==='sparks'){
+        ctx.strokeStyle = c; ctx.lineWidth = (k==='sparks' ? 2.4 : 1.8)*sc;
+        ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + (10+f.v*14)*sc, f.y); ctx.stroke();
+      } else if (k==='snow' || k==='spores' || k==='embers'){
+        ctx.fillStyle = c;
+        ctx.beginPath(); ctx.arc(f.x, f.y, (1.6+f.v*2.6)*sc, 0, 7); ctx.fill();
+      } else {                                   // petals, leaves: tumbling flakes
+        ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.r);
+        ctx.fillStyle = c;
+        const s = (3+f.v*3)*sc;
+        ctx.fillRect(-s/2, -s*.35, s, s*.7);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
 
   /* ---------- state ---------- */
   let state = 'menu';
@@ -595,7 +968,7 @@
     things=[]; structs=[]; pests=[]; walkers=[]; bodies=[]; stars=[]; bits=[]; pops=[]; confetti=[];
     speed = 4.2; dist = 0; points = 0; spawnIn = 80; starIn = 150;
     shake=0; t=0; superT=0; charge=0; slow=0; combo=0; comboT=0;
-    lvlIndex=0; lvlTimer=0; banner=0; coyote=0; buffer=0;
+    lvlBag=[]; lvlIndex=nextLevel(); lvlTimer=0; banner=0; coyote=0; buffer=0;
     phase='run'; phaseT=0; boss=null; trophies=0; chargeCount=0;
     rushCount = 0; bag = [];
     trail = [];
@@ -745,19 +1118,29 @@
   }
 
   /* A cluster always opens on tier 1 so it is reachable from the ground;
-     later platforms in the cluster may step up to tier 2. */
+     later platforms in the cluster may step up to tier 2.
+     During a boss fight the same code runs off the same PRNG with the shorter
+     boss-lane numbers, so the high road is open in the arena too. */
   function spawnCluster(){
-    const n = Math.floor(skyRange(TUNE.clusterMin, TUNE.clusterMax + 1));
+    const fight = phase === 'boss';
+    const lo = fight ? TUNE.bossClusterMin : TUNE.clusterMin;
+    const hi = fight ? TUNE.bossClusterMax : TUNE.clusterMax;
+    const n = Math.floor(skyRange(lo, hi + 1));
     let x = W + 80;
     for (let i=0;i<n;i++){
       const w = skyRange(TUNE.platWMin, TUNE.platWMax);
       const high = i > 0 && skyRnd() < TUNE.tier2Chance;
-      const p = {x, y: high ? TUNE.tier2Y : TUNE.tier1Y, w, star:null};
-      if (skyRnd() < TUNE.goldChance) p.star = {dx: w/2, got:false};
+      /* A run-lane pad rides the world past you. A boss-lane pad hovers:
+         it crosses at a third of the speed, which is what turns it from
+         scenery into somewhere you can climb, wait, and drop from. */
+      const p = {x, y: high ? TUNE.tier2Y : TUNE.tier1Y, w, star:null,
+                 drift: fight ? TUNE.bossDrift : 1};
+      if (skyRnd() < (fight ? 1 : TUNE.goldChance)) p.star = {dx: w/2, got:false};
       platforms.push(p);
       x += w + skyRange(70, 150);
     }
-    skyIn = skyRange(TUNE.clusterGapMin, TUNE.clusterGapMax);
+    skyIn = fight ? skyRange(TUNE.bossGapMin, TUNE.bossGapMax)
+                  : skyRange(TUNE.clusterGapMin, TUNE.clusterGapMax);
   }
 
   /* ---------- power-ups ---------- */
@@ -832,6 +1215,7 @@
             vx:0, airborne:false, flash:0, wob:Math.random()*6, phase:0,
             spec, plate: spec.plate};
     chargeCount = 0;
+    skyIn = TUNE.bossFirst;          // open the high road over the arena
     el.bossName.textContent = mode==='rush'
       ? 'Boss ' + rushCount + ' — ' + spec.name
       : spec.name;
@@ -882,6 +1266,8 @@
     sfx.bossDown();
 
     setMusic(L().music);
+    // the arena's hovering pads rejoin the world and scroll away with it
+    for (const p of platforms) p.drift = 1;
     superT = 460; charge = 0; updateMeter();   // victory lap
     boss = null;
     el.bossWrap.hidden = true;
@@ -934,12 +1320,26 @@
     const bb = bossBox();
     if (hitFn(bb.x, bb.y, bb.w, bb.h)){
       if (b.state==='charge'){
+        /* Dropped in from the high road: feet still at or above the boss's
+           shoulders and on the way down. Costs the boss the same one hit —
+           it is worth points and a bounce, never a shortcut past the fight. */
+        const fromAbove = !hero.onGround && hero.vy > 0 && hero.y <= bb.y + 30;
         b.hp--; updateBossBar();
         b.state = 'hurt'; b.timer = 46; b.vx = 11; b.flash = 44;
         shake = 26; hero.push = 10;
         burst(b.x-30, b.y-s.h*.5, ['#FFFFFF','#FFD23D', b.plate], 26, 9);
         pop(b.x-20, b.y-s.h-16, b.hp>0 ? 'HIT! '+b.hp+' LEFT' : 'FINAL HIT!', '#FFD23D', 30);
         sfx.bossHit(); addCharge(sup?0:2.5); bumpCombo();
+        if (fromAbove){
+          points += TUNE.skySmash;
+          shake = 32;
+          burst(b.x, bb.y, ['#FFFFFF','#8BE05A','#FFD23D'], 30, 11);
+          pop(b.x, bb.y-52, 'SKY SMASH! +'+TUNE.skySmash, '#8BE05A', 32);
+          hero.vy = L().jump*.62;        // bounce back up for another go
+          hero.onGround = false;
+          jumpsLeft = P('rocket') ? 1 : jumpsLeft;
+          sfx.star(); addCharge(sup?0:1.5);
+        }
         if (b.hp<=0) defeatBoss();
       } else if (b.state!=='enter' && b.flash<=0){
         b.flash = 18; hero.push = 12; shake = 8;
@@ -972,8 +1372,9 @@
         phase = 'boss'; phaseT = 0; startBoss();
       } else if (phase==='victory' && phaseT>=170){
         phase = 'run'; phaseT = 0;
-        lvlIndex = (lvlIndex+1)%LEVELS.length;
-        spawnIn = 70; sfx.level(); el.lvlName.textContent = L().name; setMusic(L().music);
+        lvlIndex = nextLevel();
+        spawnIn = 70; skyIn = TUNE.firstCluster;
+        sfx.level(); el.lvlName.textContent = L().name; setMusic(L().music);
         showBanner(L().banner, 'Watch out for the '+L().walkerName+'s!');
         for (let i=0;i<74;i++) confetti.push({x:Math.random()*W,y:-10-Math.random()*200,
           vx:(Math.random()-.5)*2.2, vy:1.4+Math.random()*2.8, c:RAINBOW[i%6],
@@ -990,7 +1391,9 @@
     }
     hero.sc += (targetScale() - hero.sc)*.14*dt;
 
-    const target = Math.min(7.0, 4.2 + dist/5000) * (superT>0 ? 1.14 : 1) * (P('dog') ? 1.28 : 1);
+    // lv.pace is the world's own temper: the speedway hurries, the hollow dawdles
+    const target = Math.min(7.0, 4.2 + dist/5000)
+                 * (lv.pace || 1) * (superT>0 ? 1.14 : 1) * (P('dog') ? 1.28 : 1);
     if (slow>0){ slow -= dt; speed += (target*.55 - speed)*.08*dt; }
     else speed += (target - speed)*.035*dt;
     dist += speed*dt;
@@ -1024,10 +1427,11 @@
     trail.push({y:hero.y, run:hero.run, air:!hero.onGround, glide:gliding});
     while (trail.length > SIS_DELAY) trail.shift();
 
-    if (phase==='run'){
-      spawnIn -= dt; if (spawnIn<=0) spawn();
-      skyIn -= dt;   if (skyIn<=0) spawnCluster();
-    }
+    if (phase==='run'){ spawnIn -= dt; if (spawnIn<=0) spawn(); }
+    /* Ground obstacles stop for the fight, the high road does not: a pad to
+       leap from is how a small player reaches a boss that flies, and it works
+       the same in Boss Rush, which has no run phase at all. */
+    if (phase==='run' || phase==='boss'){ skyIn -= dt; if (skyIn<=0) spawnCluster(); }
     starIn -= dt; if (starIn<=0) spawnStar();
     powerIn -= dt;
     if (powerIn<=0){ if (!power && !orbs.length) spawnOrb(); else powerIn = 240; }
@@ -1048,7 +1452,7 @@
     const hit = (x,y,w,h) => hitBox(x,y,w,h) || inFire(x+w/2, y+h/2);
     const sup = superT>0;
 
-    for (const p of platforms) p.x -= speed*dt;
+    for (const p of platforms) p.x -= speed*(p.drift==null ? 1 : p.drift)*dt;
     platforms = platforms.filter(p => p.x + p.w > -120);
 
     /* Gold stars ride their platform, so they are always exactly as reachable
@@ -1242,6 +1646,7 @@
     pops = pops.filter(p=>p.life>0);
     for (const c of confetti){ c.x += c.vx*dt; c.y += c.vy*dt; c.r += c.sp*dt; c.life -= dt; }
     confetti = confetti.filter(c=>c.life>0 && c.y<H+30);
+    updateWeather(dt);
     if (lv.underwater) for (const b of bubbles){
       b.y -= b.sp*dt; b.x += Math.sin(t*.02+b.p)*.3*dt;
       if (b.y < -12){ b.y = H+10; b.x = Math.random()*W; }
@@ -1276,8 +1681,54 @@
       ctx.save(); ctx.translate(720,96); ctx.rotate(-.35);
       ctx.strokeStyle = 'rgba(255,209,102,.75)'; ctx.lineWidth = 5;
       ctx.beginPath(); ctx.ellipse(0,0,64,17,0,0,7); ctx.stroke(); ctx.restore();
-    } else {
-      // god rays
+    }
+    else if (lv.celestial==='moons'){          // twin moons over the fungus wood
+      glowBall(700,80,22,54,'#DFF7E8','rgba(200,245,220,.75)');
+      glowBall(786,132,13,34,'#F2D8FF','rgba(200,150,255,.7)');
+    }
+    else if (lv.celestial==='ember'){          // sun choking behind volcano haze
+      glowBall(722,104,44,120,'#FF7A3D','rgba(255,90,30,.55)');
+      ctx.save(); ctx.globalAlpha = .22; ctx.fillStyle = '#2A0714';
+      for (let i=0;i<3;i++){
+        const y = 78 + i*26 + Math.sin(t*.008+i)*5;
+        ctx.fillRect(640, y, 170, 9);
+      }
+      ctx.restore();
+    }
+    else if (lv.celestial==='aurora'){         // neon ribbons over the speedway
+      ctx.save();
+      for (let i=0;i<4;i++){
+        const g = ctx.createLinearGradient(0, 20+i*26, 0, 150+i*26);
+        g.addColorStop(0, i%2 ? 'rgba(61,245,255,.34)' : 'rgba(255,61,174,.30)');
+        g.addColorStop(1, 'rgba(255,61,174,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(-40, 40+i*24);
+        for (let x=-40;x<=W+40;x+=60)
+          ctx.lineTo(x, 40+i*24 + Math.sin(x*.006 + t*.012 + i)*22);
+        ctx.lineTo(W+40, 190+i*24); ctx.lineTo(-40, 190+i*24);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+    else if (lv.celestial==='storm'){          // lightning over the cove
+      /* Driven off the frame counter, never Math.random(): two slow sines
+         beating against each other give strikes that feel unscheduled. */
+      const bolt = Math.sin(t*.017)*Math.sin(t*.0043);
+      if (bolt > .93){
+        ctx.save();
+        ctx.globalAlpha = Math.min(.5, (bolt-.93)*12);
+        ctx.fillStyle = '#DCEBFA'; ctx.fillRect(0,0,W,GROUND);
+        ctx.globalAlpha = Math.min(.9, (bolt-.93)*18);
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        let bx = 250 + (Math.floor(t*.02)%5)*110, by = 0;
+        ctx.moveTo(bx, by);
+        for (let i=0;i<5;i++){ bx += ((i%2)?-1:1)*(14+i*6); by += 26+i*4; ctx.lineTo(bx,by); }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    else if (lv.celestial==='rays'){
       ctx.save(); ctx.globalAlpha = .16;
       for (let i=0;i<6;i++){
         const x = 60+i*150 + Math.sin(t*.006+i)*22;
@@ -1324,21 +1775,243 @@
       }
     }
   }
-  function drawTrees(set, offset, color, baseY){
+  function drawTrees(set, offset, color, baseY, bare){
     const shift = -(offset%set.span);
-    ctx.fillStyle = color;
+    ctx.fillStyle = color; ctx.strokeStyle = color;
     for (let pass=0; pass<2; pass++){
       const ox = shift+pass*set.span;
       for (const b of set.blocks){
         const x = b.x+ox;
         if (x>W+60 || x+b.w<-60) continue;
         const cx = x+b.w/2, topY = baseY-b.h;
+        if (bare){
+          /* Same trees, stripped: a trunk that forks into clawed branches,
+             leaning a little further with every gust. */
+          const gust = Math.sin(t*.012 + b.ph)*4;
+          ctx.lineWidth = 9; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(cx, baseY); ctx.lineTo(cx+gust*.4, topY+b.h*.30); ctx.stroke();
+          ctx.lineWidth = 5;
+          for (const sgn of [-1,1]) for (let i=0;i<2;i++){
+            const y0 = topY + b.h*(.34 + i*.22), reach = b.w*(.34 - i*.10);
+            ctx.beginPath(); ctx.moveTo(cx+gust*.3, y0);
+            ctx.quadraticCurveTo(cx+sgn*reach*.7+gust, y0-10, cx+sgn*reach+gust*1.4, y0-b.h*.16);
+            ctx.stroke();
+          }
+          ctx.lineCap = 'butt';
+          continue;
+        }
         ctx.fillRect(cx-7, topY+b.h*.35, 14, b.h*.65);
         ctx.beginPath();
         ctx.arc(cx+b.lean, topY+b.h*.28, b.w*.40, 0, 7);
         ctx.arc(cx-b.w*.26, topY+b.h*.42, b.w*.30, 0, 7);
         ctx.arc(cx+b.w*.26, topY+b.h*.42, b.w*.30, 0, 7);
         ctx.fill();
+      }
+    }
+  }
+
+  /* Mountains, dunes and volcanoes are one silhouette with three tempers:
+     a snowcap, a soft crest, or a crater with lava running out of it. */
+  function drawRidge(set, offset, color, baseY, kind, hot){
+    const shift = -(offset%set.span);
+    /* Peaks overlap, so every silhouette goes down first and the snowcaps and
+       lava go on afterwards. Decorating as we went left the next peak painted
+       over the bottom of the last one's lava — an orange cone hanging in mid
+       air, which is exactly how it looked. */
+    for (let deco=0; deco<2; deco++)
+    for (let pass=0; pass<2; pass++){
+      const ox = shift+pass*set.span;
+      for (const b of set.blocks){
+        const x = b.x+ox;
+        if (x>W+220 || x+b.w<-220) continue;
+        const cx = x+b.w/2, topY = baseY-b.h, peak = cx+b.lean*.4;
+        ctx.fillStyle = color;
+        if (kind==='dunes'){
+          if (deco) continue;
+          ctx.beginPath(); ctx.moveTo(x, baseY);
+          ctx.quadraticCurveTo(peak, topY-b.h*.18, x+b.w, baseY);
+          ctx.closePath(); ctx.fill();
+          continue;
+        }
+        if (!deco){
+          ctx.beginPath();
+          ctx.moveTo(x, baseY); ctx.lineTo(peak, topY); ctx.lineTo(x+b.w, baseY);
+          ctx.closePath(); ctx.fill();
+          continue;
+        }
+        if (kind==='mountains' && b.top){
+          ctx.fillStyle = 'rgba(255,255,255,.88)';
+          ctx.beginPath();
+          ctx.moveTo(peak, topY);
+          ctx.lineTo(peak-b.w*.11, topY+b.h*.19);
+          ctx.lineTo(peak-b.w*.04, topY+b.h*.13);
+          ctx.lineTo(peak+b.w*.04, topY+b.h*.21);
+          ctx.lineTo(peak+b.w*.10, topY+b.h*.15);
+          ctx.closePath(); ctx.fill();
+        } else if (kind==='volcano' && hot && b.top && b.lit>.45){
+          /* Only the near range runs lava. On the far one the near peaks
+             drew over its base and left an orange column hanging in the sky. */
+          ctx.fillStyle = '#FF6A2B';
+          ctx.beginPath();
+          ctx.moveTo(peak-8, topY+4); ctx.lineTo(peak+8, topY+4);
+          ctx.lineTo(peak+4, topY+b.h*.26); ctx.lineTo(peak-1, topY+b.h*.26);
+          ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = .55 + Math.sin(t*.05+b.ph)*.25;
+          ctx.fillStyle = '#FFD23D'; ctx.fillRect(peak-6, topY+1, 12, 6);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+
+  function drawCandy(set, offset, color, baseY){
+    const shift = -(offset%set.span);
+    for (let pass=0; pass<2; pass++){
+      const ox = shift+pass*set.span;
+      for (const b of set.blocks){
+        const x = b.x+ox;
+        if (x>W+90 || x+b.w<-90) continue;
+        const cx = x+b.w/2, topY = baseY-b.h;
+        ctx.strokeStyle = color; ctx.lineWidth = 11; ctx.lineCap = 'round';
+        if (b.ph>3.1){                              // candy cane
+          ctx.beginPath(); ctx.moveTo(cx, baseY); ctx.lineTo(cx, topY+b.w*.30);
+          ctx.quadraticCurveTo(cx, topY, cx+b.w*.30, topY+b.w*.16); ctx.stroke();
+        } else {                                    // lollipop, with a swirl
+          const hx = cx+b.lean, hy = topY+b.w*.32, r = b.w*.32;
+          ctx.beginPath(); ctx.moveTo(cx, baseY); ctx.lineTo(hx, hy); ctx.stroke();
+          ctx.fillStyle = color;
+          ctx.beginPath(); ctx.arc(hx, hy, r, 0, 7); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 4;
+          ctx.beginPath();
+          for (let i=0;i<24;i++){
+            const a = i*.42, rr = r*.92*(i/24);
+            const px = hx+Math.cos(a)*rr, py = hy+Math.sin(a)*rr;
+            i ? ctx.lineTo(px,py) : ctx.moveTo(px,py);
+          }
+          ctx.stroke();
+        }
+        ctx.lineCap = 'butt';
+      }
+    }
+  }
+
+  function drawMushrooms(set, offset, color, baseY){
+    const shift = -(offset%set.span);
+    for (let pass=0; pass<2; pass++){
+      const ox = shift+pass*set.span;
+      for (const b of set.blocks){
+        const x = b.x+ox;
+        if (x>W+90 || x+b.w<-90) continue;
+        const cx = x+b.w/2, topY = baseY-b.h, capY = topY+b.h*.30;
+        ctx.fillStyle = color;
+        ctx.fillRect(cx-b.w*.09, capY, b.w*.18, baseY-capY);
+        ctx.beginPath(); ctx.ellipse(cx, capY, b.w*.46, b.h*.26, 0, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.20)';
+        for (let i=-1;i<=1;i++){
+          ctx.beginPath();
+          ctx.ellipse(cx+i*b.w*.22, capY-b.h*(.10+Math.abs(i)*.03), b.w*.07, b.h*.05, 0,0,7);
+          ctx.fill();
+        }
+        /* the glow is what makes it a fungus wood rather than a garden */
+        ctx.globalAlpha = .12 + Math.sin(t*.03+b.ph)*.06;
+        ctx.fillStyle = '#7CF5D0';
+        ctx.beginPath(); ctx.ellipse(cx, capY, b.w*.52, b.h*.32, 0, Math.PI, 0); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function drawCloudBank(set, offset, color, baseY, turrets){
+    const shift = -(offset%set.span);
+    for (let pass=0; pass<2; pass++){
+      const ox = shift+pass*set.span;
+      for (const b of set.blocks){
+        const x = b.x+ox;
+        if (x>W+140 || x+b.w<-140) continue;
+        const cx = x+b.w/2, topY = baseY-b.h, drift = Math.sin(t*.011+b.ph)*5;
+        ctx.fillStyle = color;
+        if (turrets && b.ph>3.4){                   // a keep riding the cloud
+          const ty = topY+b.h*.34+drift;
+          ctx.fillRect(cx-13, ty-34, 26, 36);
+          ctx.beginPath();
+          ctx.moveTo(cx-19, ty-32); ctx.lineTo(cx, ty-56); ctx.lineTo(cx+19, ty-32);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(cx-b.w*.34, topY+b.h*.56+drift, b.w*.30, 0, 7);
+        ctx.arc(cx,          topY+b.h*.34+drift, b.w*.38, 0, 7);
+        ctx.arc(cx+b.w*.34, topY+b.h*.57+drift, b.w*.28, 0, 7);
+        ctx.fill();
+        ctx.fillRect(cx-b.w*.40, topY+b.h*.55+drift, b.w*.80, baseY-(topY+b.h*.55+drift));
+      }
+    }
+  }
+
+  /* The factory is the city skyline with cogs turning on the roofs. */
+  function drawGears(set, offset, color, winColor, baseY){
+    drawCity(set, offset, color, winColor, baseY);
+    const shift = -(offset%set.span);
+    for (let pass=0; pass<2; pass++){
+      const ox = shift+pass*set.span;
+      for (const b of set.blocks){
+        const x = b.x+ox;
+        if (x>W+60 || x+b.w<-60 || b.lit<.45) continue;
+        const cx = x+b.w/2, r = Math.min(b.w*.30, 27);
+        ctx.save();
+        ctx.translate(cx, baseY-b.h-r-5);
+        ctx.rotate(t*.012*(b.lit>.72 ? -1 : 1));
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fill();
+        for (let i=0;i<8;i++){
+          ctx.save(); ctx.rotate(i*Math.PI/4); ctx.fillRect(r-3,-4.5,9,9); ctx.restore();
+        }
+        ctx.fillStyle = 'rgba(0,0,0,.35)';
+        ctx.beginPath(); ctx.arc(0,0,r*.34,0,7); ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  /* A galleon reads as a ship or it reads as nothing: a hull wider than it is
+     tall, one mast about two thirds of the hull's length, and sails hung off
+     it. Sizes come from makeFleet, not the tree generator, for exactly that
+     reason — tall thin trunks made these look like weeds the first time. */
+  function drawShips(set, offset, color, baseY){
+    const shift = -(offset%set.span);
+    for (let pass=0; pass<2; pass++){
+      const ox = shift+pass*set.span;
+      for (const b of set.blocks){
+        const x = b.x+ox;
+        if (x>W+200 || x+b.w<-200) continue;
+        const cx = x+b.w/2, hull = b.w*.5, mast = b.h;
+        ctx.save();
+        ctx.translate(cx, baseY);
+        ctx.rotate(Math.sin(t*.014+b.ph)*.035);     // moored, and rolling
+        ctx.fillStyle = color;
+        ctx.beginPath();                            // hull
+        ctx.moveTo(-hull, -mast*.20);
+        ctx.lineTo(hull, -mast*.20);
+        ctx.lineTo(hull*.72, 6);
+        ctx.quadraticCurveTo(0, 16, -hull*.78, 6);
+        ctx.closePath(); ctx.fill();
+        ctx.fillRect(-3.5, -mast, 7, mast*.82);                  // mast
+        ctx.fillRect(-hull*.60, -mast*.76, hull*1.20, 5);        // yard
+        ctx.beginPath();                            // main sail, bellied out
+        ctx.moveTo(-hull*.54, -mast*.74);
+        ctx.quadraticCurveTo(0, -mast*.60, hull*.54, -mast*.74);
+        ctx.lineTo(hull*.40, -mast*.40);
+        ctx.quadraticCurveTo(0, -mast*.28, -hull*.40, -mast*.40);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();                            // top sail
+        ctx.moveTo(-hull*.32, -mast*.98);
+        ctx.quadraticCurveTo(0, -mast*.90, hull*.32, -mast*.98);
+        ctx.lineTo(hull*.24, -mast*.80);
+        ctx.lineTo(-hull*.24, -mast*.80);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();                            // pennant
+        ctx.moveTo(3,-mast); ctx.lineTo(hull*.34,-mast+7); ctx.lineTo(3,-mast+14);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
       }
     }
   }
@@ -1361,14 +2034,35 @@
     }
     ctx.lineCap = 'butt';
   }
+  /* Two parallax layers, always: the far one drifts at .16 of the run and the
+     near one at .42. Only the shape changes from world to world. */
   function drawBackdrop(){
-    const lv = L();
-    if (lv.decor==='trees'){
-      drawTrees(far.trees, dist*.16, lv.far, GROUND+6);
-      drawTrees(near.trees, dist*.42, lv.near, GROUND+6);
-    } else if (lv.decor==='kelp'){
+    const lv = L(), d = lv.decor;
+    if (d==='trees' || d==='deadtrees'){
+      const bare = d==='deadtrees';
+      drawTrees(far.trees, dist*.16, lv.far, GROUND+6, bare);
+      drawTrees(near.trees, dist*.42, lv.near, GROUND+6, bare);
+    } else if (d==='kelp'){
       drawKelp(far.kelp, dist*.16, lv.far, GROUND+6);
       drawKelp(near.kelp, dist*.42, lv.near, GROUND+6);
+    } else if (d==='mountains' || d==='dunes' || d==='volcano'){
+      drawRidge(far.ridge, dist*.13, lv.far, GROUND+6, d, false);
+      drawRidge(near.ridge, dist*.36, lv.near, GROUND+6, d, true);
+    } else if (d==='candy'){
+      drawCandy(far.pods, dist*.16, lv.far, GROUND+6);
+      drawCandy(near.pods, dist*.42, lv.near, GROUND+6);
+    } else if (d==='mushrooms'){
+      drawMushrooms(far.pods, dist*.16, lv.far, GROUND+6);
+      drawMushrooms(near.pods, dist*.42, lv.near, GROUND+6);
+    } else if (d==='clouds'){
+      drawCloudBank(far.pods, dist*.13, lv.far, GROUND+6, false);
+      drawCloudBank(near.pods, dist*.36, lv.near, GROUND+6, true);
+    } else if (d==='gears'){
+      drawGears(far.city, dist*.16, lv.far, lv.farWin, GROUND+4);
+      drawGears(near.city, dist*.42, lv.near, lv.nearWin, GROUND+4);
+    } else if (d==='ships'){
+      drawShips(far.ships, dist*.13, lv.far, GROUND+6);
+      drawShips(near.ships, dist*.36, lv.near, GROUND+6);
     } else {
       drawCity(far.city, dist*.16, lv.far, lv.farWin, GROUND+4);
       drawCity(near.city, dist*.42, lv.near, lv.nearWin, GROUND+4);
@@ -1423,6 +2117,84 @@
       ctx.fillStyle = '#FFD23D';
       ctx.fillRect(o.x+o.w/2-6, y+o.h*.30, 12, 16);
       ctx.fillRect(o.x, y+o.h*.55, o.w, 4);
+    } else if (o.shape==='gumdrop'){
+      ctx.fillStyle = o.a;
+      ctx.beginPath();
+      ctx.moveTo(o.x, GROUND);
+      ctx.quadraticCurveTo(o.x+o.w*.05, y+o.h*.10, o.x+o.w/2, y);
+      ctx.quadraticCurveTo(o.x+o.w*.95, y+o.h*.10, o.x+o.w, GROUND);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = o.b;
+      ctx.beginPath(); ctx.ellipse(o.x+o.w/2, GROUND-3, o.w*.5, 5, 0,0,7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.5)';       // sugar crust
+      for (let i=0;i<7;i++)
+        ctx.fillRect(o.x+9+((i*19)%Math.max(8,o.w-16)), y+11+((i*23)%Math.max(8,o.h-18)), 3, 3);
+    } else if (o.shape==='cane'){
+      const cx = o.x+o.w/2;
+      ctx.strokeStyle = o.a; ctx.lineWidth = 13; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx, GROUND); ctx.lineTo(cx, y+o.h*.28);
+      ctx.quadraticCurveTo(cx, y, cx+o.w*.38, y+o.h*.16); ctx.stroke();
+      ctx.strokeStyle = o.b; ctx.lineWidth = 4;
+      for (let i=0;i<5;i++){
+        const yy = y+o.h*.34+i*(o.h*.60/5);
+        ctx.beginPath(); ctx.moveTo(cx-7, yy); ctx.lineTo(cx+7, yy-6); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    } else if (o.shape==='ice'){
+      ctx.fillStyle = o.a; roundRect(o.x,y,o.w,o.h,4); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.beginPath(); ctx.moveTo(o.x+5,y+o.h-6); ctx.lineTo(o.x+o.w*.42,y+5);
+      ctx.lineTo(o.x+o.w*.56,y+5); ctx.lineTo(o.x+17,y+o.h-6); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = o.b; ctx.lineWidth = 3; roundRect(o.x+2,y+2,o.w-4,o.h-4,4); ctx.stroke();
+    } else if (o.shape==='gear'){
+      const cx = o.x+o.w/2, cy = y+o.h/2, r = Math.min(o.w,o.h)*.40;
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(t*.02);
+      ctx.fillStyle = o.a; ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fill();
+      for (let i=0;i<8;i++){
+        ctx.save(); ctx.rotate(i*Math.PI/4); ctx.fillRect(r-3,-5,10,10); ctx.restore();
+      }
+      ctx.fillStyle = o.b; ctx.beginPath(); ctx.arc(0,0,r*.36,0,7); ctx.fill();
+      ctx.restore();
+    } else if (o.shape==='cactus'){
+      const cx = o.x+o.w/2;
+      ctx.fillStyle = o.a;
+      roundRect(cx-o.w*.18, y, o.w*.36, o.h, 10); ctx.fill();
+      roundRect(cx-o.w*.46, y+o.h*.34, o.w*.30, o.h*.16, 8); ctx.fill();
+      roundRect(cx-o.w*.46, y+o.h*.34, o.w*.16, o.h*.36, 8); ctx.fill();
+      roundRect(cx+o.w*.16, y+o.h*.24, o.w*.30, o.h*.16, 8); ctx.fill();
+      roundRect(cx+o.w*.30, y+o.h*.24, o.w*.16, o.h*.44, 8); ctx.fill();
+      ctx.strokeStyle = o.b; ctx.lineWidth = 2;
+      for (let i=0;i<5;i++){
+        const yy = y+9+i*(o.h*.19);
+        ctx.beginPath(); ctx.moveTo(cx-5,yy); ctx.lineTo(cx+5,yy); ctx.stroke();
+      }
+    } else if (o.shape==='mushroom'){
+      const cx = o.x+o.w/2, capY = y+o.h*.44;
+      ctx.fillStyle = '#F2E6D2';
+      roundRect(cx-o.w*.16, capY-4, o.w*.32, GROUND-capY+4, 6); ctx.fill();
+      ctx.fillStyle = o.a;
+      ctx.beginPath(); ctx.ellipse(cx, capY, o.w*.5, o.h*.44, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = o.b;
+      ctx.beginPath(); ctx.ellipse(cx, capY, o.w*.5, 5, 0, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.6)';
+      for (const [dx,dy,r] of [[-.24,-.16,.10],[.05,-.26,.12],[.27,-.11,.09]]){
+        ctx.beginPath(); ctx.ellipse(cx+o.w*dx, capY+o.h*dy, o.w*r, o.h*r*.8, 0,0,7); ctx.fill();
+      }
+    } else if (o.shape==='pumpkin'){
+      const cx = o.x+o.w/2, cy = y+o.h*.56, k = o.w/48;
+      ctx.fillStyle = o.a;
+      ctx.beginPath(); ctx.ellipse(cx,cy,o.w*.5,o.h*.44,0,0,7); ctx.fill();
+      ctx.fillStyle = o.b;
+      ctx.beginPath(); ctx.ellipse(cx-o.w*.27,cy,o.w*.14,o.h*.42,0,0,7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx+o.w*.27,cy,o.w*.14,o.h*.42,0,0,7); ctx.fill();
+      ctx.fillStyle = '#4A7A2B'; ctx.fillRect(cx-4*k, y+o.h*.02, 8*k, o.h*.18);
+      ctx.fillStyle = '#FFF07A';                    // jack-o'-lantern
+      ctx.beginPath(); ctx.moveTo(cx-14*k,cy-7*k); ctx.lineTo(cx-6*k,cy-7*k);
+      ctx.lineTo(cx-10*k,cy+2*k); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx+14*k,cy-7*k); ctx.lineTo(cx+6*k,cy-7*k);
+      ctx.lineTo(cx+10*k,cy+2*k); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx-12*k,cy+8*k); ctx.lineTo(cx+12*k,cy+8*k);
+      ctx.lineTo(cx+7*k,cy+15*k); ctx.lineTo(cx-7*k,cy+15*k); ctx.closePath(); ctx.fill();
     } else if (o.shape==='coral'){
       ctx.strokeStyle = o.a; ctx.lineCap = 'round'; ctx.lineWidth = 12;
       const cx = o.x+o.w/2;
@@ -1560,6 +2332,105 @@
       ctx.beginPath(); ctx.moveTo(-7,-32); ctx.lineTo(-9,-42); ctx.moveTo(7,-32); ctx.lineTo(9,-42); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-9,-45,5,0,7); ctx.arc(9,-45,5,0,7); ctx.fill();
       ctx.fillStyle = '#2A0F0A'; ctx.beginPath(); ctx.arc(-8,-45,2.4,0,7); ctx.arc(10,-45,2.4,0,7); ctx.fill();
+    } else if (b.kind==='gummy'){
+      ctx.fillStyle = 'rgba(255,140,200,.30)';
+      ctx.beginPath(); ctx.arc(0,-22,25,0,7); ctx.fill();
+      ctx.fillStyle = '#FF6FA8';
+      ctx.beginPath(); ctx.arc(-13,-38,7,0,7); ctx.arc(13,-38,7,0,7); ctx.fill();
+      roundRect(-15,-36,30,32,13); ctx.fill();
+      roundRect(-20,-24,11,14,5); ctx.fill(); roundRect(9,-24,11,14,5); ctx.fill();
+      ctx.fillStyle = '#FFC2E5'; roundRect(-8,-19,16,13,6); ctx.fill();
+      ctx.fillStyle = '#5E1436';
+      ctx.beginPath(); ctx.arc(-5,-28,2.6,0,7); ctx.arc(6,-28,2.6,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(1,-23,2,0,7); ctx.fill();
+    } else if (b.kind==='penguin'){
+      ctx.fillStyle = '#FF9A3D';
+      roundRect(-13,-6,11,6,3); ctx.fill(); roundRect(3,-6,11,6,3); ctx.fill();
+      ctx.fillStyle = '#2A3446'; ctx.beginPath(); ctx.ellipse(0,-24,17,22,0,0,7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-17,-26,5,12,.3,0,7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(17,-26,5,12,-.3,0,7); ctx.fill();
+      ctx.fillStyle = '#F3F7FA'; ctx.beginPath(); ctx.ellipse(1,-20,11,16,0,0,7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-5,-34,5,0,7); ctx.arc(6,-34,5,0,7); ctx.fill();
+      ctx.fillStyle = '#12202E'; ctx.beginPath(); ctx.arc(-4,-34,2.4,0,7); ctx.arc(7,-34,2.4,0,7); ctx.fill();
+      ctx.fillStyle = '#FF9A3D';
+      ctx.beginPath(); ctx.moveTo(-4,-29); ctx.lineTo(6,-29); ctx.lineTo(1,-23); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#F0453A'; roundRect(-13,-49,26,9,4); ctx.fill();
+      ctx.beginPath(); ctx.arc(0,-53,6,0,7); ctx.fill();
+    } else if (b.kind==='ember'){
+      const fl = Math.sin(b.bob*2)*3;
+      ctx.fillStyle = 'rgba(255,120,40,.32)';
+      ctx.beginPath(); ctx.arc(0,-26,27,0,7); ctx.fill();
+      ctx.fillStyle = '#FF6A2B';
+      ctx.beginPath();
+      ctx.moveTo(0,-52-fl); ctx.quadraticCurveTo(19,-30,13,-14);
+      ctx.quadraticCurveTo(8,-2,0,-2); ctx.quadraticCurveTo(-8,-2,-13,-14);
+      ctx.quadraticCurveTo(-19,-30,0,-52-fl); ctx.fill();
+      ctx.fillStyle = '#FFD23D'; ctx.beginPath(); ctx.ellipse(0,-15,7,11,0,0,7); ctx.fill();
+      ctx.fillStyle = '#2A0714';
+      ctx.beginPath(); ctx.arc(-5,-30,3,0,7); ctx.arc(5,-30,3,0,7); ctx.fill();
+      ctx.strokeStyle = '#2A0714'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0,-22,4,.2,Math.PI-.2); ctx.stroke();
+      ctx.lineCap = 'butt';
+    } else if (b.kind==='bat'){
+      const flap = Math.sin(b.bob*3)*10;
+      ctx.fillStyle = '#4B2E72';
+      for (const sg of [-1,1]){
+        ctx.beginPath();
+        ctx.moveTo(sg*4,-34);
+        ctx.quadraticCurveTo(sg*24,-44-flap, sg*38,-30+flap*.4);
+        ctx.quadraticCurveTo(sg*24,-30, sg*20,-22);
+        ctx.quadraticCurveTo(sg*14,-26, sg*4,-24);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#6B3FA0';
+      ctx.beginPath(); ctx.ellipse(0,-30,12,13,0,0,7); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-10,-40); ctx.lineTo(-6,-51); ctx.lineTo(-2,-40); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(10,-40); ctx.lineTo(6,-51); ctx.lineTo(2,-40); ctx.fill();
+      ctx.fillStyle = '#FFD23D';
+      ctx.beginPath(); ctx.arc(-4,-31,3,0,7); ctx.arc(5,-31,3,0,7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.moveTo(-5,-25); ctx.lineTo(-2,-19); ctx.lineTo(1,-25); ctx.fill();
+    } else if (b.kind==='birdie'){
+      const flap = Math.sin(b.bob*3)*12;
+      ctx.fillStyle = '#FFB03D';
+      roundRect(-7,-13,8,13,3); ctx.fill(); roundRect(3,-13,8,13,3); ctx.fill();
+      ctx.fillStyle = '#EAD9B0';
+      ctx.beginPath(); ctx.moveTo(-15,-28); ctx.lineTo(-31,-35); ctx.lineTo(-30,-21); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#FFF3D6';
+      ctx.beginPath(); ctx.ellipse(0,-26,18,15,0,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(14,-37,10,0,7); ctx.fill();
+      ctx.fillStyle = '#EAD9B0';
+      ctx.beginPath(); ctx.ellipse(-3,-28,12,7,-.25+flap*.02,0,7); ctx.fill();
+      ctx.fillStyle = '#FFB03D';
+      ctx.beginPath(); ctx.moveTo(22,-39); ctx.lineTo(34,-35); ctx.lineTo(22,-31); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#3A2A1E'; ctx.beginPath(); ctx.arc(16,-39,2.6,0,7); ctx.fill();
+    } else if (b.kind==='drone'){
+      const spin = Math.sin(b.bob*6)*10;
+      ctx.strokeStyle = '#5C6784'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-16,-30); ctx.lineTo(-26,-40);
+      ctx.moveTo(16,-30); ctx.lineTo(26,-40); ctx.stroke();
+      ctx.strokeStyle = 'rgba(200,230,255,.7)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-35,-42+spin*.2); ctx.lineTo(-17,-42-spin*.2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(17,-42+spin*.2); ctx.lineTo(35,-42-spin*.2); ctx.stroke();
+      ctx.fillStyle = '#8D98B5'; roundRect(-17,-34,34,24,10); ctx.fill();
+      ctx.fillStyle = '#1A2233'; roundRect(-11,-30,22,13,6); ctx.fill();
+      ctx.fillStyle = '#FF5A5A';
+      ctx.beginPath(); ctx.arc(-4,-24,3.4,0,7); ctx.arc(6,-24,3.4,0,7); ctx.fill();
+      ctx.fillStyle = '#5C6784'; roundRect(-12,-11,8,5,2); ctx.fill(); roundRect(4,-11,8,5,2); ctx.fill();
+    } else if (b.kind==='scarab'){
+      ctx.strokeStyle = '#3A2A14'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      for (const sg of [-1,1]) for (let i=0;i<3;i++){
+        ctx.beginPath(); ctx.moveTo(sg*10,-24+i*5); ctx.lineTo(sg*(22+i*3),-6+i*3); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+      ctx.fillStyle = '#3DB58A'; ctx.beginPath(); ctx.ellipse(0,-22,19,16,0,0,7); ctx.fill();
+      ctx.fillStyle = '#2A8A68'; ctx.fillRect(-2,-38,4,32);
+      ctx.fillStyle = '#FFD23D'; ctx.beginPath(); ctx.ellipse(0,-36,10,8,0,0,7); ctx.fill();
+      ctx.fillStyle = '#3A2A14';
+      ctx.beginPath(); ctx.arc(-4,-37,2,0,7); ctx.arc(4,-37,2,0,7); ctx.fill();
+      ctx.strokeStyle = '#FFD23D'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-5,-43); ctx.lineTo(-10,-50);
+      ctx.moveTo(5,-43); ctx.lineTo(10,-50); ctx.stroke();
     } else {
       ctx.strokeStyle = '#7CF5D0'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(0,-34); ctx.lineTo(6,-48); ctx.stroke();
@@ -2414,7 +3285,7 @@
     ctx.save();
     if (shake>0) ctx.translate((Math.random()-.5)*shake*.8, (Math.random()-.5)*shake*.55);
 
-    drawSky(); drawBackdrop(); drawGround();
+    drawSky(); drawBackdrop(); drawWeather(false); drawGround();
 
     for (const p of platforms){
       drawPlatform(p);
@@ -2455,6 +3326,7 @@
     drawDog();
     drawKids();
     drawFireRing();
+    drawWeather(true);
 
     if (lv.underwater){
       ctx.strokeStyle = 'rgba(255,255,255,.42)'; ctx.lineWidth = 1.6;

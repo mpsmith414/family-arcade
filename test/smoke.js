@@ -73,12 +73,23 @@ const POWER_DURATIONS = { 'RIDE THE DOG': 900, 'FIRE RING': 750, 'GIANT MODE': 6
    the entire point: it proves nothing changed. Do not "fix" it into a
    red-first test; inverting it would destroy the invariance proof.
 
-   Captured from the pre-high-road build. A run with no jump and no hold input
-   never leaves the ground, so it can never touch a platform or a gold star —
-   which means the sky lane must not perturb this by so much as one RNG draw.
-   If this test fails after a sky-lane change, the separate-PRNG rule was
-   broken somewhere, most likely in drawing code calling Math.random(). */
-const GROUND_BASELINE = { "score": 4658, "level": "Space Station", "trophies": "🏆🏆", "rng": "449869:a3ed77ff" };
+   A run with no jump and no hold input never leaves the ground, so it can
+   never touch a platform or a gold star — which means the sky lane must not
+   perturb this by so much as one RNG draw. If this test fails after a
+   sky-lane change, the separate-PRNG rule was broken somewhere, most likely
+   in drawing code calling Math.random(). Weather is on the same footing: it
+   has its own PRNG (TUNE.wxSeed) and must stay off Math.random() too.
+
+   RE-BASELINED once, deliberately, when the ten later worlds landed and the
+   level order became a shuffle. Both of those ARE the ground lane — new
+   obstacle sizes and a random running order move the stream by design — so
+   the old numbers could not survive and re-capturing them was the honest
+   answer. What the guard proves is unchanged, because the proof was never the
+   literal numbers: it is that the two runs below, one holding the button and
+   one not, agree with each other to the draw. Re-capture only for a change
+   that is deliberately about the ground lane, and never to make a red test
+   go quiet. */
+const GROUND_BASELINE = { "score": 4426, "level": "Candy Kingdom", "trophies": "🏆🏆", "rng": "562923:7c1fa539" };
 
 test('ground lane is byte-identical (Emsile regression)', note => {
   const h = createHarness('oliver-run', { seed: 20260729 });
@@ -379,10 +390,21 @@ test('holding through a long run throws nothing', note => {
 /* ---------------------------------------------------------------- *
  * 1. it boots
  * ---------------------------------------------------------------- */
+/* Adventure shuffles its worlds, so the menu shows whichever one came up
+   first rather than a fixed opener. */
+const LEVEL_NAMES = [
+  'Rooftop City', 'Dino Jungle', 'Space Station', 'Coral Reef',
+  'Candy Kingdom', 'Frozen Peaks', 'Volcano Rush', 'Haunted Hollow',
+  'Cloud Castle', 'Robot Factory', 'Golden Dunes', 'Mushroom Forest',
+  'Neon Speedway', 'Pirate Cove',
+];
+
 test('boots and reaches the menu', note => {
   const h = createHarness('oliver-run');
   note(`loaded ${h.loaded.join(', ')}`);
-  assert(h.text('lvlName') === 'Rooftop City', `expected first level name, got "${h.text('lvlName')}"`);
+  note(`opening world: ${h.text('lvlName')}`);
+  assert(LEVEL_NAMES.includes(h.text('lvlName')),
+    `menu should name one of the worlds, got "${h.text('lvlName')}"`);
   assert(h.text('score') === '0', 'score should start at 0');
   assert(!h.hidden('startScreen'), 'start screen should be visible before play');
   pump(h, 60);
@@ -1563,12 +1585,10 @@ test('kit: a key held when focus is lost does not stay stuck', note => {
  * sky lane (Task 4)
  * ---------------------------------------------------------------- */
 
-/* REGRESSION GUARD — green before and after this task, by design.
-   Platforms are not observable from the DOM, so this cannot assert their
-   absence in Boss Rush directly. What it does assert is the thing that would
-   actually break: that a mode with no `run` phase still runs clean once the
-   sky-lane code exists. Named for what it checks, not what we wish it could. */
-test('sky lane: Boss Rush is unaffected by the sky lane code', note => {
+/* Boss Rush has no `run` phase at all, so for a long time it had no sky lane
+   either. It does now — the pads spawn in the arena instead — and this stays
+   as the guard that the mode still runs clean end to end. */
+test('sky lane: Boss Rush runs clean with pads in the arena', note => {
   const h = createHarness('oliver-run', { seed: 41 });
   h.click('rushBtn');          // Boss Rush only cycles warn -> boss -> victory
   pump(h, 6000);
@@ -1637,6 +1657,123 @@ test('glide measurably improves sky lane collection', note => {
   note(`tap-only ${tapOnly} vs floating ${floating} (+${floating - tapOnly})`);
   assert(floating > tapOnly,
     `holding should collect more: ${tapOnly} -> ${floating}`);
+});
+
+/* ---------------------------------------------------------------- *
+ * the high road in the arena, and the fourteen worlds
+ * ---------------------------------------------------------------- */
+
+/* Pops are painted to the canvas and never reach the DOM, so they are counted
+   off h.painted(). A pop lives 58 frames and is stroked and filled on each of
+   them, so one pop is ~116 entries — hence "roughly how many", not "exactly". */
+function poppedRoughly(h, re) {
+  return Math.round(h.painted().filter(s => re.test(s)).length / 116);
+}
+
+/* The cleanest proof available that the sky lane really is open during a boss
+   fight: a +50 pop is a gold star, gold stars only ever sit on platforms, and
+   Boss Rush is nothing but fights. A grounded player cannot reach one — that
+   half is the same claim the run-phase test makes, re-checked in the arena. */
+test('sky lane: gold stars are collectable during a boss fight', note => {
+  const grounded = createHarness('oliver-run', { seed: 41 });
+  grounded.click('rushBtn');
+  pump(grounded, 6000);                        // never jumps
+  const flatGold = poppedRoughly(grounded, /^\+50$/);
+  const flat = grounded.num('score');
+  grounded.dispose();
+
+  const climber = createHarness('oliver-run', { seed: 41 });
+  climber.click('rushBtn');
+  pump(climber, 5);
+  runCycles(climber, 6000, 24, 40);
+  const gold = poppedRoughly(climber, /^\+50$/);
+
+  note(`grounded ${flat} with ${flatGold} gold stars, climbing ${climber.num('score')} with ${gold}`);
+  assert(flatGold === 0, `a grounded rush run reached ${flatGold} gold stars — the arena pads are too low`);
+  assert(gold > 0, 'climbing through a boss fight never reached a gold star');
+  return climber;
+});
+
+/* SKY SMASH is the reward for using the arena pads as pads: climb one, wait,
+   drop on the boss as it charges under you. A robot that jumps every 40 frames
+   is not aiming for it, so it lands a handful of times across a sweep rather
+   than reliably in one run — the assertion is on the sweep. */
+test('sky lane: dropping onto a boss from above pays a bonus', note => {
+  let total = 0;
+  const seen = [];
+  for (const seed of [7, 41, 44]) {
+    const h = createHarness('oliver-run', { seed });
+    h.click('rushBtn');
+    pump(h, 5);
+    runCycles(h, 5000, 24, 40);
+    const n = poppedRoughly(h, /SKY SMASH/);
+    seen.push(`${seed}:${n}`);
+    total += n;
+    h.dispose();
+  }
+  note(`sky smashes per seed — ${seen.join(', ')}`);
+  assert(total > 0, 'no seed ever landed a drop on a boss from the arena pads');
+});
+
+/* Reading the running order off the level label would be circular: the label
+   only changes when the name changes, so a world following itself would look
+   like no change at all and the repeat would be invisible. The banner is the
+   honest signal — it is painted afresh on arrival whatever it says — so this
+   watches for the frame a world banner appears and records that. */
+const BANNERS = new Set(LEVEL_NAMES.map(n => n.toUpperCase()));
+
+function worldOrder(h, frames) {
+  const order = [h.text('lvlName').toUpperCase()];   // world one arrives without a banner
+  let showing = false;
+  for (let i = 0; i < frames; i++) {
+    h.clearPainted();
+    pump(h, 1);
+    const banner = h.painted().find(s => BANNERS.has(s));
+    if (banner && !showing) order.push(banner);
+    showing = !!banner;
+  }
+  return order;
+}
+
+/* A shuffle bag, not a dice roll: one long run has to reach every world before
+   it sees any of them twice, and the seam where the bag refills must not hand
+   back the world that just finished. */
+test('levels: one run visits all fourteen worlds before repeating any', note => {
+  const h = createHarness('oliver-run', { seed: 1 });
+  h.tap();
+  h.holdJump(true);
+  const order = worldOrder(h, 46000);
+  const seen = new Set();
+  for (let i = 0; i < order.length; i++) {
+    const name = LEVEL_NAMES.find(n => n.toUpperCase() === order[i]);
+    assert(name, `unknown world "${order[i]}"`);
+    assert(i === 0 || order[i] !== order[i - 1],
+      `world repeated back to back: ${order.join(' -> ')}`);
+    if (seen.size < LEVEL_NAMES.length)
+      assert(!seen.has(name),
+        `"${name}" came round again after only ${seen.size} of ${LEVEL_NAMES.length}: ${order.join(' -> ')}`);
+    seen.add(name);
+  }
+  note(`${order.length} worlds in order: ${order.join(' -> ')}`);
+  assert(seen.size === LEVEL_NAMES.length,
+    `never visited: ${LEVEL_NAMES.filter(n => !seen.has(n)).join(', ')}`);
+  return h;
+});
+
+/* The opening world is drawn from the same shuffle, so it is on the menu
+   before a frame is pumped — which makes this the cheapest possible check
+   that the order really is re-rolled per run. */
+test('levels: the run opens on a different world each time', note => {
+  const openers = [];
+  for (const seed of [1, 2, 3, 5, 7, 11, 13, 42]) {
+    const h = createHarness('oliver-run', { seed });
+    const name = h.text('lvlName');
+    assert(LEVEL_NAMES.includes(name), `menu named an unknown world "${name}"`);
+    openers.push(name);
+    h.dispose();
+  }
+  note(`opening worlds: ${openers.join(', ')}`);
+  assert(new Set(openers).size > 1, 'every run opened on the same world — the order is not shuffled');
 });
 
 /* ---------------------------------------------------------------- *

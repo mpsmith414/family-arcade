@@ -7,7 +7,16 @@ tablet, and a TV with a controller.
 Three games, deliberately unlike each other. Keep it that way: a fourth should
 contrast with all three rather than land in between.
 
-- `games/oliver-run` — endless runner, tap to jump, 18 bosses, scores distance.
+- `games/oliver-run` — endless runner, tap to jump, 14 worlds, 18 bosses, scores
+  distance. Adventure deals the worlds from a shuffle bag, so a full set comes
+  round before any repeat and no two runs open the same way. Each world owns a
+  palette, a backdrop shape, its weather (`wx`) and how heavy the jump feels;
+  `grav` and `jump` always move together as `jump = sqrt(2*grav*152)`, because
+  152px is the apex the sky lane's platforms are placed around. Change one
+  without the other and that world's high road becomes unreachable.
+  The sky lane is open during boss fights too, where the pads hover at a third
+  of the world speed so they can be climbed and waited on; dropping onto a
+  charging boss from one is a SKY SMASH.
 - `games/emsile-fishing` — still screen, tap on the bite, scores a book of 15 sea
   creatures. Tap does four jobs depending on state (wiggle the lure / hook the
   fish / reel faster / skip the celebration), and mashing is always rewarded,
@@ -59,10 +68,11 @@ way that eyeballing missed (a `ReferenceError` firing every frame a power-up
 was active, and a hitbox that stretched to the ground while jumping).
 
 ```bash
-node test/smoke.js            # all three games, ~35s, no dependencies
+node test/smoke.js            # all three games, a minute or two, no dependencies
 node test/smoke.js powers     # only tests matching "powers"
 node test/smoke.js fishing    # only the Emsile Fishing block
 node test/smoke.js daddy      # only the Daddy Smash block
+node test/smoke.js levels     # only the fourteen-worlds block
 ```
 
 The harness draws to a no-op canvas, so it proves the game does not throw and
@@ -99,13 +109,28 @@ h.loseFocus(); h.regainFocus();
 h.byId('kk-focus-guard');// nodes the page built at runtime, unlike el()
 ```
 
-Feel values for the sky lane and the glide all live in the `TUNE` object at the
-top of `games/oliver-run/index.html`. Change those rather than hunting through
-the game loop. Anything sky-lane related must draw from `skyRnd`, never
-`Math.random()` — the ground-lane regression test asserts an exact fingerprint
-of the `Math.random()` stream, and one stray draw on the render path breaks it.
-That test is what proves the younger child's game is untouched by everything
-added above it, so treat a failure there as a real defect, never a flaky test.
+Feel values for the sky lane, the boss-arena pads and the glide all live in the
+`TUNE` object at the top of `games/oliver-run/index.html`. Change those rather
+than hunting through the game loop. Anything sky-lane related must draw from
+`skyRnd`, and weather from `wxRnd`, never `Math.random()` — the ground-lane
+regression test asserts an exact fingerprint of the `Math.random()` stream, and
+one stray draw on the render path breaks it. That test is what proves the
+younger child's game is untouched by everything added above it, so treat a
+failure there as a real defect, never a flaky test.
+
+Its baseline has been re-captured exactly once, when the ten later worlds and
+the shuffled running order landed — both of those *are* the ground lane, so the
+old numbers could not survive. The proof was never the literal numbers: it is
+that the two runs, one holding the button and one not, agree to the draw. Only
+re-capture for a change that is deliberately about the ground lane, and never
+to quieten a red test.
+
+The harness can read what the game paints, not just what it writes to the DOM:
+`h.painted()` / `h.paintedSome(re)` / `h.clearPainted()` return the strings sent
+to `fillText`/`strokeText`. Score pops, level banners and the boss warning never
+reach the DOM, so that is the only way to assert on them — it is how the
+fourteen-worlds test reads the running order (the level label alone can't, since
+a world following itself would look like no change at all).
 
 Gotchas already handled in there, worth knowing before you change it:
 

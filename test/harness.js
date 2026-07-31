@@ -180,7 +180,11 @@ function makeGradient() {
   return { addColorStop() {}, _gradient: true };
 }
 
-function makeCtx(canvas) {
+/* `sink`, when given, collects every string the game paints onto the canvas.
+   It is the only way to observe things that never reach the DOM — score pops,
+   banners, the boss warning — so a test can assert on them the same way a
+   person reads them off the screen. Bounded, because a long run paints a lot. */
+function makeCtx(canvas, sink) {
   const noop = function () {};
   const store = {
     canvas,
@@ -192,7 +196,14 @@ function makeCtx(canvas) {
     shadowBlur: 0, shadowColor: 'rgba(0,0,0,0)', shadowOffsetX: 0, shadowOffsetY: 0,
     filter: 'none', imageSmoothingEnabled: true, imageSmoothingQuality: 'low',
   };
+  const paint = text => {
+    if (!sink) return;
+    sink.push(String(text == null ? '' : text));
+    if (sink.length > 4000) sink.splice(0, sink.length - 4000);
+  };
   const special = {
+    fillText: paint,
+    strokeText: paint,
     createLinearGradient: makeGradient,
     createRadialGradient: makeGradient,
     createConicGradient: makeGradient,
@@ -446,6 +457,7 @@ function createHarness(gameName, options) {
 
   /* ---- document ------------------------------------------------ */
   const elements = new Map();
+  const paintedText = [];          // every string drawn to a canvas, in order
   const created = [];                 // createElement()'d nodes, for byId()
   /* A TV browser drives a mouse cursor with the stick, and when that cursor
      leaves the page the browser chrome takes focus: keys stop arriving and
@@ -467,7 +479,7 @@ function createHarness(gameName, options) {
       if (known && 'hidden' in known.attrs) e.hidden = true;
       if (e.tagName === 'CANVAS') {
         e.width = 900; e.height = 450;
-        const c = makeCtx(e);
+        const c = makeCtx(e, paintedText);
         e.getContext = () => c;
       }
       elements.set(id, e);
@@ -478,7 +490,7 @@ function createHarness(gameName, options) {
       e._doc = doc;
       if (String(tag).toUpperCase() === 'CANVAS') {
         e.width = 300; e.height = 150;
-        const c = makeCtx(e);
+        const c = makeCtx(e, paintedText);
         e.getContext = () => c;
       }
       created.push(e);
@@ -864,6 +876,12 @@ function createHarness(gameName, options) {
     },
     blur() { winDispatch(makeEvent('blur', null, {})); return api; },
     fingerprint() { return rngCalls + ':' + (rngSum >>> 0).toString(16); },
+    /* Everything the game has painted onto the canvas as text since the last
+       clearPainted(), newest last. Score pops, banners and the boss warning
+       never touch the DOM, so this is how a test reads them. */
+    painted: () => paintedText.slice(),
+    paintedSome: re => paintedText.some(s => re.test(s)),
+    clearPainted() { paintedText.length = 0; return api; },
     /* Queue a press for the next frame; the caller pumps it. */
     pad(button, index) { pressPadButton(button, index); return api; },
     /* Press, let one frame poll it, then one clear frame so the next
