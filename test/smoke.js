@@ -83,16 +83,18 @@ const POWER_NAMES = [
    in drawing code calling Math.random(). Weather is on the same footing: it
    has its own PRNG (TUNE.wxSeed) and must stay off Math.random() too.
 
-   RE-BASELINED twice, deliberately: once when the ten later worlds landed and
-   the level order became a shuffle, and once when the ground filled up with
-   critters and power-ups stopped expiring. All of those ARE the ground lane —
-   new spawns and a random running order move the stream by design — so the
-   old numbers could not survive and re-capturing them was the honest answer. What the guard proves is unchanged, because the proof was never the
+   RE-BASELINED three times, deliberately: when the ten later worlds landed and
+   the level order became a shuffle; when the ground filled up with critters and
+   power-ups stopped expiring; and when a world got longer than a boss fight
+   (RUN_FRAMES 1500 -> 2600, which is why one trophy shows here where two used
+   to). All of those ARE the ground lane — spawns, running order and the length
+   of a world move the stream by design — so the old numbers could not survive
+   and re-capturing them was the honest answer. What the guard proves is unchanged, because the proof was never the
    literal numbers: it is that the two runs below, one holding the button and
    one not, agree with each other to the draw. Re-capture only for a change
    that is deliberately about the ground lane, and never to make a red test
    go quiet. */
-const GROUND_BASELINE = { "score": 4686, "level": "Candy Kingdom", "trophies": "🏆🏆", "rng": "788645:fbfdb046" };
+const GROUND_BASELINE = { "score": 4758, "level": "Mushroom Forest", "trophies": "🏆", "rng": "1548658:3b3bb5b4" };
 
 test('ground lane is byte-identical (Emsile regression)', note => {
   const h = createHarness('oliver-run', { seed: 20260729 });
@@ -1697,38 +1699,41 @@ test('sky lane: gold stars are unreachable without leaving the ground', note => 
   return climber;
 });
 
-/* The one test that isolates the glide itself. Both runs share a seed and
-   press the jump button on exactly the same frames — the ONLY difference is
-   how long the button stays down afterwards. holdFor:1 releases immediately
-   (a plain jump); holdFor:24 keeps floating. Any score difference is the
-   glide and nothing else.
+/* The one test that isolates the glide itself. Every run presses the jump
+   button on exactly the same frames — the ONLY difference is how long the
+   button stays down afterwards. holdFor:1 releases immediately (a plain
+   jump); holding keeps floating. Any difference is the glide and nothing
+   else.
 
-   Measured while building this: the glide raises time spent standing on a
-   platform from 167 frames to 1178 over the same run — a 7x difference. The
-   score margin below is much smaller than that because distance dominates
-   the score; it is the visible tip of a far larger effect.
-
-   Counted in gold stars rather than points since the ground filled up with
-   critters: staying airborne now costs you real ground-lane pickings, so
-   total score stopped being a reading of the sky lane at all. */
+   Measured while building it: the glide raised time spent standing on a
+   platform from 167 frames to 1178 over the same run, a 7x difference.
+   Almost none of that reaches the score, and since worlds got longer the
+   sky lane offers so many stars that a plain jumper collects nearly all of
+   them anyway — so the margin here is a couple of stars, not a landslide.
+   It is summed over three seeds to keep it off a knife edge, and jumps are
+   deliberately sparse (once every 110 frames), because hang time only
+   matters when you are not simply jumping again straight away. */
 test('glide measurably improves sky lane collection', note => {
-  const run = holdFor => {
-    const h = createHarness('oliver-run', { seed: 44 });
-    // Pin the power-up to the fire ring in both runs. Powers last until they
-    // are swapped now, and several of them change how the hero falls, so a
-    // free-for-all would have the two runs flying differently for reasons
-    // that have nothing to do with the glide. The fire ring is the one that
-    // touches neither gravity nor reach.
+  const run = (holdFor, seed) => {
+    const h = createHarness('oliver-run', { seed });
+    // fire ring in both runs: several powers change how the hero falls, and
+    // this is the one that touches neither gravity nor reach
     h.bucket(1, POWER_NAMES.length);
     h.tap();
-    runCycles(h, 9000, holdFor, 40);
+    runCycles(h, 9000, holdFor, 110);
     const gold = poppedRoughly(h, /^\+50$/);
     h.dispose();
     return gold;
   };
-  const tapOnly = run(1);
-  const floating = run(24);
-  note(`tap-only reached ${tapOnly} gold stars vs floating ${floating}`);
+  let tapOnly = 0, floating = 0;
+  const rows = [];
+  for (const seed of [44, 21, 7]) {
+    const a = run(1, seed), b = run(70, seed);
+    tapOnly += a; floating += b;
+    rows.push(`${seed}: ${a} vs ${b}`);
+  }
+  note(`gold stars per seed (tap-only vs floating) — ${rows.join(', ')}`);
+  note(`totals: tap-only ${tapOnly}, floating ${floating}`);
   assert(floating > tapOnly,
     `holding should collect more gold stars: ${tapOnly} -> ${floating}`);
 });
@@ -1809,7 +1814,7 @@ test('levels: one run visits all fourteen worlds before repeating any', note => 
   const h = createHarness('oliver-run', { seed: 1 });
   h.tap();
   h.holdJump(true);
-  const order = worldOrder(h, 46000);
+  const order = worldOrder(h, 64000);   // ~4000 frames a world now, not ~2900
   const seen = new Set();
   for (let i = 0; i < order.length; i++) {
     const name = LEVEL_NAMES.find(n => n.toUpperCase() === order[i]);
@@ -1841,6 +1846,97 @@ test('levels: the run opens on a different world each time', note => {
   }
   note(`opening worlds: ${openers.join(', ')}`);
   assert(new Set(openers).size > 1, 'every run opened on the same world — the order is not shuffled');
+});
+
+/* ---------------------------------------------------------------- *
+ * boss fights: rage, tricks and rewards
+ * ---------------------------------------------------------------- */
+
+/* Everything in a fight beyond the health bar is painted, never written to
+   the DOM, so these read the screen. The painted window is a rolling one —
+   clearPainted() first and keep the run short enough that a rare event is
+   still in it. */
+test('boss: it loses its temper at half health', note => {
+  const h = createHarness('oliver-run', { seed: 12 });
+  h.tap();
+  h.holdJump(true);
+  h.until(() => h.paintedSome(/IT IS FURIOUS/), 30000, 'a boss to be driven to rage');
+  note(`raged after ${h.frameCount} frames`);
+  return h;
+});
+
+/* A boss no longer just waits between charges: it throws junk, calls in the
+   world's own critters, or slams the floor. The junk is the observable half —
+   it is a crate you get to smash, and smashing one pays 18. */
+test('boss: its junk is a target, not a threat', note => {
+  const h = createHarness('oliver-run', { seed: 3 });
+  h.tap();                                   // stays on the ground, in the way
+  h.until(() => h.paintedSome(/^SMASH! \+(18|30)$/), 30000, 'boss junk to be smashed');
+  note(`first junk smashed at frame ${h.frameCount}`);
+  // and it paid, rather than costing anything
+  assert(h.num('score') > 0, 'smashing boss junk should score');
+  return h;
+});
+
+/* The reward for staying up among the arena pads. */
+test('boss: hits without landing pay a rising bonus', note => {
+  const h = createHarness('oliver-run', { seed: 1 });
+  h.tap();
+  h.holdJump(true);
+  h.until(() => h.paintedSome(/IN A ROW! \+/), 40000, 'an air combo');
+  assert(h.paintedSome(/AIR COMBO/), 'an air combo should be announced too');
+  note(`air combo landed by frame ${h.frameCount}`);
+  return h;
+});
+
+/* Something to carry out of every fight. */
+test('boss: beating one drops a power-up', note => {
+  const h = createHarness('oliver-run', { seed: 12 });
+  h.tap();
+  h.holdJump(true);
+  h.until(() => trophyCount(h) >= 1, 30000, 'a boss to go down');
+  // the orb pops out at the wreck and drifts back to the kids
+  const got = h.until(() => !h.hidden('powerTag'), 1200, 'the dropped orb to be collected');
+  note(`picked up "${h.text('powerName')}" ${got} frames after the boss fell`);
+  return h;
+});
+
+/* Freeze and magnet were the two the boy found least exciting, so they get
+   one re-roll each and everything else gets the freed slots. This asserts the
+   shape of the change, not an exact ratio — it is a weighting, not a quota. */
+test('power-ups: the quieter powers come up less often', note => {
+  const seen = {};
+  for (const seed of [2, 4, 6, 8, 11, 13]) {
+    const h = createHarness('oliver-run', { seed });
+    h.tap();
+    h.holdJump(true);
+    let last = '';
+    for (let i = 0; i < 10000; i++) {
+      pump(h, 1);
+      const now = h.hidden('powerTag') ? '' : h.text('powerName');
+      if (now && now !== last) seen[now] = (seen[now] || 0) + 1;
+      last = now;
+    }
+    h.dispose();
+  }
+  const total = Object.values(seen).reduce((a, b) => a + b, 0);
+  const quiet = (seen['FREEZE RAY'] || 0) + (seen['STAR MAGNET'] || 0);
+  const evenShare = total * 2 / POWER_NAMES.length;
+  note(`${total} pickups: ${JSON.stringify(seen)}`);
+  note(`freeze+magnet ${quiet}, an even share of two in ten would be ${evenShare.toFixed(1)}`);
+  assert(total >= 18, `not enough pickups to judge: ${total}`);
+  assert(quiet < evenShare, `freeze and magnet are not rarer than even: ${quiet} vs ${evenShare.toFixed(1)}`);
+});
+
+/* A world is longer than it was, which is only visible as bosses arriving
+   less often for the same distance run. */
+test('levels: a world runs longer before the boss shows up', note => {
+  const h = createHarness('oliver-run', { seed: 43 });
+  h.tap();
+  const firstWarn = h.until(() => h.paintedSome(/BOSS TIME/), 6000, 'the first boss call');
+  note(`first boss called at frame ${firstWarn} (RUN_FRAMES is 2600)`);
+  assertBetween(firstWarn, 2300, 3200, 'the first boss arrived at the wrong time');
+  return h;
 });
 
 /* ---------------------------------------------------------------- *

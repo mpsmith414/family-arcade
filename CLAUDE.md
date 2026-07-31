@@ -17,6 +17,14 @@ contrast with all three rather than land in between.
   The sky lane is open during boss fights too, where the pads hover at a third
   of the world speed so they can be climbed and waited on; dropping onto a
   charging boss from one is a SKY SMASH.
+  A boss fight has an arc rather than five identical exchanges: each boss has
+  one `trick` it works between charges (`throw` lobs junk you smash, `summon`
+  calls in that world's critters, `quake` shakes rubble off the floor), it
+  goes red-hot and faster at half health, the wait between charges shrinks as
+  its health falls, hits landed without touching the ground pay a rising
+  combo, and a power-up orb always pops out of the wreck. Everything a boss
+  produces is a target, never a threat — the no-fail rule does not bend for
+  bosses.
   Enemies come in four shapes — crawlers, flyers, swarms and brutes — composed
   by `drawFoe` from a per-world `foe` spec, the same trick the generic bosses
   use. Flyers have their own spawn clock so the sky can fill up without the
@@ -31,7 +39,11 @@ contrast with all three rather than land in between.
   fires itself, the freeze ray stops the world.
   Announcements all go through one queue (`announce`, drawn by `drawBanner`)
   so a new world can't wipe the boss it just beat off the screen. Each one
-  carries a picture from `drawGlyph`, because the audience is five.
+  carries a picture from `drawGlyph`, because the audience is five. When the
+  queue overflows it drops the **least important** card waiting, not the
+  oldest — dropping the oldest silently ate the "swapped!" card whenever a
+  fight got loud, and a kid who just traded one power for another is owed
+  that feedback more than the screen is owed a tidy queue.
 - `games/emsile-fishing` — still screen, tap on the bite, scores a book of 15 sea
   creatures. Tap does four jobs depending on state (wiggle the lure / hook the
   fish / reel faster / skip the celebration), and mashing is always rewarded,
@@ -142,7 +154,9 @@ to quieten a red test.
 
 The harness can read what the game paints, not just what it writes to the DOM:
 `h.painted()` / `h.paintedSome(re)` / `h.clearPainted()` return the strings sent
-to `fillText`/`strokeText`. Score pops, level banners and the boss warning never
+to `fillText`/`strokeText`. It is a rolling window, so for a rare event in a long
+run call `clearPainted()` first — a too-small window once made a working mechanic
+read as "never happened". Score pops, level banners and the boss warning never
 reach the DOM, so that is the only way to assert on them — it is how the
 fourteen-worlds test reads the running order (the level label alone can't, since
 a world following itself would look like no change at all).

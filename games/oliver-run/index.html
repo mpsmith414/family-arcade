@@ -752,56 +752,56 @@
      hop = bounces high and low, zig = weaves up and down. */
   const BOSSES = [
     {id:'crateking', art:'crateking', name:'The Crate King', w:112,h:130, hp:5, plate:'#FFD23D',
-     pattern:'alt', spd:5.4, taunt:80},
+     pattern:'alt', spd:5.4, taunt:80, trick:'throw'},
     {id:'bigrex', art:'bigrex', name:'Big Rex', w:150,h:150, hp:6, plate:'#8BE05A',
-     pattern:'alt', spd:5.0, taunt:80},
+     pattern:'alt', spd:5.0, taunt:80, trick:'quake'},
     {id:'megarobo', art:'megarobo', name:'Mega Robo', w:112,h:136, hp:5, plate:'#6EE7F5',
-     pattern:'alt', spd:5.6, taunt:75},
+     pattern:'alt', spd:5.6, taunt:75, trick:'summon'},
     {id:'kingcrab', art:'kingcrab', name:'King Crab', w:170,h:132, hp:5, plate:'#FFAE5C',
-     pattern:'ground', spd:6.0, taunt:65},
+     pattern:'ground', spd:6.0, taunt:65, trick:'throw'},
 
     {id:'blob', name:'Bubble Blob', w:170,h:150, hp:6, plate:'#9BE8F5',
      body:'blob', c1:'#6FD3E8', c2:'#3898B5', accent:'#D6F6FF',
-     eyes:2, eyeR:15, mouth:'grin', pattern:'hop', spd:3.6, taunt:60},
+     eyes:2, eyeR:15, mouth:'grin', pattern:'hop', spd:3.6, taunt:60, trick:'summon'},
     {id:'knight', name:'Sir Stompsalot', w:104,h:124, hp:5, plate:'#E8E0C8',
      body:'box', c1:'#A8B0C4', c2:'#666F86', accent:'#E84A4A',
-     eyes:2, eyeR:8, mouth:'none', horns:true, legs:2, pattern:'ground', spd:6.6, taunt:52},
+     eyes:2, eyeR:8, mouth:'none', horns:true, legs:2, pattern:'ground', spd:6.6, taunt:52, trick:'quake'},
     {id:'zappy', name:'Zappy', w:74,h:78, hp:4, plate:'#FFF07A',
      body:'orb', c1:'#FFE24A', c2:'#E0A21F', accent:'#FFFBD6',
-     eyes:1, eyeR:16, mouth:'fangs', bolts:true, pattern:'air', spd:7.2, taunt:44},
+     eyes:1, eyeR:16, mouth:'fangs', bolts:true, pattern:'air', spd:7.2, taunt:44, trick:'summon'},
     {id:'grumble', name:'Grumbletooth', w:150,h:148, hp:6, plate:'#FFB3D9',
      body:'fur', c1:'#B06EF5', c2:'#6A35A8', accent:'#FFD6F0',
-     eyes:3, eyeR:11, mouth:'fangs', horns:true, arms:true, pattern:'alt', spd:5.2, taunt:76},
+     eyes:3, eyeR:11, mouth:'fangs', horns:true, arms:true, pattern:'alt', spd:5.2, taunt:76, trick:'throw'},
     {id:'squid', name:'Captain Squid', w:120,h:126, hp:5, plate:'#7CF5D0',
      body:'dome', c1:'#4FC3A1', c2:'#227A63', accent:'#D8FFF2',
-     eyes:2, eyeR:13, mouth:'grin', tentacles:6, pattern:'zig', spd:5.0, taunt:62},
+     eyes:2, eyeR:13, mouth:'grin', tentacles:6, pattern:'zig', spd:5.0, taunt:62, trick:'summon'},
     {id:'rocky', name:'Rocky Rumble', w:186,h:156, hp:7, plate:'#C9B48A',
      body:'rock', c1:'#8F8578', c2:'#5A5148', accent:'#C9B48A',
-     eyes:2, eyeR:12, mouth:'jaw', arms:true, pattern:'ground', spd:4.2, taunt:88},
+     eyes:2, eyeR:12, mouth:'jaw', arms:true, pattern:'ground', spd:4.2, taunt:88, trick:'quake'},
     {id:'snoozer', name:'The Snoozer', w:150,h:100, hp:4, plate:'#FFFFFF',
      body:'cloud', c1:'#E8EEFA', c2:'#B7C4DE', accent:'#8FA6CC',
-     eyes:2, eyeR:10, mouth:'grin', pattern:'air', spd:3.9, taunt:70},
+     eyes:2, eyeR:10, mouth:'grin', pattern:'air', spd:3.9, taunt:70, trick:'summon'},
     {id:'chompy', name:'Chompy', w:126,h:150, hp:5, plate:'#8BE05A',
      body:'plant', c1:'#4FD16A', c2:'#237A3B', accent:'#FF6A8A',
-     eyes:2, eyeR:9, mouth:'jaw', pattern:'ground', spd:5.8, taunt:60},
+     eyes:2, eyeR:9, mouth:'jaw', pattern:'ground', spd:5.8, taunt:60, trick:'throw'},
     {id:'frost', name:'Frostbite', w:118,h:144, hp:5, plate:'#BFE8FF',
      body:'crystal', c1:'#8FD8F5', c2:'#3E7FB5', accent:'#EAF9FF',
-     eyes:2, eyeR:10, mouth:'fangs', spikes:true, pattern:'alt', spd:5.5, taunt:70},
+     eyes:2, eyeR:10, mouth:'fangs', spikes:true, pattern:'alt', spd:5.5, taunt:70, trick:'throw'},
     {id:'lava', name:'Lava Lump', w:132,h:128, hp:5, plate:'#FFB03D',
      body:'blob', c1:'#F0453A', c2:'#9E1E14', accent:'#FFD23D',
-     eyes:2, eyeR:12, mouth:'fangs', flames:true, pattern:'hop', spd:4.6, taunt:58},
+     eyes:2, eyeR:12, mouth:'fangs', flames:true, pattern:'hop', spd:4.6, taunt:58, trick:'quake'},
     {id:'ghost', name:'Spooky Sam', w:112,h:132, hp:4, plate:'#E6E0FF',
      body:'ghost', c1:'#DCD6F7', c2:'#9B90CC', accent:'#6B5FA8',
-     eyes:2, eyeR:12, mouth:'grin', ghostly:true, pattern:'zig', spd:5.2, taunt:58},
+     eyes:2, eyeR:12, mouth:'grin', ghostly:true, pattern:'zig', spd:5.2, taunt:58, trick:'summon'},
     {id:'spider', name:'Mecha Spider', w:170,h:122, hp:6, plate:'#FF6A4D',
      body:'wide', c1:'#5C6784', c2:'#333B52', accent:'#FF4D3D',
-     eyes:4, eyeR:8, mouth:'none', legs:6, pattern:'ground', spd:6.8, taunt:56},
+     eyes:4, eyeR:8, mouth:'none', legs:6, pattern:'ground', spd:6.8, taunt:56, trick:'summon'},
     {id:'balloon', name:'Balloon Baron', w:92,h:120, hp:4, plate:'#FF8AD8',
      body:'orb', c1:'#FF7FA8', c2:'#C43F72', accent:'#FFE0EE',
-     eyes:2, eyeR:10, mouth:'grin', basket:true, pattern:'air', spd:4.8, taunt:64},
+     eyes:2, eyeR:10, mouth:'grin', basket:true, pattern:'air', spd:4.8, taunt:64, trick:'throw'},
     {id:'wall', name:'The Wall', w:196,h:166, hp:7, plate:'#E0A85C',
      body:'bricks', c1:'#B5653F', c2:'#7A3D22', accent:'#E0A85C',
-     eyes:2, eyeR:14, mouth:'jaw', pattern:'ground', spd:3.8, taunt:92},
+     eyes:2, eyeR:14, mouth:'jaw', pattern:'ground', spd:3.8, taunt:92, trick:'quake'},
   ];
   const BOSS_BY_ID = {};
   for (const b of BOSSES) BOSS_BY_ID[b.id] = b;
@@ -834,7 +834,7 @@
     return lvlBag.pop();
   }
 
-  const RUN_FRAMES = 1500;   // ~25s of running, then the boss shows up
+  const RUN_FRAMES = 2600;   // ~43s of running, then the boss shows up
   let lvlIndex = 0, lvlTimer = 0;
   const L = () => LEVELS[lvlIndex];
 
@@ -846,13 +846,13 @@
      Each has a big picture, because the audience is five. The words are for
      whoever is watching with them. */
   const CALL_STYLE = {
-    world: {life:200, icon:'flag',   color:'#FFD23D', rainbow:true},
-    boss:  {life:190, icon:'skull',  color:'#FF5A4D', shake:true},
-    win:   {life:220, icon:'trophy', color:'#FFD23D', rainbow:true},
-    power: {life:150, icon:'star',   color:'#FFD23D'},
-    super: {life:160, icon:'star',   color:'#FFD23D', rainbow:true},
-    best:  {life:150, icon:'crown',  color:'#FFD23D'},
-    info:  {life:140, icon:null,     color:'#FFFFFF'},
+    world: {life:200, icon:'flag',   color:'#FFD23D', rainbow:true, rank:3},
+    boss:  {life:190, icon:'skull',  color:'#FF5A4D', shake:true,   rank:3},
+    win:   {life:220, icon:'trophy', color:'#FFD23D', rainbow:true, rank:3},
+    power: {life:150, icon:'star',   color:'#FFD23D',               rank:2},
+    best:  {life:150, icon:'crown',  color:'#FFD23D',               rank:2},
+    super: {life:160, icon:'star',   color:'#FFD23D', rainbow:true, rank:1},
+    info:  {life:140, icon:null,     color:'#FFFFFF',               rank:1},
   };
   let call = null, callQueue = [];
   function announce(spec){
@@ -861,14 +861,28 @@
       text: String(spec.text || ''), sub: spec.sub || '',
       icon: spec.icon || st.icon, color: spec.color || st.color,
       rainbow: !!st.rainbow, shake: !!st.shake,
+      rank: st.rank || 1,
       life: spec.life || st.life,
     };
     a.span = a.life;
     // saying the same thing twice in a row is noise, not emphasis
     if (call && call.text === a.text) return;
     if (callQueue.some(c => c.text === a.text)) return;
-    if (!call || spec.now){ call = a; if (spec.now) callQueue.length = 0; }
-    else { callQueue.push(a); if (callQueue.length > 3) callQueue.shift(); }
+    if (!call || spec.now){ call = a; }
+    else {
+      /* Queue full: drop the least important thing waiting, not the oldest.
+         Dropping the oldest quietly ate the "swapped!" card whenever a fight
+         got loud — and a kid who just traded one power for another is owed
+         that feedback more than the screen is owed a tidy queue. An urgent
+         card no longer clears the queue either; it only takes the front. */
+      callQueue.push(a);
+      while (callQueue.length > 3){
+        let worst = 0;
+        for (let i=1;i<callQueue.length;i++)
+          if (callQueue[i].rank < callQueue[worst].rank) worst = i;
+        callQueue.splice(worst, 1);
+      }
+    }
   }
   function updateCalls(dt){
     if (!call){ call = callQueue.shift() || null; return; }
@@ -1046,7 +1060,7 @@
   function reset(){
     hero.y = GROUND; hero.vy = 0; hero.onGround = true; hero.run = 0; hero.push = 0;
     things=[]; structs=[]; pests=[]; walkers=[]; bodies=[]; stars=[]; bits=[]; pops=[]; confetti=[];
-    foes=[]; flyIn=140;
+    foes=[]; flyIn=140; junk=[];
     speed = 4.2; dist = 0; points = 0; spawnIn = 80; starIn = 150;
     shake=0; t=0; superT=0; charge=0; slow=0; combo=0; comboT=0;
     lvlBag=[]; lvlIndex=nextLevel(); lvlTimer=0; coyote=0; buffer=0;
@@ -1362,19 +1376,30 @@
     {id:'fire',   name:'FIRE RING',    c:'#FF6A2B', icon:'flame'},
     {id:'giant',  name:'GIANT MODE',   c:'#7CD16A', icon:'big'},
     {id:'tiny',   name:'TINY MODE',    c:'#6ED0F5', icon:'small'},
-    {id:'magnet', name:'STAR MAGNET',  c:'#FF8AD8', icon:'magnet'},
+    {id:'magnet', name:'STAR MAGNET',  c:'#FF8AD8', icon:'magnet', weight:.4},
     {id:'rocket', name:'ROCKET BOOTS', c:'#B06EF5', icon:'rocket'},
     {id:'wings',  name:'FLAPPY WINGS', c:'#FFE24A', icon:'wing'},
     {id:'zap',    name:'LIGHTNING',    c:'#6EE7F5', icon:'bolt'},
     {id:'bubble', name:'BOUNCY BUBBLE',c:'#8FD8F5', icon:'bubble'},
-    {id:'freeze', name:'FREEZE RAY',   c:'#BFE8FF', icon:'snow'},
+    {id:'freeze', name:'FREEZE RAY',   c:'#BFE8FF', icon:'snow', weight:.35},
   ];
   let power = null, powerIn = 0, orbs = [], jumpsLeft = 0;
   let boltT = 0, boltIn = 0, bolts = [];
   const P = id => !!power && power.id === id;
 
+  /* A quiet power gets one re-roll, so the loud ones come up more often.
+     Deliberately ONE re-roll and not a loop: rejection sampling can never
+     escape a biased RNG, and the tests bias the whole stream on purpose to
+     force a particular power. One extra draw is bounded whatever the stream
+     is doing. */
+  function pickPower(){
+    let def = POWERS[Math.floor(Math.random()*POWERS.length)];
+    if (def.weight && Math.random() > def.weight)
+      def = POWERS[Math.floor(Math.random()*POWERS.length)];
+    return def;
+  }
   function spawnOrb(){
-    const def = POWERS[Math.floor(Math.random()*POWERS.length)];
+    const def = pickPower();
     orbs.push({x:W+70, y: Math.random()<.5 ? GROUND-152 : GROUND-72, def, ph:Math.random()*6, got:false});
     powerIn = 900 + Math.random()*700;       // one along every 15–27s, always
   }
@@ -1428,6 +1453,49 @@
     return base;
   }
 
+  /* ---------- boss junk ----------
+     Everything a boss throws or shakes loose. It is a target, never a threat:
+     touching one smashes it for points, exactly like running into a crate.
+     Nothing in this game is allowed to punish a kid for being in the way. */
+  let junk = [];
+  function addJunk(x, y, vx, vy, big){
+    const lv = L(), d = lv.smash[Math.floor(Math.random()*lv.smash.length)];
+    junk.push({
+      x, y, vx, vy, w: big ? d.w*.9 : d.w*.7, h: big ? d.h*.9 : d.h*.7,
+      a: d.a, b: d.b, rot: Math.random()*6, spin: (Math.random()-.5)*.34, gone:false,
+    });
+    if (junk.length > 26) junk.splice(0, junk.length-26);
+  }
+  function updateJunk(dt, hit, sup){
+    for (const j of junk){
+      j.x += (j.vx - speed)*dt; j.y += j.vy*dt; j.vy += .34*dt; j.rot += j.spin*dt;
+      if (j.y > GROUND - j.h/2){ j.y = GROUND - j.h/2; j.vy *= -.42; j.vx *= .72; j.spin *= .6; }
+    }
+    junk = junk.filter(j => !j.gone && j.x > -120 && j.y < H+160);
+    for (const j of junk){
+      if (!hit(j.x-j.w/2, j.y-j.h/2, j.w, j.h)) continue;
+      j.gone = true;
+      const gain = sup ? 30 : 18;
+      points += gain; shake = 12;
+      burst(j.x, j.y, L().bits, sup?22:14, 7);
+      pop(j.x, j.y-24, 'SMASH! +'+gain, sup?'#FFD23D':'#FFFFFF', 24);
+      sfx.smash(); addCharge(sup?0:1.2); bumpCombo();
+    }
+  }
+  function drawJunk(){
+    for (const j of junk){
+      ctx.save();
+      ctx.translate(j.x, j.y); ctx.rotate(j.rot);
+      ctx.fillStyle = j.a; roundRect(-j.w/2, -j.h/2, j.w, j.h, 6); ctx.fill();
+      ctx.fillStyle = j.b;
+      ctx.fillRect(-j.w/2+4, -2.5, j.w-8, 5);
+      ctx.fillRect(-2.5, -j.h/2+4, 5, j.h-8);
+      ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 2.5;
+      roundRect(-j.w/2+2, -j.h/2+2, j.w-4, j.h-4, 6); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   /* ---------- boss ---------- */
   const BOSS_HOME = 660, BOSS_AIR = GROUND-118;
   function startBoss(){
@@ -1442,6 +1510,7 @@
     boss = {x: W+spec.w+60, y: spec.pattern==='air' ? BOSS_AIR : GROUND,
             hp: spec.hp+extra, max: spec.hp+extra, state:'enter', timer:0,
             vx:0, airborne:false, flash:0, wob:Math.random()*6, phase:0,
+            raged:false, trickIn: 70, chain:0,
             spec, plate: spec.plate};
     chargeCount = 0;
     skyIn = TUNE.bossFirst;          // open the high road over the arena
@@ -1462,6 +1531,12 @@
   function updateTrophies(){
     el.trophies.textContent = '🏆'.repeat(Math.min(trophies, 10)) +
       (trophies>10 ? ' ×'+trophies : '');
+  }
+  /* The closer it is to beaten, the less it stands about — a fight that
+     speeds up as it goes rather than five identical exchanges. */
+  function tauntFor(b){
+    const left = b.hp / b.max;
+    return Math.max(26, b.spec.taunt * (.55 + .45*left));
   }
   function bossBox(){
     const s = boss.spec;
@@ -1484,8 +1559,11 @@
       vx:(Math.random()-.5)*2.6, vy:1.4+Math.random()*3.2, c:RAINBOW[i%6],
       r:Math.random()*6, sp:(Math.random()-.5)*.4, life:250});
 
-    const gain = 250 + (mode==='rush' ? rushCount*25 : 0);
+    const gain = 250 + boss.max*40 + (mode==='rush' ? rushCount*25 : 0);
     points += gain; shake = 34; trophies++;
+    /* Something to carry out of the fight: a power of your choosing pops
+       out of the wreck, every time, whatever else you were holding. */
+    orbs.push({x: boss.x, y: GROUND-150, def: pickPower(), ph:Math.random()*6, got:false});
     if (trophies > bestTrophies){ bestTrophies = trophies; saveBest(); }
     updateTrophies();
     pop(boss.x, boss.y-s.h-40, '+'+gain, '#FFD23D', 36);
@@ -1505,18 +1583,64 @@
     el.bossWrap.hidden = true;
     phase = 'victory'; phaseT = 0;
   }
+  /* Each boss has one signature move it pulls between charges, so the wait
+     is something to play rather than something to sit through. None of them
+     can hurt anybody — a thrown crate is a crate you get to smash, and a
+     summoned critter is a critter you get to pop. */
+  function bossTrick(){
+    const b = boss, s = b.spec;
+    if (s.trick==='throw'){
+      /* Lobbed just short of the kids so it lands in front of them. Junk
+         drifts with the world at (vx - speed), so the throw has to add the
+         world speed back in or it rockets past before anyone can reach it. */
+      const dx = (hero.x + 70) - b.x;
+      addJunk(b.x - 20, b.y - s.h*.6, dx/58 + speed, -6 - Math.random()*3, false);
+      sfx.whoosh();
+    } else if (s.trick==='summon'){
+      const flying = Math.random() < .5;
+      addFoe(flying ? 'fly' : 'crawl', b.x - 20,
+             flying ? GROUND - (86 + Math.random()*70) : GROUND - FOE_KIND.crawl.r);
+      burst(b.x - 20, b.y - s.h*.5, ['#FFFFFF', b.plate], 14, 6);
+      sfx.pow();
+    } else {
+      // quake: the floor jumps and its rubble comes up with it
+      shake = Math.max(shake, 22);
+      // rubble rides the floor it came off, so it scrolls in like anything else
+      for (let i=0;i<4;i++)
+        addJunk(b.x - 40 - i*70, GROUND - 10, (Math.random()-.5)*1.2, -7 - Math.random()*4, false);
+      sfx.crumble();
+    }
+  }
+
   function updateBoss(dt, hitFn, sup){
     const b = boss, s = b.spec;
     if (b.flash>0) b.flash -= dt;
     b.wob += dt*.06;
 
+    /* Half health and it loses its temper: quicker on the charge, less time
+       spent posturing, and its trick comes twice as often. The fight has an
+       arc now instead of being the same exchange five times over. */
+    if (!b.raged && b.hp <= Math.floor(b.max/2)){
+      b.raged = true;
+      shake = 30; sfx.roar();
+      announce({kind:'boss', now:true, text:'IT IS FURIOUS!', sub:'Faster now — keep smashing!'});
+      burst(b.x, b.y-s.h*.5, ['#FF3B30','#FF8A3D','#FFD23D'], 34, 10);
+    }
+    const rage = b.raged ? 1.32 : 1;
+
+    // between charges it works the arena
+    if (b.state!=='enter' && b.state!=='charge'){
+      b.trickIn -= dt;
+      if (b.trickIn<=0){ bossTrick(); b.trickIn = (b.raged ? 70 : 130) + Math.random()*60; }
+    }
+
     if (b.state==='enter'){
       b.x -= 5.2*dt;
-      if (b.x <= BOSS_HOME){ b.x = BOSS_HOME; b.state='taunt'; b.timer = s.taunt; }
+      if (b.x <= BOSS_HOME){ b.x = BOSS_HOME; b.state='taunt'; b.timer = tauntFor(b); }
     } else if (b.state==='taunt'){
       const rest = s.pattern==='air' ? BOSS_AIR : GROUND;
       b.y += (rest - b.y)*.14*dt;
-      b.timer -= dt;
+      b.timer -= dt*rage;
       if (b.timer<=0){
         b.state = 'charge'; b.phase = 0;
         b.airborne = (chargeCount % 2 === 1);
@@ -1524,7 +1648,7 @@
         if (s.pattern!=='air') sfx.roar();
       }
     } else if (b.state==='charge'){
-      b.x -= s.spd*dt;
+      b.x -= s.spd*rage*dt;
       b.phase += dt*.075;
       let goal, ease = .16;
       switch (s.pattern){
@@ -1559,7 +1683,7 @@
       b.x += 6.4*dt;
       const rest = s.pattern==='air' ? BOSS_AIR : GROUND;
       b.y += (rest - b.y)*.12*dt;
-      if (b.x >= BOSS_HOME){ b.x = BOSS_HOME; b.state='taunt'; b.timer = s.taunt; }
+      if (b.x >= BOSS_HOME){ b.x = BOSS_HOME; b.state='taunt'; b.timer = tauntFor(b); }
     }
 
     const bb = bossBox();
@@ -1575,6 +1699,18 @@
         burst(b.x-30, b.y-s.h*.5, ['#FFFFFF','#FFD23D', b.plate], 26, 9);
         pop(b.x-20, b.y-s.h-16, b.hp>0 ? 'HIT! '+b.hp+' LEFT' : 'FINAL HIT!', '#FFD23D', 30);
         sfx.bossHit(); addCharge(sup?0:2.5); bumpCombo();
+
+        /* Land two or more hits without touching the ground and the bonus
+           climbs. It rewards staying up among the arena pads, which is where
+           the fight is most fun, and it costs nothing to ignore. */
+        b.chain = hero.onGround ? 1 : b.chain + 1;
+        if (b.chain >= 2){
+          const bonus = 75 * b.chain;
+          points += bonus;
+          pop(b.x-20, b.y-s.h-52, b.chain+' IN A ROW! +'+bonus, '#FF8AD8', 30);
+          announce({kind:'super', text:b.chain+'x AIR COMBO!', sub:'Never touched the floor'});
+          sfx.star();
+        }
         if (fromAbove){
           points += TUNE.skySmash;
           shake = 32;
@@ -1846,8 +1982,9 @@
       }
     }
 
-    /* the critters */
+    /* the critters, and whatever the boss has thrown at them */
     updateFoes(dt, hit, sup, chilled);
+    updateJunk(dt, hit, sup);
 
     /* multi-part walkers */
     for (const wk of walkers){ wk.x -= (speed + (chilled?0:.4))*dt; if (!chilled) wk.step += dt*.18; }
@@ -3759,6 +3896,24 @@
       g.addColorStop(1,'rgba(255,210,61,0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,-s.h*.5,gr,0,7); ctx.fill();
     }
+    /* Half beaten and it goes red hot, with steam coming off it. A kid needs
+       to be able to see the fight has changed without being told. */
+    if (b.raged){
+      const gr = Math.max(s.w, s.h)*.95;
+      const g = ctx.createRadialGradient(0,-s.h*.5,12,0,-s.h*.5,gr);
+      g.addColorStop(0,'rgba(255,59,48,'+(.26+Math.sin(t*.28)*.12)+')');
+      g.addColorStop(1,'rgba(255,59,48,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,-s.h*.5,gr,0,7); ctx.fill();
+      for (let i=0;i<4;i++){
+        const p = (t*.03 + i*.25) % 1;
+        ctx.globalAlpha = (1-p)*.5;
+        ctx.fillStyle = '#FFD9CF';
+        ctx.beginPath();
+        ctx.arc(Math.sin(i*2.1)*s.w*.3, -s.h - p*46, 5 + p*9, 0, 7);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
     if (b.flash>0 && Math.floor(t/3)%2===0) ctx.globalAlpha = .4;
 
     const hp = b.hp;
@@ -3934,6 +4089,7 @@
     for (const s of structs) drawStruct(s);
     for (const wk of walkers) drawWalker(wk);
     for (const f of foes) drawFoe(f, P('freeze') && !f.flung);
+    drawJunk();
     drawBoss();
     for (const b of bodies) drawBody(b);
     for (const b of pests) drawPest(b);

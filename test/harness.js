@@ -196,10 +196,16 @@ function makeCtx(canvas, sink) {
     shadowBlur: 0, shadowColor: 'rgba(0,0,0,0)', shadowOffsetX: 0, shadowOffsetY: 0,
     filter: 'none', imageSmoothingEnabled: true, imageSmoothingQuality: 'low',
   };
+  /* Rolling window, and big enough to hold a long run: at 4000 entries a
+     20,000-frame test only remembered its last few seconds, so anything that
+     happened rarely — a boss trick, one smashed crate — had scrolled out
+     before the assertion ran and read as "never happened". A test that wants
+     a precise count should still clearPainted() first and keep the window
+     short; this ceiling only exists to stop a runaway run eating memory. */
   const paint = text => {
     if (!sink) return;
     sink.push(String(text == null ? '' : text));
-    if (sink.length > 4000) sink.splice(0, sink.length - 4000);
+    if (sink.length > 250000) sink.splice(0, sink.length - 250000);
   };
   const special = {
     fillText: paint,
