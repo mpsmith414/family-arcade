@@ -253,7 +253,7 @@
 
 <script>
 (() => {
-  const W = 900, H = 450, GROUND = 366;
+  const W = 900, H = 450, GROUND = 366, CEILING = 96;
   /* Every number that changes how the high road feels. Tune these with a
      six-year-old sitting next to you; nothing else should need touching. */
   const TUNE = {
@@ -456,6 +456,9 @@
         {shape:'crate', w:46,h:80, a:'#A06B33', b:'#6B4520', big:true},
       ],
       bits:['#C08A4A','#8A5A2B','#5E3A18','#FFD23D'],
+      foe:{ c1:'#6B3FA0', c2:'#3A1F5C', accent:'#FFD23D',
+            crawlShape:'bug', flyShape:'bat', bruteShape:'box',
+            crawlName:'Sewer Scuttler', flyName:'Roof Gremlin', bruteName:'Crate Bruiser' },
     },
     {
       name:'Dino Jungle', music:'jungle', banner:'DINO JUNGLE', night:false, celestial:'sun', decor:'trees',
@@ -473,6 +476,9 @@
         {shape:'rock', w:54,h:78, a:'#A2B2BA', b:'#63737B', big:true},
       ],
       bits:['#E09A52','#95A6AE','#7A5230','#8BE05A'],
+      foe:{ c1:'#57C777', c2:'#2E8A47', accent:'#FFD23D',
+            crawlShape:'bug', flyShape:'bat', bruteShape:'rock',
+            crawlName:'Leaf Nipper', flyName:'Pterry', bruteName:'Stomposaur' },
     },
     {
       name:'Space Station', music:'space', banner:'SPACE STATION', night:true, celestial:'planet', decor:'city',
@@ -491,6 +497,9 @@
         {shape:'crystal',w:50,h:82, a:'#7CF5D0', b:'#2E9E80', big:true},
       ],
       bits:['#6EE7F5','#B06EF5','#7CF5D0','#FFD23D'],
+      foe:{ c1:'#6EE7F5', c2:'#2E8FB0', accent:'#B06EF5',
+            crawlShape:'blob', flyShape:'drone', bruteShape:'box',
+            crawlName:'Goo Creeper', flyName:'Patrol Drone', bruteName:'Heavy Bot' },
     },
     {
       name:'Coral Reef', music:'reef', banner:'CORAL REEF', night:false, celestial:'rays', decor:'kelp',
@@ -508,6 +517,9 @@
         {shape:'coral',  w:52,h:84, a:'#FFAE5C', b:'#D97B2B', big:true},
       ],
       bits:['#FF7FA8','#FFAE5C','#B5793F','#8FE0D6'],
+      foe:{ c1:'#FF7FA8', c2:'#D24C7C', accent:'#7CF5D0',
+            crawlShape:'bug', flyShape:'blob', bruteShape:'rock',
+            crawlName:'Nipper Shrimp', flyName:'Drifty Jelly', bruteName:'Boulder Clam' },
     },
 
     /* ---- the ten later worlds ----
@@ -537,6 +549,9 @@
         {shape:'gumdrop',w:54,h:82, a:'#B274EB', b:'#6B2BA8', big:true},
       ],
       bits:['#FF8AD8','#FFF3D6','#8BE05A','#7CD1F5'],
+      foe:{ c1:'#FF6FA8', c2:'#C43F72', accent:'#FFF3D6',
+            crawlShape:'blob', flyShape:'blob', bruteShape:'blob',
+            crawlName:'Jelly Bean', flyName:'Floating Fizz', bruteName:'Gumdrop Giant' },
     },
     {
       name:'Frozen Peaks', music:'ice', banner:'FROZEN PEAKS', night:false, celestial:'sun', decor:'mountains',
@@ -555,6 +570,9 @@
         {shape:'ice',    w:52,h:82, a:'#E6F7FF', b:'#6FA8D0', big:true},
       ],
       bits:['#BFE8FF','#FFFFFF','#8FD8F5','#5F93BE'],
+      foe:{ c1:'#BFE8FF', c2:'#5F93BE', accent:'#FFFFFF',
+            crawlShape:'blob', flyShape:'bat', bruteShape:'rock',
+            crawlName:'Snow Scuttler', flyName:'Frost Flitter', bruteName:'Ice Bruiser' },
     },
     {
       name:'Volcano Rush', music:'lava', banner:'VOLCANO RUSH', night:false, celestial:'ember', decor:'volcano',
@@ -573,6 +591,9 @@
         {shape:'rock',  w:56,h:80, a:'#FF6A2B', b:'#9E2E12', big:true},
       ],
       bits:['#FF6A2B','#FFD23D','#8A3A22','#F5A03D'],
+      foe:{ c1:'#FF6A2B', c2:'#9E2E12', accent:'#FFD23D',
+            crawlShape:'bug', flyShape:'blob', bruteShape:'rock',
+            crawlName:'Cinder Crawler', flyName:'Fire Flitter', bruteName:'Magma Lump' },
     },
     {
       name:'Haunted Hollow', music:'spooky', banner:'HAUNTED HOLLOW', night:true, celestial:'moon', decor:'deadtrees',
@@ -591,6 +612,9 @@
         {shape:'pumpkin',w:58,h:80, a:'#FFB03D', b:'#C4661F', big:true},
       ],
       bits:['#8BE05A','#FF8A3D','#B49BE0','#E6E0FF'],
+      foe:{ c1:'#B49BE0', c2:'#4B3A6B', accent:'#8BE05A',
+            crawlShape:'bug', flyShape:'bat', bruteShape:'blob',
+            crawlName:'Grave Crawler', flyName:'Flappy Spook', bruteName:'Big Boo' },
     },
     {
       name:'Cloud Castle', music:'sky', banner:'CLOUD CASTLE', night:false, celestial:'sun', decor:'clouds',
@@ -609,6 +633,9 @@
         {shape:'crystal',w:52,h:84, a:'#FFF3D6', b:'#D9BE6B', big:true},
       ],
       bits:['#FFF3D6','#FFD23D','#CFE8FF','#FFFFFF'],
+      foe:{ c1:'#FFF3D6', c2:'#B5A47E', accent:'#FFD23D',
+            crawlShape:'blob', flyShape:'bat', bruteShape:'box',
+            crawlName:'Puff Scuttler', flyName:'Sky Flitter', bruteName:'Thunder Lump' },
     },
     {
       name:'Robot Factory', music:'factory', banner:'ROBOT FACTORY', night:true, celestial:'none', decor:'gears',
@@ -628,6 +655,9 @@
         {shape:'gear',  w:58,h:80, a:'#C3CCE0', b:'#5C6784', big:true},
       ],
       bits:['#FFB03D','#8D98B5','#6EE7F5','#C4642B'],
+      foe:{ c1:'#8D98B5', c2:'#3A4358', accent:'#FFB03D',
+            crawlShape:'bug', flyShape:'drone', bruteShape:'box',
+            crawlName:'Nut Scuttler', flyName:'Buzz Drone', bruteName:'Crusher Bot' },
     },
     {
       name:'Golden Dunes', music:'desert', banner:'GOLDEN DUNES', night:false, celestial:'sun', decor:'dunes',
@@ -646,6 +676,9 @@
         {shape:'cactus',w:52,h:84, a:'#6BC47A', b:'#33804A', big:true},
       ],
       bits:['#FFD23D','#D98A4A','#4FA85E','#E8C078'],
+      foe:{ c1:'#D98A4A', c2:'#8A4E22', accent:'#FFD23D',
+            crawlShape:'bug', flyShape:'bat', bruteShape:'rock',
+            crawlName:'Sand Scuttler', flyName:'Dune Flitter', bruteName:'Rock Giant' },
     },
     {
       name:'Mushroom Forest', music:'fungus', banner:'MUSHROOM FOREST', night:true, celestial:'moons', decor:'mushrooms',
@@ -664,6 +697,9 @@
         {shape:'mushroom',w:58,h:84, a:'#FFD23D', b:'#B5851F', big:true},
       ],
       bits:['#7CF5D0','#FF6FA8','#FFD23D','#B274EB'],
+      foe:{ c1:'#7CF5D0', c2:'#2E9E80', accent:'#FF6FA8',
+            crawlShape:'blob', flyShape:'blob', bruteShape:'blob',
+            crawlName:'Spore Crawler', flyName:'Puffball', bruteName:'Toadstool Titan' },
     },
     {
       name:'Neon Speedway', music:'neon', banner:'NEON SPEEDWAY', night:true, celestial:'aurora', decor:'city',
@@ -683,6 +719,9 @@
         {shape:'crystal',w:52,h:84, a:'#FFF07A', b:'#B58A1F', big:true},
       ],
       bits:['#3DF5FF','#FF3DAE','#FFF07A','#B274EB'],
+      foe:{ c1:'#3DF5FF', c2:'#1A7A8A', accent:'#FF3DAE',
+            crawlShape:'blob', flyShape:'drone', bruteShape:'box',
+            crawlName:'Glitch Crawler', flyName:'Neon Drone', bruteName:'Bass Bin' },
     },
     {
       name:'Pirate Cove', music:'pirate', banner:'PIRATE COVE', night:true, celestial:'storm', decor:'ships',
@@ -701,6 +740,9 @@
         {shape:'chest', w:60,h:80, a:'#D9A93D', b:'#8A6420', big:true},
       ],
       bits:['#FFD23D','#B5793F','#7CF5D0','#8AA8B5'],
+      foe:{ c1:'#7CF5D0', c2:'#227A63', accent:'#FFD23D',
+            crawlShape:'bug', flyShape:'bat', bruteShape:'rock',
+            crawlName:'Dock Scuttler', flyName:'Sea Flitter', bruteName:'Barnacle Brute' },
     },
   ];
   /* ---------- boss roster ----------
@@ -794,10 +836,48 @@
 
   const RUN_FRAMES = 1500;   // ~25s of running, then the boss shows up
   let lvlIndex = 0, lvlTimer = 0;
-  let banner = 0, bannerText = '', bannerSub = '', bannerBig = false;
   const L = () => LEVELS[lvlIndex];
+
+  /* ---------- announcements ----------
+     Everything worth shouting about goes through one queue, so a new world
+     arriving can no longer wipe the boss it just beat off the screen — which
+     is exactly what happened when each of these wrote into a single slot.
+
+     Each has a big picture, because the audience is five. The words are for
+     whoever is watching with them. */
+  const CALL_STYLE = {
+    world: {life:200, icon:'flag',   color:'#FFD23D', rainbow:true},
+    boss:  {life:190, icon:'skull',  color:'#FF5A4D', shake:true},
+    win:   {life:220, icon:'trophy', color:'#FFD23D', rainbow:true},
+    power: {life:150, icon:'star',   color:'#FFD23D'},
+    super: {life:160, icon:'star',   color:'#FFD23D', rainbow:true},
+    best:  {life:150, icon:'crown',  color:'#FFD23D'},
+    info:  {life:140, icon:null,     color:'#FFFFFF'},
+  };
+  let call = null, callQueue = [];
+  function announce(spec){
+    const st = CALL_STYLE[spec.kind] || CALL_STYLE.info;
+    const a = {
+      text: String(spec.text || ''), sub: spec.sub || '',
+      icon: spec.icon || st.icon, color: spec.color || st.color,
+      rainbow: !!st.rainbow, shake: !!st.shake,
+      life: spec.life || st.life,
+    };
+    a.span = a.life;
+    // saying the same thing twice in a row is noise, not emphasis
+    if (call && call.text === a.text) return;
+    if (callQueue.some(c => c.text === a.text)) return;
+    if (!call || spec.now){ call = a; if (spec.now) callQueue.length = 0; }
+    else { callQueue.push(a); if (callQueue.length > 3) callQueue.shift(); }
+  }
+  function updateCalls(dt){
+    if (!call){ call = callQueue.shift() || null; return; }
+    call.life -= dt;
+    if (call.life <= 0) call = callQueue.shift() || null;
+  }
+  // kept so every old call site still reads the way it did
   function showBanner(text, sub, big){
-    banner = big ? 220 : 160; bannerText = text; bannerSub = sub || ''; bannerBig = !!big;
+    announce({text, sub, kind: big ? 'win' : 'world'});
   }
 
   /* ---------- backdrop generators ---------- */
@@ -935,9 +1015,9 @@
   const hero = {x:160, y:GROUND, vy:0, w:34, h:50, onGround:true, run:0, push:0, sc:1};
   let things=[], structs=[], pests=[], walkers=[], bodies=[], stars=[], bits=[], pops=[], confetti=[];
   let speed, dist, points, spawnIn, starIn, shake, t, superT, charge, slow, combo, comboT;
-  let coyote=0, buffer=0;
+  let coyote=0, buffer=0, airT=0;
   let phase, phaseT, boss, trophies, chargeCount;
-  let mode = 'adventure', rushCount = 0;
+  let mode = 'adventure', rushCount = 0, beatBest = false;
   let trail = [];
   /* Sky lane. Its randomness comes from a dedicated PRNG so the Math.random()
      stream stays byte-identical for anyone who never leaves the ground —
@@ -966,14 +1046,17 @@
   function reset(){
     hero.y = GROUND; hero.vy = 0; hero.onGround = true; hero.run = 0; hero.push = 0;
     things=[]; structs=[]; pests=[]; walkers=[]; bodies=[]; stars=[]; bits=[]; pops=[]; confetti=[];
+    foes=[]; flyIn=140;
     speed = 4.2; dist = 0; points = 0; spawnIn = 80; starIn = 150;
     shake=0; t=0; superT=0; charge=0; slow=0; combo=0; comboT=0;
-    lvlBag=[]; lvlIndex=nextLevel(); lvlTimer=0; banner=0; coyote=0; buffer=0;
+    lvlBag=[]; lvlIndex=nextLevel(); lvlTimer=0; coyote=0; buffer=0;
+    call=null; callQueue=[]; beatBest=false; airT=0;
     phase='run'; phaseT=0; boss=null; trophies=0; chargeCount=0;
     rushCount = 0; bag = [];
     trail = [];
     platforms = []; skyIn = TUNE.firstCluster; skyRnd = rnd(TUNE.skySeed);
     power = null; orbs = []; powerIn = 420; jumpsLeft = 0; hero.sc = 1;
+    boltT = 0; boltIn = 0; bolts = [];
     el.powerTag.hidden = true;
     el.bossWrap.hidden = true; el.trophies.textContent = '';
     el.score.textContent = '0'; el.lvlName.textContent = L().name;
@@ -989,16 +1072,34 @@
   function tryJump(){
     if (buffer<=0) return;
     const grounded = hero.onGround || coyote>0;
-    if (!grounded && jumpsLeft<=0) return;
-    if (!grounded) jumpsLeft--;
+    /* Wings turn the one button into a flap: every press lifts you again,
+       for ever, with no counter to run down and nothing to get wrong. */
+    const flapping = P('wings') && !grounded;
+    if (!grounded && !flapping && jumpsLeft<=0) return;
+    if (!grounded && !flapping) jumpsLeft--;
     let jv = L().jump;
     if (P('tiny')) jv *= 1.10;
     if (P('rocket')) jv *= 1.12;
     if (P('giant')) jv *= 1.06;
-    hero.vy = jv; hero.onGround = false; coyote = 0; buffer = 0;
+    if (flapping){
+      /* Flaps stack, and they fade out as you climb. Both halves were learned
+         by measuring it: clamping each flap to a fixed lift left a tapping kid
+         hovering at knee height, unable to reach platforms a plain jump
+         reaches; letting them stack all the way pinned them to the top of the
+         screen, cruising over every star in the game. Fading the lift between
+         those two heights leaves a masher rising and falling through exactly
+         the band where the platforms, stars and orbs live. */
+      jv *= .62;
+      const climb = Math.max(0, Math.min(1, (hero.y - 150) / 170));
+      hero.vy = Math.max(L().jump*1.2, Math.min(hero.vy + jv*.8*climb, jv*climb));
+    } else {
+      hero.vy = Math.min(hero.vy, jv);
+    }
+    hero.onGround = false; coyote = 0; buffer = 0;
     const base = hero.y;
     for (let i=0;i<7;i++) bits.push({x:hero.x,y:base,vx:-1-Math.random()*2.5,vy:-Math.random()*2,
-      life:20,c: grounded ? 'rgba(255,255,255,.7)' : '#FFB03D',s:4,rot:0,spin:0});
+      life:20,c: grounded ? 'rgba(255,255,255,.7)' : (flapping ? '#FFE24A' : '#FFB03D'),
+      s:4,rot:0,spin:0});
     sfx.jump();
     if (!grounded) sfx.whoosh();
   }
@@ -1056,6 +1157,7 @@
     charge = Math.min(CHARGE_MAX, charge+n);
     if (charge>=CHARGE_MAX){
       superT = 520; charge = 0; sfx.sup();
+      announce({kind:'super', text:'SUPER!', sub:'Everything you touch explodes'});
       pop(hero.x+50, hero.y-110, 'SUPER!', '#FFD23D', 42);
       for (let i=0;i<54;i++) confetti.push({x:Math.random()*W,y:-10-Math.random()*180,
         vx:(Math.random()-.5)*2, vy:1.4+Math.random()*2.4, c:RAINBOW[i%6], r:Math.random()*6,
@@ -1071,6 +1173,103 @@
     bodies.push({x,y,w,h,c1,c2,style,shape:extra||'block',
       vx: 3+Math.random()*8, vy: -6-Math.random()*7,
       rot:(Math.random()-.5)*.6, spin:(Math.random()-.5)*.5, rest:0});
+  }
+
+  /* ---------- the critters ----------
+     Four shapes of trouble, on the same principle as the eighteen bosses:
+     one drawing routine that composes a body from flags, coloured out of the
+     world's own palette, so all fourteen worlds get their own creatures
+     without fourteen sets of hand-drawn sprites.
+
+       crawl  low and quick, scuttles at you — pop it at a dead run
+       fly    up at jump height, weaving — you have to leave the ground
+       swarm  a line of tiny ones at mixed heights, one long combo
+       brute  big and slow, three knocks before it bursts
+
+     None of them can hurt anybody. A brute knocks you back half a step and
+     that is the whole of it — no lives, no damage, nothing to lose. */
+  const FOE_KIND = {
+    crawl: {r:17, hp:1, pts:20, spdAdd:2.2, sfx:'pow'},
+    fly:   {r:19, hp:1, pts:25, spdAdd:1.0, sfx:'pow'},
+    swarm: {r:12, hp:1, pts:15, spdAdd:1.6, sfx:'bone'},
+    brute: {r:44, hp:3, pts:60, spdAdd:-.9, sfx:'bonk'},
+  };
+  let foes = [], flyIn = 0;
+
+  function foeSpec(kind){
+    const f = L().foe || {};
+    return {
+      kind,
+      c1: f.c1 || L().block.a, c2: f.c2 || L().block.b,
+      accent: f.accent || L().line,
+      shape: (kind==='fly' ? f.flyShape : kind==='brute' ? f.bruteShape : f.crawlShape) || 'bug',
+      name: f[kind+'Name'] || 'Critter',
+    };
+  }
+  function addFoe(kind, x, y){
+    const k = FOE_KIND[kind], spec = foeSpec(kind);
+    foes.push({
+      kind, spec, x, y, hp:k.hp, r:k.r,
+      vx:0, vy:0, rot:0, spin:0, flung:false, hurt:0,
+      ph: Math.random()*6.28, base:y, wob: .5+Math.random(),
+    });
+  }
+  function spawnCrawler(){ addFoe('crawl', W+60, GROUND-FOE_KIND.crawl.r); }
+  function spawnBrute(){ addFoe('brute', W+90, GROUND-FOE_KIND.brute.r); }
+  function spawnFlyer(){
+    // GROUND-150 is right at the top of a plain jump; -80 is a low weave
+    addFoe('fly', W+60, GROUND - (78 + Math.random()*84));
+  }
+  function spawnSwarm(){
+    const n = 3 + Math.floor(Math.random()*3);
+    const y0 = GROUND - (60 + Math.random()*110);
+    for (let i=0;i<n;i++) addFoe('swarm', W+60+i*46, y0 + Math.sin(i)*22);
+  }
+
+  function updateFoes(dt, hit, sup, chilled){
+    for (const f of foes){
+      if (f.hurt>0) f.hurt -= dt;
+      if (f.flung){ f.x += f.vx*dt; f.y += f.vy*dt; f.vy += .5*dt; f.rot += f.spin*dt; continue; }
+      /* Frozen solid: it stops dead, and touching it shatters it for double.
+         Standing still is the point — a five-year-old gets to walk up and
+         break things at their own speed for once. */
+      if (chilled){ f.x -= speed*dt; continue; }
+      f.ph += dt*.06;
+      f.x -= (speed + FOE_KIND[f.kind].spdAdd)*dt;
+      if (f.kind==='fly')   f.y = f.base + Math.sin(f.ph*1.7)*26*f.wob;
+      if (f.kind==='swarm') f.y = f.base + Math.sin(f.ph*2.3)*16;
+      if (f.kind==='crawl') f.y = GROUND - f.r + Math.abs(Math.sin(f.ph*3))*5;
+    }
+    foes = foes.filter(f => f.x > -180 && f.x < W+520 && f.y < H+260);
+
+    for (const f of foes){
+      if (f.flung) continue;
+      const box = {x:f.x-f.r, y:f.y-f.r, w:f.r*2, h:f.r*2};
+      if (!hit(box.x, box.y, box.w, box.h)) continue;
+      const k = FOE_KIND[f.kind];
+      const oneShot = sup || chilled || f.kind!=='brute';
+      f.hp = oneShot ? 0 : f.hp-1;
+      if (f.hp>0){
+        // a brute shrugs it off, shoves back, and comes again
+        f.hurt = 22; f.x += 46; hero.push = 9; shake = 16;
+        points += 20;
+        burst(f.x, f.y, ['#FFFFFF', f.spec.accent], 16, 7);
+        pop(f.x, f.y-f.r-14, 'CLONK! '+f.hp+' LEFT', '#FFFFFF', 26);
+        sfx.bonk(); addCharge(sup?0:1.4); bumpCombo();
+        continue;
+      }
+      f.flung = true;
+      f.vx = 8+Math.random()*7; f.vy = -9-Math.random()*6;
+      f.spin = (Math.random()<.5?-1:1)*(.2+Math.random()*.22);
+      const gain = Math.round(k.pts * (sup?2:1) * (chilled?2:1));
+      points += gain; shake = f.kind==='brute' ? 26 : 12;
+      burst(f.x, f.y, chilled ? ['#FFFFFF','#BFE8FF','#8FD8F5']
+                              : ['#FFFFFF','#FFD23D', f.spec.accent], sup?26:18, 8);
+      pop(f.x, f.y-f.r-18,
+          (chilled ? 'SHATTER! +' : f.kind==='brute' ? 'TIMBER! +' : 'POW! +')+gain,
+          chilled ? '#BFE8FF' : '#FF8AD8', f.kind==='brute' ? 34 : 28);
+      sfx[k.sfx](); addCharge(sup?0:(f.kind==='brute'?3:1.8)); bumpCombo();
+    }
   }
 
   /* ---------- spawning ---------- */
@@ -1102,15 +1301,23 @@
       ],
     });
   }
+  /* Twice as much going on as there used to be, but not twice as much of
+     everything: the poppable half — critters, swarms, the world's own pest —
+     is what doubled. Big smashables still arrive at the old rate, because
+     those are the only things that slow you down, and a run made of nothing
+     but BONKs is a punishment however loud it is. */
   function spawn(){
     const lv = L(), r = Math.random();
-    if (r < .38){
+    if (r < .19){
       const d = lv.smash[Math.floor(Math.random()*lv.smash.length)];
       things.push({x:W+60, gone:false, shape:d.shape, w:d.w, h:d.h, a:d.a, b:d.b, big:!!d.big});
-    } else if (r < .60){ makeStructure(); }
-    else if (r < .80){ pests.push({x:W+60, y:GROUND, vx:0, vy:0, rot:0, spin:0, flung:false, bob:Math.random()*6, kind:lv.pest}); }
-    else { makeWalker(); }
-    spawnIn = Math.max(78, 150 - speed*6) + Math.random()*75;
+    } else if (r < .30){ makeStructure(); }
+    else if (r < .44){ pests.push({x:W+60, y:GROUND, vx:0, vy:0, rot:0, spin:0, flung:false, bob:Math.random()*6, kind:lv.pest}); }
+    else if (r < .54){ makeWalker(); }
+    else if (r < .74){ spawnCrawler(); }
+    else if (r < .88){ spawnSwarm(); }
+    else { spawnBrute(); }
+    spawnIn = Math.max(40, 78 - speed*3) + Math.random()*40;
   }
   function spawnStar(){
     stars.push({x:W+60, y: Math.random()<.6 ? GROUND-140 : GROUND-64, got:false, p:Math.random()*6});
@@ -1143,33 +1350,49 @@
                   : skyRange(TUNE.clusterGapMin, TUNE.clusterGapMax);
   }
 
-  /* ---------- power-ups ---------- */
+  /* ---------- power-ups ----------
+     A power lasts until you pick up another one. There is no timer and no
+     way to lose one, so the only decision is whether the orb floating towards
+     you is better than what you are already holding — which is a decision a
+     five-year-old can actually make, unlike "spend it before it runs out".
+
+     Every one of them is either automatic or maps onto the single button. */
   const POWERS = [
-    {id:'dog',    name:'RIDE THE DOG', dur:900, c:'#C98A4A', icon:'paw'},
-    {id:'fire',   name:'FIRE RING',    dur:750, c:'#FF6A2B', icon:'flame'},
-    {id:'giant',  name:'GIANT MODE',   dur:690, c:'#7CD16A', icon:'big'},
-    {id:'tiny',   name:'TINY MODE',    dur:750, c:'#6ED0F5', icon:'small'},
-    {id:'magnet', name:'STAR MAGNET',  dur:810, c:'#FF8AD8', icon:'magnet'},
-    {id:'rocket', name:'ROCKET BOOTS', dur:810, c:'#B06EF5', icon:'rocket'},
+    {id:'dog',    name:'RIDE THE DOG', c:'#C98A4A', icon:'paw'},
+    {id:'fire',   name:'FIRE RING',    c:'#FF6A2B', icon:'flame'},
+    {id:'giant',  name:'GIANT MODE',   c:'#7CD16A', icon:'big'},
+    {id:'tiny',   name:'TINY MODE',    c:'#6ED0F5', icon:'small'},
+    {id:'magnet', name:'STAR MAGNET',  c:'#FF8AD8', icon:'magnet'},
+    {id:'rocket', name:'ROCKET BOOTS', c:'#B06EF5', icon:'rocket'},
+    {id:'wings',  name:'FLAPPY WINGS', c:'#FFE24A', icon:'wing'},
+    {id:'zap',    name:'LIGHTNING',    c:'#6EE7F5', icon:'bolt'},
+    {id:'bubble', name:'BOUNCY BUBBLE',c:'#8FD8F5', icon:'bubble'},
+    {id:'freeze', name:'FREEZE RAY',   c:'#BFE8FF', icon:'snow'},
   ];
   let power = null, powerIn = 0, orbs = [], jumpsLeft = 0;
+  let boltT = 0, boltIn = 0, bolts = [];
   const P = id => !!power && power.id === id;
 
   function spawnOrb(){
     const def = POWERS[Math.floor(Math.random()*POWERS.length)];
     orbs.push({x:W+70, y: Math.random()<.5 ? GROUND-152 : GROUND-72, def, ph:Math.random()*6, got:false});
-    powerIn = 1200 + Math.random()*900;      // roughly every 20–35s
+    powerIn = 900 + Math.random()*700;       // one along every 15–27s, always
   }
   function activate(def){
-    power = {id:def.id, name:def.name, t:def.dur, max:def.dur, c:def.c};
+    const swapped = !!power && power.id !== def.id;
+    power = {id:def.id, name:def.name, c:def.c, icon:def.icon};
     el.powerTag.hidden = false;
     el.powerName.textContent = def.name;
     el.powerName.style.color = def.c;
     el.powerBar.style.background = def.c;
-    el.powerBar.style.width = '100%';
-    pop(hero.x+40, hero.y-150, def.name+'!', def.c, 32);
+    el.powerBar.style.width = '100%';        // a solid strip now, not a timer
+    announce({
+      text: def.name, sub: swapped ? 'Swapped!' : 'Got it! Keep it as long as you like',
+      icon: def.icon, color: def.c, kind:'power',
+    });
     burst(hero.x, hero.y-40, [def.c,'#FFFFFF','#FFD23D'], 30, 8);
     shake = 16;
+    jumpsLeft = 0; boltIn = 26; bolts = [];
     sfx.power();
     if (def.id==='dog') setTimeout(()=>sfx.bark(), 260);
   }
@@ -1182,19 +1405,25 @@
   }
   // dog lifts both kids onto its back; giant/tiny change their size
   const RIDE_H = 40;
-  function heroBase(){ return P('dog') ? GROUND - RIDE_H : GROUND; }
   function targetScale(){ return P('giant') ? 1.75 : P('tiny') ? .58 : 1; }
 
   /* The surface the hero would land on this frame. Platforms are one-way:
      they only catch a hero who was at or above the top edge last frame, so
      jumping up through one never collides. Uses foot position, not the body
-     box — the body box is what caused the old hitbox-to-the-ground bug. */
+     box — the body box is what caused the old hitbox-to-the-ground bug.
+
+     The dog rides the high road too. It used to skip platforms entirely,
+     which was survivable when it wore off after fifteen seconds and is not
+     now a power lasts until you swap it: a permanent dog would have meant a
+     permanently closed sky lane. It carries the kids RIDE_H above whatever
+     they land on instead. */
   function landingY(prevY){
-    let base = heroBase();
-    if (P('dog')) return base;
+    const lift = P('dog') ? RIDE_H : 0;
+    let base = GROUND - lift;
     for (const p of platforms){
       if (hero.x < p.x - 6 || hero.x > p.x + p.w + 6) continue;
-      if (prevY <= p.y + 2 && p.y < base) base = p.y;
+      const top = p.y - lift;
+      if (prevY <= top + 2 && top < base) base = top;
     }
     return base;
   }
@@ -1222,8 +1451,10 @@
     el.bossWrap.hidden = false;
     updateBossBar();
     sfx.roar();
-    showBanner(spec.name.toUpperCase(),
-      'Smash it ' + boss.max + ' times!' + (spec.pattern==='air' ? '   (jump!)' : ''));
+    announce({
+      kind:'boss', now:true, text: spec.name.toUpperCase(),
+      sub: 'Smash it ' + boss.max + ' times!' + (spec.pattern==='air' ? '   Jump for it!' : ''),
+    });
   }
   function updateBossBar(){
     el.bossBar.style.width = (boss ? boss.hp/boss.max*100 : 0)+'%';
@@ -1258,11 +1489,12 @@
     if (trophies > bestTrophies){ bestTrophies = trophies; saveBest(); }
     updateTrophies();
     pop(boss.x, boss.y-s.h-40, '+'+gain, '#FFD23D', 36);
-    showBanner('BOSS DOWN!',
-      mode==='rush'
+    announce({
+      kind:'win', now:true, text:'BOSS DOWN!',
+      sub: mode==='rush'
         ? s.name + ' beaten!   ' + trophies + ' down' + (bag.length ? '' : '  —  all 18!')
         : 'Trophy earned  ' + '🏆'.repeat(Math.min(trophies,6)),
-      true);
+    });
     sfx.bossDown();
 
     setMusic(L().music);
@@ -1301,6 +1533,19 @@
         case 'hop':    goal = GROUND - Math.abs(Math.sin(b.phase*1.5))*152; ease = .5; break;
         case 'zig':    goal = GROUND - 64 - Math.sin(b.phase*1.25)*60; ease = .45; break;
         default:       goal = b.airborne ? BOSS_AIR : GROUND;
+      }
+      /* A boss comes after a kid who is *loitering* up there. Without it,
+         holding the flap button parks you above the arena and the fight
+         never ends — no danger, no progress, nothing at all, which is worse
+         than losing would be. The 80-frame wait is what keeps it from
+         cancelling out a SKY SMASH: a drop from an arena pad is over in
+         about half that, so the boss is still underneath you when you land
+         on it, and only a hoverer gets chased upstairs. The ones that walk
+         can only manage a big leap; anything that already moves up and down
+         comes all the way up to meet you. */
+      if (airT > 80 && hero.y < GROUND - 40){
+        const reach = s.pattern==='ground' ? GROUND - 168 : 74;
+        goal = Math.max(s.pattern==='ground' ? reach : 74, Math.min(goal, hero.y + 8));
       }
       b.y += (goal - b.y)*ease*dt;
       if (b.x < 60){ b.state = 'retreat'; }
@@ -1368,6 +1613,7 @@
     } else {
       if (phase==='run' && phaseT>=RUN_FRAMES){
         phase = 'warn'; phaseT = 0; sfx.warn(); setMusic('boss');
+        announce({kind:'boss', now:true, text:'BOSS TIME!', sub:'Here it comes — get ready!'});
       } else if (phase==='warn' && phaseT>=115){
         phase = 'boss'; phaseT = 0; startBoss();
       } else if (phase==='victory' && phaseT>=170){
@@ -1375,25 +1621,21 @@
         lvlIndex = nextLevel();
         spawnIn = 70; skyIn = TUNE.firstCluster;
         sfx.level(); el.lvlName.textContent = L().name; setMusic(L().music);
-        showBanner(L().banner, 'Watch out for the '+L().walkerName+'s!');
+        announce({kind:'world', now:true, text:L().banner,
+                  sub:'Watch out for the '+(L().foe && L().foe.bruteName || L().walkerName)+'s!'});
         for (let i=0;i<74;i++) confetti.push({x:Math.random()*W,y:-10-Math.random()*200,
           vx:(Math.random()-.5)*2.2, vy:1.4+Math.random()*2.8, c:RAINBOW[i%6],
           r:Math.random()*6, sp:(Math.random()-.5)*.35, life:240});
       }
     }
-    if (banner>0) banner -= dt;
+    updateCalls(dt);
 
-    // power-up timer
-    if (power){
-      power.t -= dt;
-      el.powerBar.style.width = Math.max(0, power.t/power.max*100)+'%';
-      if (power.t<=0) endPower();
-    }
     hero.sc += (targetScale() - hero.sc)*.14*dt;
 
     // lv.pace is the world's own temper: the speedway hurries, the hollow dawdles
     const target = Math.min(7.0, 4.2 + dist/5000)
-                 * (lv.pace || 1) * (superT>0 ? 1.14 : 1) * (P('dog') ? 1.28 : 1);
+                 * (lv.pace || 1) * (superT>0 ? 1.14 : 1) * (P('dog') ? 1.28 : 1)
+                 * (P('freeze') ? .62 : 1);
     if (slow>0){ slow -= dt; speed += (target*.55 - speed)*.08*dt; }
     else speed += (target - speed)*.035*dt;
     dist += speed*dt;
@@ -1409,32 +1651,52 @@
     if (coyote>0) coyote -= dt;
     tryJump();
     const prevY = hero.y;
-    hero.vy += lv.grav*dt;
+    // wings and the bubble both hang in the air longer; the bubble drifts down
+    const gmul = P('wings') ? .74 : P('bubble') ? .68 : 1;
+    hero.vy += lv.grav*gmul*dt;
     // Hold to float: clamps descent only, so it can never gain height and
     // reaching a platform stays a matter of nailing the jump.
-    const gliding = holding && hero.vy > 0 && !hero.onGround && !P('dog');
+    const gliding = holding && hero.vy > 0 && !hero.onGround;
     if (gliding) hero.vy = Math.min(hero.vy, TUNE.glideVyMax);
     hero.y += hero.vy*dt;
+    // wings would otherwise carry them clean off the top of the screen
+    if (hero.y < CEILING){ hero.y = CEILING; hero.vy = Math.max(hero.vy, 0); }
     const base = landingY(prevY);
     if (hero.y>=base){
+      const landedHard = hero.vy;
       hero.y = base; hero.vy = 0;
       jumpsLeft = P('rocket') ? 1 : 0;
       if (!hero.onGround){ hero.onGround = true; burst(hero.x, base, ['rgba(255,255,255,.6)'], 6, 2); }
+      /* The bubble never lets you settle: every landing throws you back up,
+         so the kid holding the button is bouncing across the whole world. */
+      if (P('bubble') && landedHard > .6){
+        hero.vy = L().jump*.86; hero.onGround = false; coyote = 0;
+        burst(hero.x, base, ['#8FD8F5','#FFFFFF','#DFF2FF'], 12, 5);
+        sfx.jump();
+      }
     } else if (hero.onGround){ hero.onGround = false; coyote = 9; }
+    airT = hero.onGround ? 0 : airT + dt;
     hero.run += dt*(hero.onGround ? .32 : .1);
 
     // record Oliver's movement; little sister replays it a beat later
     trail.push({y:hero.y, run:hero.run, air:!hero.onGround, glide:gliding});
     while (trail.length > SIS_DELAY) trail.shift();
 
-    if (phase==='run'){ spawnIn -= dt; if (spawnIn<=0) spawn(); }
+    if (phase==='run'){
+      spawnIn -= dt; if (spawnIn<=0) spawn();
+      /* Flyers keep their own clock so the sky fills up without the ground
+         lane getting any more crowded than it already is. */
+      flyIn -= dt; if (flyIn<=0){ spawnFlyer(); flyIn = 96 + Math.random()*110; }
+    }
     /* Ground obstacles stop for the fight, the high road does not: a pad to
        leap from is how a small player reaches a boss that flies, and it works
        the same in Boss Rush, which has no run phase at all. */
     if (phase==='run' || phase==='boss'){ skyIn -= dt; if (skyIn<=0) spawnCluster(); }
     starIn -= dt; if (starIn<=0) spawnStar();
+    /* Orbs keep coming whether or not you are holding one — swapping is the
+       whole game now, so there has to be something to swap for. */
     powerIn -= dt;
-    if (powerIn<=0){ if (!power && !orbs.length) spawnOrb(); else powerIn = 240; }
+    if (powerIn<=0){ if (!orbs.length) spawnOrb(); else powerIn = 180; }
 
     const hs = hero.sc;
     const hw0 = hero.w*hs, hh0 = hero.h*hs;
@@ -1443,14 +1705,33 @@
     const hcy = hero.y - hh0/2;
     // the dog is its own solid box down at ground level, so jumping still clears things
     const riding = P('dog');
-    const dgx = hero.x - 48, dgy = GROUND - RIDE_H - 4, dgw = 96, dgh = RIDE_H + 4;
+    const dgx = hero.x - 48, dgy = hero.y - 4, dgw = 96, dgh = RIDE_H + 4;
     const fireR = P('fire') ? 96 : 0;
     const overlap = (ax,ay,aw,ah, x,y,w,h) => ax < x+w-3 && ax+aw > x+3 && ay < y+h-2 && ay+ah > y+2;
     const hitBox = (x,y,w,h) =>
       overlap(hx,hy,hw,hh, x,y,w,h) || (riding && overlap(dgx,dgy,dgw,dgh, x,y,w,h));
     const inFire = (cx,cy) => fireR>0 && Math.hypot(cx-hero.x, cy-hcy) < fireR;
-    const hit = (x,y,w,h) => hitBox(x,y,w,h) || inFire(x+w/2, y+h/2);
+    /* Lightning is a live corridor in front of the kids for a few frames,
+       folded straight into the same hit test everything else already uses.
+       That is the whole implementation: every reward, particle and sound in
+       the game fires exactly as it would have if you had run into the thing.
+       Bosses use hitBox and so are deliberately out of reach of it, the same
+       way the fire ring cannot chip them. */
+    if (P('zap')){
+      boltIn -= dt;
+      if (boltIn<=0){
+        boltIn = 40; boltT = 7;
+        bolts.push({y:hcy, life:14, seed:(t|0)%97});
+        sfx.clang();
+      }
+    }
+    if (boltT>0) boltT -= dt;
+    const BOLT_REACH = 430;
+    const inBolt = (x,y,w,h) =>
+      boltT>0 && x+w > hero.x && x < hero.x+BOLT_REACH && y < hcy+46 && y+h > hcy-46;
+    const hit = (x,y,w,h) => hitBox(x,y,w,h) || inFire(x+w/2, y+h/2) || inBolt(x,y,w,h);
     const sup = superT>0;
+    const chilled = P('freeze');
 
     for (const p of platforms) p.x -= speed*(p.drift==null ? 1 : p.drift)*dt;
     platforms = platforms.filter(p => p.x + p.w > -120);
@@ -1544,6 +1825,7 @@
     /* simple pests */
     for (const b of pests){
       if (b.flung){ b.x += b.vx*dt; b.y += b.vy*dt; b.vy += .5*dt; b.rot += b.spin*dt; }
+      else if (chilled){ b.x -= speed*dt; }
       else { b.x -= (speed+.6)*dt; b.bob += dt*.16; }
     }
     pests = pests.filter(b => b.x>-150 && b.x<W+420 && b.y<H+240);
@@ -1555,15 +1837,20 @@
         b.flung = true;
         b.vx = 10+Math.random()*7; b.vy = -10-Math.random()*6;
         b.spin = (Math.random()<.5?-1:1)*(.22+Math.random()*.2);
-        points += sup?40:20; shake = sup?18:12;
-        burst(b.x, b.y-24, ['#FFFFFF','#FFD23D','#FF8AD8'], sup?26:16, 7);
-        pop(b.x, b.y-72, sup?'KA-POW! +40':'POW! +20', '#FF8AD8', sup?34:30);
+        const gain = 20 * (sup?2:1) * (chilled?2:1);
+        points += gain; shake = sup?18:12;
+        burst(b.x, b.y-24, chilled ? ['#FFFFFF','#BFE8FF','#8FD8F5'] : ['#FFFFFF','#FFD23D','#FF8AD8'], sup?26:16, 7);
+        pop(b.x, b.y-72, (chilled?'SHATTER! +':sup?'KA-POW! +':'POW! +')+gain,
+            chilled?'#BFE8FF':'#FF8AD8', sup?34:30);
         sfx.pow(); addCharge(sup?0:2); bumpCombo();
       }
     }
 
+    /* the critters */
+    updateFoes(dt, hit, sup, chilled);
+
     /* multi-part walkers */
-    for (const wk of walkers){ wk.x -= (speed+.4)*dt; wk.step += dt*.18; }
+    for (const wk of walkers){ wk.x -= (speed + (chilled?0:.4))*dt; if (!chilled) wk.step += dt*.18; }
     walkers = walkers.filter(wk => wk.x > -220 && !wk.dead);
     for (const wk of walkers){
       const legsLeft = wk.parts.filter(p=>p.alive && p.key.endsWith('leg')).length;
@@ -1640,6 +1927,8 @@
     }
 
     /* particles */
+    for (const b of bolts) b.life -= dt;
+    bolts = bolts.filter(b => b.life > 0);
     for (const f of bits){ f.x += (f.vx - speed*.35)*dt; f.y += f.vy*dt; f.vy += .22*dt; f.life -= dt; f.rot += f.spin*dt; }
     bits = bits.filter(f=>f.life>0);
     for (const p of pops){ p.y += p.vy*dt; p.x -= speed*.5*dt; p.vy *= .97; p.life -= dt; }
@@ -1652,7 +1941,10 @@
       if (b.y < -12){ b.y = H+10; b.x = Math.random()*W; }
     }
 
-    if (points>best){ best = points; el.best.textContent = 'Best '+best; saveBest(); }
+    if (points>best){
+      if (!beatBest && best>0){ beatBest = true; announce({kind:'best', text:'NEW BEST!', sub:'Past '+best+' and still going'}); }
+      best = points; el.best.textContent = 'Best '+best; saveBest();
+    }
   }
 
   /* ---------- drawing ---------- */
@@ -2443,6 +2735,133 @@
     ctx.restore();
   }
 
+  /* One critter, assembled from its spec. Every world colours it differently,
+     and the four kinds read apart at a glance by size and where they sit:
+     something tiny scuttling at your ankles, something bobbing at head
+     height, a little swarm, or a slab with three knocks in it. */
+  function drawFoe(f, chilled){
+    const s = f.spec, r = f.r, wob = Math.sin(f.ph*2)*2;
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.rot);
+    if (f.hurt>0 && Math.floor(t/3)%2===0) ctx.globalAlpha = .55;
+
+    // wings go on behind the body
+    if (f.kind==='fly'){
+      const flap = Math.sin(f.ph*6)*.7;
+      ctx.fillStyle = s.accent;
+      for (const sg of [-1,1]){
+        ctx.save(); ctx.rotate(sg*flap);
+        if (s.shape==='bat'){
+          ctx.beginPath();
+          ctx.moveTo(sg*r*.3,-r*.2);
+          ctx.quadraticCurveTo(sg*r*1.5,-r*1.1, sg*r*2.0,-r*.1);
+          ctx.quadraticCurveTo(sg*r*1.2,-r*.15, sg*r*.9, r*.35);
+          ctx.closePath(); ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.ellipse(sg*r*1.05, -r*.45, r*.78, r*.34, sg*.5, 0, 7);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    if (f.kind==='crawl' || f.kind==='swarm'){
+      ctx.strokeStyle = s.c2; ctx.lineWidth = Math.max(2, r*.16); ctx.lineCap = 'round';
+      for (const sg of [-1,1]) for (let i=0;i<3;i++){
+        const kick = Math.sin(f.ph*5 + i*1.2 + (sg<0?1.6:0))*r*.28;
+        ctx.beginPath();
+        ctx.moveTo(sg*r*.5, r*.1);
+        ctx.lineTo(sg*(r*1.05)+kick, r*.55 - i*r*.18);
+        ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    }
+    if (f.kind==='brute'){
+      ctx.fillStyle = s.c2;                       // stumpy legs and fists
+      for (const sg of [-1,1]){
+        ctx.beginPath(); ctx.ellipse(sg*r*.42, r*.82, r*.26, r*.24, 0, 0, 7); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(sg*(r*.92+Math.sin(f.ph*3+(sg<0?2:0))*4), r*.05, r*.28, 0, 7);
+        ctx.fill();
+      }
+    }
+
+    // body
+    ctx.fillStyle = s.c1;
+    if (s.shape==='blob'){
+      ctx.beginPath();
+      for (let i=0;i<=22;i++){
+        const a = i/22*Math.PI*2;
+        const rr = r*(1 + Math.sin(a*3 + f.ph*2)*.09);
+        const x = Math.cos(a)*rr, y = Math.sin(a)*rr*.92;
+        i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+      }
+      ctx.closePath(); ctx.fill();
+    } else if (s.shape==='box'){
+      roundRect(-r*.9, -r*.9, r*1.8, r*1.8, r*.34); ctx.fill();
+      ctx.fillStyle = s.c2; ctx.fillRect(-r*.8, -r*.1, r*1.6, r*.16);
+    } else if (s.shape==='rock'){
+      ctx.beginPath();
+      ctx.moveTo(-r, r*.8); ctx.lineTo(-r*.82,-r*.35); ctx.lineTo(-r*.2,-r);
+      ctx.lineTo(r*.55,-r*.82); ctx.lineTo(r, r*.1); ctx.lineTo(r*.7, r*.85);
+      ctx.closePath(); ctx.fill();
+    } else if (s.shape==='drone'){
+      roundRect(-r*.85, -r*.55, r*1.7, r*1.1, r*.42); ctx.fill();
+      ctx.fillStyle = s.c2; roundRect(-r*.5,-r*.3, r, r*.5, r*.24); ctx.fill();
+    } else if (s.shape==='bat'){
+      ctx.beginPath(); ctx.ellipse(0, 0, r*.72, r*.85, 0, 0, 7); ctx.fill();
+      ctx.beginPath();                            // ears
+      ctx.moveTo(-r*.5,-r*.6); ctx.lineTo(-r*.34,-r*1.25); ctx.lineTo(-r*.08,-r*.62);
+      ctx.moveTo(r*.5,-r*.6);  ctx.lineTo(r*.34,-r*1.25);  ctx.lineTo(r*.08,-r*.62);
+      ctx.fill();
+    } else {                                      // bug: shell with a stripe
+      ctx.beginPath(); ctx.ellipse(0, 0, r, r*.86, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = s.c2;
+      ctx.beginPath(); ctx.ellipse(0, r*.12, r*.94, r*.34, 0, 0, Math.PI); ctx.fill();
+      ctx.fillRect(-r*.06, -r*.8, r*.12, r*1.4);
+    }
+
+    if (f.kind==='brute'){                        // a crest, so it reads as the big one
+      ctx.fillStyle = s.accent;
+      for (let i=-1;i<=1;i++){
+        ctx.beginPath();
+        ctx.moveTo(i*r*.34-r*.14, -r*.78);
+        ctx.lineTo(i*r*.34, -r*1.22+wob);
+        ctx.lineTo(i*r*.34+r*.14, -r*.78);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // face — one eye on the little ones, two on anything bigger
+    const eyes = r < 15 ? 1 : 2, er = Math.max(3.4, r*.26);
+    for (let i=0;i<eyes;i++){
+      const ex = eyes===1 ? 0 : (i-.5)*r*.62;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(ex, -r*.16, er, 0, 7); ctx.fill();
+      ctx.fillStyle = '#22182E';
+      ctx.beginPath(); ctx.arc(ex+er*.25, -r*.16+Math.sin(f.ph)*1.2, er*.48, 0, 7); ctx.fill();
+    }
+    if (r > 20){
+      ctx.strokeStyle = '#22182E'; ctx.lineWidth = Math.max(2, r*.10); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0, r*.20, r*.34, .25, Math.PI-.25); ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+
+    if (chilled && !f.flung){                     // iced over, waiting to be broken
+      ctx.globalAlpha = .55;
+      ctx.fillStyle = '#BFE8FF';
+      ctx.beginPath();
+      ctx.moveTo(-r*1.05, r*.9); ctx.lineTo(-r*.75,-r*.7); ctx.lineTo(-r*.2, r*.2);
+      ctx.lineTo(r*.25,-r*1.1); ctx.lineTo(r*.8,-r*.2); ctx.lineTo(r*1.05, r*.9);
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#EAF9FF'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0,0,r*1.06,0,7); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   /* No Math.random() in here — shimmer comes from the frame counter, or the
      ground-lane fingerprint test breaks on the render path. */
   function drawPlatform(p){
@@ -2594,7 +3013,7 @@
     if (!P('dog')) return;
     const gait = hero.run*2.1;
     ctx.save();
-    ctx.translate(hero.x - 4 - hero.push*.5, GROUND);
+    ctx.translate(hero.x - 4 - hero.push*.5, hero.y + RIDE_H);
 
     const BLK = '#2E2A28', WHT = '#F3EFE8', TAN = '#B5793F', DRK = '#1C1917';
 
@@ -2687,6 +3106,239 @@
     ctx.restore();
   }
 
+  /* --- what each power looks like on the kids themselves ---
+     The HUD tag names the power for whoever is watching; these are how the
+     five-year-old knows. Wings on your back, a bubble round you, the world
+     gone blue: no reading required, and no tag to check. */
+  function drawWings(){
+    if (!P('wings')) return;
+    const cy = hero.y - hero.h*hero.sc*.62;
+    const flap = hero.onGround ? Math.sin(t*.18)*.28 : Math.sin(t*.42)*.72;
+    ctx.save();
+    ctx.translate(hero.x - hero.push, cy);
+    for (const sg of [-1,1]){
+      ctx.save(); ctx.rotate(sg*flap);
+      ctx.fillStyle = '#FFF3D6';
+      ctx.beginPath();
+      ctx.moveTo(sg*4, 4);
+      ctx.quadraticCurveTo(sg*40, -30, sg*52, 6);
+      ctx.quadraticCurveTo(sg*30, -2, sg*8, 20);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#FFE24A';
+      ctx.beginPath();
+      ctx.moveTo(sg*6, 8);
+      ctx.quadraticCurveTo(sg*28, -12, sg*38, 8);
+      ctx.quadraticCurveTo(sg*24, 4, sg*9, 18);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function drawBubble(){
+    if (!P('bubble')) return;
+    const r = 62*Math.max(.8, hero.sc), cy = hero.y - hero.h*hero.sc*.5;
+    ctx.save();
+    ctx.translate(hero.x - hero.push, cy);
+    const g = ctx.createRadialGradient(0,0,r*.55,0,0,r);
+    g.addColorStop(0,'rgba(180,230,255,0)');
+    g.addColorStop(.82,'rgba(150,215,250,.22)');
+    g.addColorStop(1,'rgba(255,255,255,.42)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fill();
+    ctx.strokeStyle = 'rgba(230,248,255,.75)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.8)';
+    ctx.beginPath(); ctx.ellipse(-r*.42, -r*.44, r*.16, r*.09, -.7, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(r*.34, -r*.5, r*.05, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  /* The bolt corridor, drawn as the jagged line it hits along. */
+  function drawBolts(){
+    if (!bolts.length) return;
+    ctx.save();
+    for (const b of bolts){
+      const a = Math.max(0, Math.min(1, b.life/9));
+      ctx.globalAlpha = a;
+      for (const [wdt, col] of [[11,'rgba(110,231,245,.42)'], [5,'#DFFAFF'], [2.5,'#FFFFFF']]){
+        ctx.strokeStyle = col; ctx.lineWidth = wdt; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(hero.x, b.y);
+        for (let i=1;i<=7;i++){
+          const px = hero.x + i*(430/7);
+          const py = b.y + Math.sin(i*2.3 + b.seed)*22*(i%2?1:-1);
+          ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = a*.8;
+      ctx.fillStyle = '#DFFAFF';
+      for (let i=1;i<=5;i++){
+        const px = hero.x + i*84, py = b.y + Math.sin(i*3.1+b.seed)*16;
+        ctx.beginPath(); ctx.arc(px, py, 3.4, 0, 7); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  function drawFrost(){
+    if (!P('freeze')) return;
+    ctx.save();
+    // light enough to read a score pop through: it is a mood, not a curtain
+    ctx.globalAlpha = .11;
+    ctx.fillStyle = '#8FD8F5'; ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha = 1;
+    const g = ctx.createRadialGradient(W/2,H/2,H*.34,W/2,H/2,W*.62);
+    g.addColorStop(0,'rgba(191,232,255,0)');
+    g.addColorStop(1,'rgba(191,232,255,.34)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+    ctx.restore();
+  }
+  /* Magnet and rocket boots had no tell of their own, which mattered less
+     when they lasted fifteen seconds than it does now they last until you
+     trade them in. */
+  function drawPowerTells(){
+    const cy = hero.y - hero.h*hero.sc*.5, hx = hero.x - hero.push;
+    if (P('magnet')){
+      ctx.save();
+      ctx.globalAlpha = .30 + Math.sin(t*.13)*.12;
+      ctx.strokeStyle = '#FF8AD8'; ctx.lineWidth = 3;
+      for (let i=0;i<3;i++){
+        const r = 46 + i*34 + (t*1.4 % 34);
+        ctx.beginPath(); ctx.arc(hx, cy, r, -1.1, 1.1); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (P('rocket') && !hero.onGround){
+      ctx.save();
+      ctx.translate(hx, hero.y);
+      for (const sg of [-1,1]){
+        const fl = 12 + Math.sin(t*.5 + (sg<0?1.6:0))*6;
+        ctx.fillStyle = '#B06EF5';
+        ctx.beginPath();
+        ctx.moveTo(sg*9-4, 0); ctx.lineTo(sg*9+4, 0); ctx.lineTo(sg*9, fl);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#FFD23D';
+        ctx.beginPath();
+        ctx.moveTo(sg*9-2, 0); ctx.lineTo(sg*9+2, 0); ctx.lineTo(sg*9, fl*.6);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  /* --- the icon set ---
+     Drawn at the origin inside roughly a 32px box, in whatever colour it is
+     handed. Shared by the floating orbs, the power badge and the
+     announcements, because a five-year-old reads the picture and not the
+     word — the words are for whoever is watching over their shoulder. */
+  function drawGlyph(k, c){
+    ctx.fillStyle = c; ctx.strokeStyle = c; ctx.lineWidth = 4;
+    if (k==='paw'){
+      ctx.beginPath(); ctx.ellipse(0,5,9,7,0,0,7); ctx.fill();
+      for (const [px,py] of [[-8,-5],[-3,-9],[3,-9],[8,-5]]){
+        ctx.beginPath(); ctx.arc(px,py,3.6,0,7); ctx.fill();
+      }
+    } else if (k==='flame'){
+      ctx.beginPath();
+      ctx.moveTo(0,-13); ctx.quadraticCurveTo(9,-2,6,5);
+      ctx.quadraticCurveTo(4,12,0,12); ctx.quadraticCurveTo(-4,12,-6,5);
+      ctx.quadraticCurveTo(-9,-2,0,-13); ctx.fill();
+      ctx.fillStyle = '#FFD23D';
+      ctx.beginPath(); ctx.ellipse(0,5,3.4,5,0,0,7); ctx.fill();
+    } else if (k==='big'){
+      ctx.strokeRect(-10,-10,20,20);
+      ctx.beginPath();
+      ctx.moveTo(-14,-6); ctx.lineTo(-14,-14); ctx.lineTo(-6,-14);
+      ctx.moveTo(14,6); ctx.lineTo(14,14); ctx.lineTo(6,14); ctx.stroke();
+    } else if (k==='small'){
+      ctx.fillRect(-5,-5,10,10);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-13,-13); ctx.lineTo(-8,-8); ctx.moveTo(13,13); ctx.lineTo(8,8);
+      ctx.moveTo(13,-13); ctx.lineTo(8,-8); ctx.moveTo(-13,13); ctx.lineTo(-8,8); ctx.stroke();
+    } else if (k==='magnet'){
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(0,2,9,Math.PI,0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-9,2); ctx.lineTo(-9,10); ctx.moveTo(9,2); ctx.lineTo(9,10); ctx.stroke();
+      ctx.strokeStyle = '#5C6784'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-9,7); ctx.lineTo(-9,11); ctx.moveTo(9,7); ctx.lineTo(9,11); ctx.stroke();
+    } else if (k==='wing'){
+      for (const sg of [-1,1]){
+        ctx.beginPath();
+        ctx.moveTo(sg*2,-9);
+        ctx.quadraticCurveTo(sg*17,-13, sg*15,3);
+        ctx.quadraticCurveTo(sg*10,-2, sg*3,7);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(0,-2,3.4,0,7); ctx.fill();
+    } else if (k==='bolt'){
+      ctx.beginPath();
+      ctx.moveTo(3,-14); ctx.lineTo(-9,2); ctx.lineTo(-1,2);
+      ctx.lineTo(-4,14); ctx.lineTo(9,-3); ctx.lineTo(1,-3);
+      ctx.closePath(); ctx.fill();
+    } else if (k==='bubble'){
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(0,0,12,0,7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.85)';
+      ctx.beginPath(); ctx.ellipse(-4.5,-5,3.4,2.2,-.6,0,7); ctx.fill();
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(0,0,4,0,7); ctx.fill();
+    } else if (k==='snow'){
+      ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+      for (let i=0;i<3;i++){
+        const a = i*Math.PI/3;
+        ctx.beginPath();
+        ctx.moveTo(-Math.cos(a)*13, -Math.sin(a)*13);
+        ctx.lineTo(Math.cos(a)*13, Math.sin(a)*13);
+        ctx.stroke();
+        for (const sg of [-1,1]){
+          ctx.beginPath();
+          ctx.moveTo(sg*Math.cos(a)*8, sg*Math.sin(a)*8);
+          ctx.lineTo(sg*Math.cos(a)*13 - Math.cos(a+1.1)*5, sg*Math.sin(a)*13 - Math.sin(a+1.1)*5);
+          ctx.stroke();
+        }
+      }
+      ctx.lineCap = 'butt';
+    } else if (k==='skull'){
+      ctx.beginPath(); ctx.arc(0,-3,11,Math.PI,0); ctx.fill();
+      ctx.fillRect(-11,-3,22,9);
+      ctx.fillRect(-6,6,12,6);
+      ctx.fillStyle = '#22182E';
+      ctx.beginPath(); ctx.arc(-5,-2,3.4,0,7); ctx.arc(5,-2,3.4,0,7); ctx.fill();
+      ctx.fillRect(-1.6,3,3.2,4);
+    } else if (k==='trophy'){
+      ctx.beginPath(); ctx.arc(0,-4,9,0,Math.PI); ctx.fill();
+      ctx.fillRect(-9,-13,18,6);
+      ctx.fillRect(-2.5,4,5,6);
+      ctx.fillRect(-8,10,16,4);
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(-11,-6,4,Math.PI*.5,Math.PI*1.5); ctx.stroke();
+      ctx.beginPath(); ctx.arc(11,-6,4,Math.PI*1.5,Math.PI*.5); ctx.stroke();
+    } else if (k==='crown'){
+      ctx.beginPath();
+      ctx.moveTo(-13,8); ctx.lineTo(-13,-9); ctx.lineTo(-6,-1); ctx.lineTo(0,-12);
+      ctx.lineTo(6,-1); ctx.lineTo(13,-9); ctx.lineTo(13,8);
+      ctx.closePath(); ctx.fill();
+    } else if (k==='star'){
+      ctx.beginPath();
+      for (let i=0;i<10;i++){ const r = i%2?5.5:13, a = -Math.PI/2 + i*Math.PI/5;
+        ctx[i?'lineTo':'moveTo'](Math.cos(a)*r, Math.sin(a)*r); }
+      ctx.closePath(); ctx.fill();
+    } else if (k==='flag'){
+      ctx.fillRect(-9,-13,3.4,26);
+      ctx.beginPath();
+      ctx.moveTo(-5,-13); ctx.lineTo(12,-8); ctx.lineTo(-5,-2);
+      ctx.closePath(); ctx.fill();
+    } else {                                     // rocket
+      ctx.beginPath();
+      ctx.moveTo(0,-13); ctx.quadraticCurveTo(6,-4,6,5); ctx.lineTo(-6,5);
+      ctx.quadraticCurveTo(-6,-4,0,-13); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-6,2); ctx.lineTo(-11,9); ctx.lineTo(-6,8); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(6,2); ctx.lineTo(11,9); ctx.lineTo(6,8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#FF8A3D';
+      ctx.beginPath(); ctx.moveTo(-3,6); ctx.lineTo(0,14); ctx.lineTo(3,6); ctx.closePath(); ctx.fill();
+    }
+  }
+
   /* --- floating power-up orbs --- */
   function drawOrb(o){
     const y = o.y + Math.sin(t*.05+o.ph)*7;
@@ -2704,47 +3356,7 @@
     ctx.strokeStyle = c; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(0,0,23,0,7); ctx.stroke();
 
-    ctx.fillStyle = c; ctx.strokeStyle = c;
-    const k = o.def.icon;
-    if (k==='paw'){
-      ctx.beginPath(); ctx.ellipse(0,5,9,7,0,0,7); ctx.fill();
-      for (const [px,py] of [[-8,-5],[-3,-9],[3,-9],[8,-5]]){
-        ctx.beginPath(); ctx.arc(px,py,3.6,0,7); ctx.fill();
-      }
-    } else if (k==='flame'){
-      ctx.beginPath();
-      ctx.moveTo(0,-13); ctx.quadraticCurveTo(9,-2,6,5);
-      ctx.quadraticCurveTo(4,12,0,12); ctx.quadraticCurveTo(-4,12,-6,5);
-      ctx.quadraticCurveTo(-9,-2,0,-13); ctx.fill();
-      ctx.fillStyle = '#FFD23D';
-      ctx.beginPath(); ctx.ellipse(0,5,3.4,5,0,0,7); ctx.fill();
-    } else if (k==='big'){
-      ctx.lineWidth = 4;
-      ctx.strokeRect(-10,-10,20,20);
-      ctx.beginPath();
-      ctx.moveTo(-14,-6); ctx.lineTo(-14,-14); ctx.lineTo(-6,-14);
-      ctx.moveTo(14,6); ctx.lineTo(14,14); ctx.lineTo(6,14); ctx.stroke();
-    } else if (k==='small'){
-      ctx.fillRect(-5,-5,10,10);
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-13,-13); ctx.lineTo(-8,-8); ctx.moveTo(13,13); ctx.lineTo(8,8);
-      ctx.moveTo(13,-13); ctx.lineTo(8,-8); ctx.moveTo(-13,13); ctx.lineTo(-8,8); ctx.stroke();
-    } else if (k==='magnet'){
-      ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.arc(0,2,9,Math.PI,0); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-9,2); ctx.lineTo(-9,10); ctx.moveTo(9,2); ctx.lineTo(9,10); ctx.stroke();
-      ctx.strokeStyle = '#5C6784'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(-9,7); ctx.lineTo(-9,11); ctx.moveTo(9,7); ctx.lineTo(9,11); ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(0,-13); ctx.quadraticCurveTo(6,-4,6,5); ctx.lineTo(-6,5);
-      ctx.quadraticCurveTo(-6,-4,0,-13); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(-6,2); ctx.lineTo(-11,9); ctx.lineTo(-6,8); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(6,2); ctx.lineTo(11,9); ctx.lineTo(6,8); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#FF8A3D';
-      ctx.beginPath(); ctx.moveTo(-3,6); ctx.lineTo(0,14); ctx.lineTo(3,6); ctx.closePath(); ctx.fill();
-    }
+    drawGlyph(o.def.icon, c);
     ctx.restore();
   }
 
@@ -3257,26 +3869,51 @@
     ctx.textAlign = 'left';
   }
 
+  /* The announcement card. One at a time, always in the same place, always
+     with its picture — that consistency is what lets a kid who cannot read
+     learn what each one means after seeing it twice. */
   function drawBanner(){
-    if (banner<=0 || !bannerText) return;
-    const span = bannerBig ? 220 : 160;
-    const a = banner>span-40 ? (span-banner)/40 : (banner<40 ? banner/40 : 1);
-    const grow = bannerBig ? 1 + Math.max(0,(banner-(span-24))/24)*.5 : 1;
+    if (!call || !call.text) return;
+    const c = call, span = c.span;
+    const fade = c.life > span-30 ? (span-c.life)/30 : (c.life < 34 ? c.life/34 : 1);
+    const grow = 1 + Math.max(0, (c.life-(span-22))/22)*.45;
+    const wide = Math.max(300, c.text.length*30 + (c.icon ? 92 : 40));
+
     ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, a));
-    ctx.translate(W/2, 150 - (1-banner/span)*18);
+    ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+    let cx = W/2, cy = 142;
+    if (c.shake){ cx += Math.sin(t*.9)*3; cy += Math.sin(t*1.3)*2; }
+    ctx.translate(cx, cy);
     ctx.scale(grow, grow);
-    ctx.textAlign = 'center';
-    ctx.font = '800 '+(bannerBig?62:54)+'px "Trebuchet MS", sans-serif';
-    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,.65)';
-    ctx.strokeText(bannerText, 0, 0);
-    ctx.fillStyle = rainbowGrad(-44, 12);
-    ctx.fillText(bannerText, 0, 0);
-    if (bannerSub){
-      ctx.font = '700 17px "Trebuchet MS", sans-serif';
-      ctx.lineWidth = 6; ctx.strokeText(bannerSub, 0, 34);
-      ctx.fillStyle = '#fff'; ctx.fillText(bannerSub, 0, 34);
+
+    // plate behind it, so the words survive a bright sky
+    ctx.fillStyle = 'rgba(10,6,26,.62)';
+    roundRect(-wide/2, -46, wide, c.sub ? 96 : 74, 20); ctx.fill();
+    ctx.strokeStyle = c.color; ctx.lineWidth = 3;
+    roundRect(-wide/2, -46, wide, c.sub ? 96 : 74, 20); ctx.stroke();
+
+    const textLeft = c.icon ? -wide/2 + 84 : 0;
+    if (c.icon){
+      ctx.save();
+      ctx.translate(-wide/2 + 46, -4);
+      ctx.scale(1.25, 1.25);
+      ctx.rotate(Math.sin(t*.06)*.12);
+      drawGlyph(c.icon, c.color);
+      ctx.restore();
     }
+
+    ctx.textAlign = c.icon ? 'left' : 'center';
+    ctx.font = '800 40px "Trebuchet MS", sans-serif';
+    ctx.lineWidth = 9; ctx.strokeStyle = 'rgba(0,0,0,.7)';
+    ctx.strokeText(c.text, textLeft, 8);
+    ctx.fillStyle = c.rainbow ? rainbowGrad(-26, 14) : c.color;
+    ctx.fillText(c.text, textLeft, 8);
+    if (c.sub){
+      ctx.font = '700 17px "Trebuchet MS", sans-serif';
+      ctx.lineWidth = 6; ctx.strokeText(c.sub, textLeft, 36);
+      ctx.fillStyle = '#fff'; ctx.fillText(c.sub, textLeft, 36);
+    }
+    ctx.textAlign = 'left';
     ctx.restore();
   }
 
@@ -3296,6 +3933,7 @@
     for (const o of things) drawSmashable(o);
     for (const s of structs) drawStruct(s);
     for (const wk of walkers) drawWalker(wk);
+    for (const f of foes) drawFoe(f, P('freeze') && !f.flung);
     drawBoss();
     for (const b of bodies) drawBody(b);
     for (const b of pests) drawPest(b);
@@ -3324,8 +3962,12 @@
     }
 
     drawDog();
+    drawWings();
     drawKids();
     drawFireRing();
+    drawPowerTells();
+    drawBubble();
+    drawBolts();
     drawWeather(true);
 
     if (lv.underwater){
@@ -3352,6 +3994,7 @@
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'left';
 
+    drawFrost();
     drawWarning();
     drawBanner();
     ctx.restore();

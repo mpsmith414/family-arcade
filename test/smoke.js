@@ -66,8 +66,11 @@ function pump(h, n, each) {
   }
 }
 
-const POWER_NAMES = ['RIDE THE DOG', 'FIRE RING', 'GIANT MODE', 'TINY MODE', 'STAR MAGNET', 'ROCKET BOOTS'];
-const POWER_DURATIONS = { 'RIDE THE DOG': 900, 'FIRE RING': 750, 'GIANT MODE': 690, 'TINY MODE': 750, 'STAR MAGNET': 810, 'ROCKET BOOTS': 810 };
+/* In POWERS order, which is what h.bucket(k, 10) pins. */
+const POWER_NAMES = [
+  'RIDE THE DOG', 'FIRE RING', 'GIANT MODE', 'TINY MODE', 'STAR MAGNET',
+  'ROCKET BOOTS', 'FLAPPY WINGS', 'LIGHTNING', 'BOUNCY BUBBLE', 'FREEZE RAY',
+];
 
 /* REGRESSION GUARD — green before and after every task, by design. That is
    the entire point: it proves nothing changed. Do not "fix" it into a
@@ -80,16 +83,16 @@ const POWER_DURATIONS = { 'RIDE THE DOG': 900, 'FIRE RING': 750, 'GIANT MODE': 6
    in drawing code calling Math.random(). Weather is on the same footing: it
    has its own PRNG (TUNE.wxSeed) and must stay off Math.random() too.
 
-   RE-BASELINED once, deliberately, when the ten later worlds landed and the
-   level order became a shuffle. Both of those ARE the ground lane — new
-   obstacle sizes and a random running order move the stream by design — so
-   the old numbers could not survive and re-capturing them was the honest
-   answer. What the guard proves is unchanged, because the proof was never the
+   RE-BASELINED twice, deliberately: once when the ten later worlds landed and
+   the level order became a shuffle, and once when the ground filled up with
+   critters and power-ups stopped expiring. All of those ARE the ground lane —
+   new spawns and a random running order move the stream by design — so the
+   old numbers could not survive and re-capturing them was the honest answer. What the guard proves is unchanged, because the proof was never the
    literal numbers: it is that the two runs below, one holding the button and
    one not, agree with each other to the draw. Re-capture only for a change
    that is deliberately about the ground lane, and never to make a red test
    go quiet. */
-const GROUND_BASELINE = { "score": 4426, "level": "Candy Kingdom", "trophies": "🏆🏆", "rng": "562923:7c1fa539" };
+const GROUND_BASELINE = { "score": 4686, "level": "Candy Kingdom", "trophies": "🏆🏆", "rng": "788645:fbfdb046" };
 
 test('ground lane is byte-identical (Emsile regression)', note => {
   const h = createHarness('oliver-run', { seed: 20260729 });
@@ -463,21 +466,33 @@ test('survives 20000 frames with no exception', note => {
 /* ---------------------------------------------------------------- *
  * 4. power-ups
  *
+ * A power lasts until you pick up another one — there is no timer to run
+ * down, so these prove the two things that replaced it: that holding one
+ * lasts, and that grabbing another swaps it.
+ *
  * Orbs spawn at one of two heights. The high one (GROUND-152) is out of
  * reach standing up, so collecting it proves a mid-air pickup; the low one
  * (GROUND-72) is collectable flat-footed. Biasing the RNG into a bucket
  * pins which power comes up, and — because the same draw decides the
- * height — which of the two pickups we are exercising.
+ * height — which of the two pickups we are exercising: with ten powers,
+ * buckets 0-4 draw under .5 and give the high orb.
  * ---------------------------------------------------------------- */
+/* Pops are painted to the canvas and never reach the DOM, so they are counted
+   off h.painted(). A pop lives 58 frames and is stroked and filled on each of
+   them, so one pop is ~116 entries — hence "roughly how many", not "exactly". */
+function poppedRoughly(h, re) {
+  return Math.round(h.painted().filter(s => re.test(s)).length / 116);
+}
+
 const GROUND_PICKUP = [];
 const AIR_PICKUP = [];
 
-for (let k = 0; k < 6; k++) {
+for (let k = 0; k < POWER_NAMES.length; k++) {
   const expected = POWER_NAMES[k];
-  const airborne = k < 3;          // buckets 0-2 draw < .5 => the high orb
-  test(`power-up ${expected} activates and expires (${airborne ? 'mid-jump' : 'from the ground'})`, note => {
+  const airborne = k < 5;
+  test(`power-up ${expected} activates and stays (${airborne ? 'mid-jump' : 'from the ground'})`, note => {
     const h = createHarness('oliver-run', { seed: 1234 });
-    h.bucket(k, 6);
+    h.bucket(k, POWER_NAMES.length);
     h.tap();
     if (airborne) h.holdJump(true);
 
@@ -486,32 +501,84 @@ for (let k = 0; k < 6; k++) {
     assert(name === expected, `expected "${expected}", got "${name}"`);
     (airborne ? AIR_PICKUP : GROUND_PICKUP).push(name);
 
-    const activatedAt = h.frameCount;
-    // stop jumping once it is held, so expiry is measured against a settled hero
+    // No timer to wait out. It has to survive far longer than any of the old
+    // durations (the longest was 900 frames) and still be the same power.
     h.holdJump(false);
-    const lived = h.until(() => h.hidden('powerTag'), 3000, `${expected} to expire`);
+    pump(h, 2500);
+    assert(!h.hidden('powerTag'), `${expected} disappeared on its own — powers must last until swapped`);
+    assert(h.text('powerName') === expected,
+      `${expected} turned into "${h.text('powerName')}" without an orb being collected`);
 
-    const expectedDur = POWER_DURATIONS[expected];
-    assertBetween(lived, expectedDur * 0.9, expectedDur * 1.1,
-      `${expected} lasted the wrong number of frames`);
-
-    // and the game has to keep running cleanly afterwards
     const after = h.num('score');
     pump(h, 400);
-    assert(h.num('score') > after, 'score stopped rising after the power-up ended');
-    assert(h.hidden('powerTag'), 'power tag came back on its own');
-    note(`picked up after ${waited} frames at ${activatedAt}, lasted ${lived} (nominal ${expectedDur})`);
+    assert(h.num('score') > after, 'score stopped rising while the power was held');
+    note(`picked up after ${waited} frames, still held 2900 frames later`);
     return h;
   });
 }
 
-test('power-ups: all six seen, from both the ground and mid-jump', note => {
+test('power-ups: all ten seen, from both the ground and mid-jump', note => {
   const seen = new Set([...GROUND_PICKUP, ...AIR_PICKUP]);
-  assert(seen.size === 6, `only saw ${seen.size} of 6 power-ups: ${[...seen].join(', ')}`);
+  assert(seen.size === POWER_NAMES.length,
+    `only saw ${seen.size} of ${POWER_NAMES.length} power-ups: ${[...seen].join(', ')}`);
   assert(AIR_PICKUP.length > 0, 'no power-up was collected mid-jump');
   assert(GROUND_PICKUP.length > 0, 'no power-up was collected from the ground');
   note(`mid-jump: ${AIR_PICKUP.join(', ')}`);
   note(`ground:   ${GROUND_PICKUP.join(', ')}`);
+});
+
+/* The other half of "lasts until you grab another": that grabbing another
+   really does take it. Two different buckets, one after the other. */
+test('power-ups: a second orb swaps the power', note => {
+  const h = createHarness('oliver-run', { seed: 1234 });
+  h.bucket(0, POWER_NAMES.length);              // RIDE THE DOG
+  h.tap();
+  h.holdJump(true);
+  h.until(() => !h.hidden('powerTag'), 12000, 'the first power');
+  const first = h.text('powerName');
+  assert(first === POWER_NAMES[0], `expected ${POWER_NAMES[0]}, got "${first}"`);
+
+  h.bucket(7, POWER_NAMES.length);              // LIGHTNING from here on
+  const swapped = h.until(() => h.text('powerName') !== first, 12000, 'the swap');
+  assert(h.text('powerName') === POWER_NAMES[7],
+    `expected ${POWER_NAMES[7]} after the swap, got "${h.text('powerName')}"`);
+  assert(!h.hidden('powerTag'), 'the badge should never blink off during a swap');
+  // The badge changes the instant the orb is taken; the announcement waits its
+  // turn in the queue behind whatever is already on screen, so give it one.
+  h.until(() => h.paintedSome(/Swapped/), 1200, 'the swap to be announced');
+  note(`${first} -> ${h.text('powerName')} after ${swapped} frames`);
+  return h;
+});
+
+/* Wings exist so a small player can simply stay up — and the rule they must
+   not break is the one behind every design decision in this game: a kid who
+   mashes the button is never worse off than one who doesn't.
+
+   They broke it twice while being built, both times invisibly. Clamping each
+   flap to a fixed lift left a tapping kid hovering at knee height, below the
+   platforms a plain jump reaches. Letting the flaps stack without limit
+   pinned them to the top of the screen, cruising over every star in the game.
+   Gold stars are the measure because they only exist up in the sky lane, and
+   the sky lane runs off a fixed seed — so the same stars are on offer in every
+   run, and the only variable is whether the kid could get to them. */
+test('power-ups: wings never leave a masher worse off than a jump', note => {
+  const goldWith = k => {
+    const h = createHarness('oliver-run', { seed: 77 });
+    h.bucket(k, POWER_NAMES.length);
+    h.tap();
+    runCycles(h, 6000, 3, 14);              // tap, tap, tap, all the way
+    const gold = poppedRoughly(h, /^\+50$/);
+    const score = h.num('score');
+    h.dispose();
+    return { gold, score };
+  };
+  const wings = goldWith(6);                 // FLAPPY WINGS
+  const boots = goldWith(5);                 // ROCKET BOOTS, the control
+  note(`wings ${wings.gold} gold / ${wings.score} pts vs boots ${boots.gold} / ${boots.score}`);
+  assert(wings.gold >= boots.gold,
+    `flying collected fewer gold stars than jumping (${wings.gold} vs ${boots.gold}) — ` +
+    `the flap is either too weak to climb or too strong to come back down`);
+  assert(wings.gold > 0, 'a flying kid reached no gold stars at all');
 });
 
 /* ---------------------------------------------------------------- *
@@ -1609,27 +1676,24 @@ test('sky lane: platforms survive a long run without incident', note => {
   return h;
 });
 
-/* Score is dominated by distance — roughly 4,600 points over 9,000 frames —
-   so gold stars can only ever be a small fraction of it, and climbing also
-   costs you ground-lane smashes you would otherwise have hit. A percentage
-   threshold on total score therefore measures distance, not the sky lane.
-   What IS provable through the score is that climbing nets strictly more
-   than a full gold star's worth over a grounded run. */
+/* Gold stars only ever sit on platforms, so counting the +50 pops is a direct
+   reading of how much sky lane a run actually reached. It used to compare
+   total scores, which worked until the ground filled up with critters and
+   made the score far too noisy to see 50 points through. */
 test('sky lane: gold stars are unreachable without leaving the ground', note => {
   const grounded = createHarness('oliver-run', { seed: 43 });
   grounded.tap();
   pump(grounded, 9000);            // never jumps, so never touches a platform
-  const flat = grounded.num('score');
+  const flat = poppedRoughly(grounded, /^\+50$/);
   grounded.dispose();
 
   const climber = createHarness('oliver-run', { seed: 43 });
   climber.tap();
   runCycles(climber, 9000, 24, 40);
-  const climbed = climber.num('score');
-  const GOLD = 50;                 // TUNE.goldPoints
-  note(`grounded ${flat} vs climbing ${climbed} (+${climbed - flat})`);
-  assert(climbed >= flat + GOLD,
-    `climbing should net at least one gold star over a grounded run: ${flat} -> ${climbed}`);
+  const climbed = poppedRoughly(climber, /^\+50$/);
+  note(`grounded reached ${flat} gold stars, climbing reached ${climbed}`);
+  assert(flat === 0, `a run that never jumps reached ${flat} gold stars`);
+  assert(climbed > 0, 'climbing for 9000 frames reached no gold star at all');
   return climber;
 });
 
@@ -1642,33 +1706,36 @@ test('sky lane: gold stars are unreachable without leaving the ground', note => 
    Measured while building this: the glide raises time spent standing on a
    platform from 167 frames to 1178 over the same run — a 7x difference. The
    score margin below is much smaller than that because distance dominates
-   the score; it is the visible tip of a far larger effect. */
+   the score; it is the visible tip of a far larger effect.
+
+   Counted in gold stars rather than points since the ground filled up with
+   critters: staying airborne now costs you real ground-lane pickings, so
+   total score stopped being a reading of the sky lane at all. */
 test('glide measurably improves sky lane collection', note => {
   const run = holdFor => {
     const h = createHarness('oliver-run', { seed: 44 });
+    // Pin the power-up to the fire ring in both runs. Powers last until they
+    // are swapped now, and several of them change how the hero falls, so a
+    // free-for-all would have the two runs flying differently for reasons
+    // that have nothing to do with the glide. The fire ring is the one that
+    // touches neither gravity nor reach.
+    h.bucket(1, POWER_NAMES.length);
     h.tap();
     runCycles(h, 9000, holdFor, 40);
-    const score = h.num('score');
+    const gold = poppedRoughly(h, /^\+50$/);
     h.dispose();
-    return score;
+    return gold;
   };
   const tapOnly = run(1);
   const floating = run(24);
-  note(`tap-only ${tapOnly} vs floating ${floating} (+${floating - tapOnly})`);
+  note(`tap-only reached ${tapOnly} gold stars vs floating ${floating}`);
   assert(floating > tapOnly,
-    `holding should collect more: ${tapOnly} -> ${floating}`);
+    `holding should collect more gold stars: ${tapOnly} -> ${floating}`);
 });
 
 /* ---------------------------------------------------------------- *
  * the high road in the arena, and the fourteen worlds
  * ---------------------------------------------------------------- */
-
-/* Pops are painted to the canvas and never reach the DOM, so they are counted
-   off h.painted(). A pop lives 58 frames and is stroked and filled on each of
-   them, so one pop is ~116 entries — hence "roughly how many", not "exactly". */
-function poppedRoughly(h, re) {
-  return Math.round(h.painted().filter(s => re.test(s)).length / 116);
-}
 
 /* The cleanest proof available that the sky lane really is open during a boss
    fight: a +50 pop is a gold star, gold stars only ever sit on platforms, and

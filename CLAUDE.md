@@ -17,6 +17,21 @@ contrast with all three rather than land in between.
   The sky lane is open during boss fights too, where the pads hover at a third
   of the world speed so they can be climbed and waited on; dropping onto a
   charging boss from one is a SKY SMASH.
+  Enemies come in four shapes — crawlers, flyers, swarms and brutes — composed
+  by `drawFoe` from a per-world `foe` spec, the same trick the generic bosses
+  use. Flyers have their own spawn clock so the sky can fill up without the
+  ground getting any busier. **Only the poppable half of the spawn table is
+  dense**: big smashables still arrive at the old rate, because they are the
+  only thing that slows you down and a run made of nothing but BONKs is a
+  punishment however loud it is.
+  Ten power-ups, and **a power lasts until you pick up another one** — no
+  timers, no expiry, nothing to lose. Orbs keep arriving so there is always
+  something to trade for. Everything a power does is either automatic or maps
+  onto the single button: wings flap, the bubble bounces itself, lightning
+  fires itself, the freeze ray stops the world.
+  Announcements all go through one queue (`announce`, drawn by `drawBanner`)
+  so a new world can't wipe the boss it just beat off the screen. Each one
+  carries a picture from `drawGlyph`, because the audience is five.
 - `games/emsile-fishing` — still screen, tap on the bite, scores a book of 15 sea
   creatures. Tap does four jobs depending on state (wiggle the lure / hook the
   fish / reel faster / skip the celebration), and mashing is always rewarded,
@@ -191,6 +206,11 @@ action. Don't "fix" this by narrowing it.
   Daddy Smash is the exception and it goes the other way — no buttons, only
   steering. Either way the rule behind the rule holds: one thing to do, and a
   kid who mashes or flails at it is never worse off than one who doesn't.
+  That last clause is load-bearing and it is easy to break by accident:
+  Flappy Wings violated it twice while being written — once hovering too low
+  to reach the platforms a plain jump reaches, once pinned so high it sailed
+  over every star in the game — and neither was visible without measuring.
+  `power-ups: wings never leave a masher worse off than a jump` is the guard.
 - **No fail states.** Nothing kills the player, ever. There's no game over in
   Oliver Run by design — hitting a big obstacle just slows you briefly. Reward
   and spectacle instead of punishment. Don't add lives or death.
