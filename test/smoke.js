@@ -1148,6 +1148,29 @@ test('daddy: both kids get smashed, not just the one you drive', note => {
   return h;
 });
 
+/* The mirror of "both kids get smashed, not just the one you drive": when
+   you are Daddy, nobody is driving either kid, so both must be fleeing on
+   autopilot. A kid left standing still would be caught constantly and the
+   other never — the shout names them, so the DOM can tell us. */
+test('daddy: as Daddy, both kids are still on the run', note => {
+  const h = createHarness('daddy-smash', { seed: 17 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 5);
+  const legs = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+  const seen = new Set();
+  for (let i = 0; i < 12000 && seen.size < 2; i++) {
+    if (i % 90 === 0) { const [x, y] = legs[(i / 90) % legs.length]; h.stick(x, y); }
+    pump(h, 1);
+    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    if (m) seen.add(m[1]);
+  }
+  assert(seen.has('Oliver'), `Oliver never got caught: saw ${[...seen].join(', ') || 'nobody'}`);
+  assert(seen.has('Emsile'), `Emsile never got caught: saw ${[...seen].join(', ') || 'nobody'}`);
+  note(`caught both within ${h.frameCount} frames`);
+  return h;
+});
+
 test('daddy: the pillow party arrives, then packs itself away', note => {
   const h = createHarness('daddy-smash', { seed: 5 });
   h.tap();
