@@ -945,7 +945,6 @@
   }
 
   function updateDaddy(dt){
-    if (daddy.hop > 0) daddy.hop -= dt;
     if (daddy.mode === 'dizzy'){
       daddy.timer -= dt;
       daddy.run += dt*0.05;
@@ -1083,6 +1082,7 @@
     t += dt;
     if (shake > 0) shake = Math.max(0, shake - dt);
     if (flash > 0) flash = Math.max(0, flash - 0.05*dt);
+    if (daddy.hop > 0) daddy.hop -= dt;
 
     if (party > 0){
       party -= dt;
