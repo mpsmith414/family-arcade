@@ -1306,6 +1306,18 @@ test('daddy: 20000 frames of hard running never throws either', note => {
   return h;
 });
 
+test('daddy: 20000 frames as Daddy never throws', note => {
+  const h = createHarness('daddy-smash', { seed: 77 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 5);
+  lapTheRoom(h, 20000);
+  assert(h.hidden('startScreen'), 'still playing');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${h.num('slams')} smashes as Daddy over 20000 frames`);
+  return h;
+});
+
 /* A blind driver: it laps the room and never reacts to where the kids are,
    so this measures "can a steered Daddy catch anybody at all", not skill —
    but it has to be a seed/budget pair the auto-lunge actually has to earn,
