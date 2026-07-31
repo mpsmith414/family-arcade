@@ -1049,6 +1049,31 @@ for (const [label, goLeft, goRight] of STEERERS) {
   });
 }
 
+/* Daddy spawns mid-room at z:34, not down at the kids' z:88, so the plant is
+   not in his lane and the landmarks either side of him are the toy box and
+   the big chair. Holding one way then the other is the honest question:
+   a Daddy nobody is driving would wander after the kids instead. */
+test('daddy: steering Daddy walks him across the room', note => {
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 5);
+
+  h.keyDown('ArrowLeft');
+  const goingLeft = new Set();
+  for (let i = 0; i < 900; i++) { pump(h, 1); goingLeft.add(h.text('whereTag')); }
+  assert(goingLeft.has('🧸 the toy box'), `holding left never walked Daddy to the toy box: ${[...goingLeft].join(', ')}`);
+
+  h.keyUp('ArrowLeft');
+  h.keyDown('ArrowRight');
+  const goingRight = new Set();
+  for (let i = 0; i < 900; i++) { pump(h, 1); goingRight.add(h.text('whereTag')); }
+  assert(goingRight.has('🪑 the big chair'), `holding right never walked Daddy to the big chair: ${[...goingRight].join(', ')}`);
+
+  note(`left → ${[...goingLeft].join(' / ')}   right → ${[...goingRight].join(' / ')}`);
+  return h;
+});
+
 /* Releasing has to actually release, and "did they stop?" is the wrong way
    to ask: being grabbed carries the kid across the room, so the position
    moves for reasons that have nothing to do with the key. Ask it the other
@@ -1123,6 +1148,29 @@ test('daddy: both kids get smashed, not just the one you drive', note => {
   return h;
 });
 
+/* The mirror of "both kids get smashed, not just the one you drive": when
+   you are Daddy, nobody is driving either kid, so both must be fleeing on
+   autopilot. A kid left standing still would be caught constantly and the
+   other never — the shout names them, so the DOM can tell us. */
+test('daddy: as Daddy, both kids are still on the run', note => {
+  const h = createHarness('daddy-smash', { seed: 17 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 5);
+  const legs = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+  const seen = new Set();
+  for (let i = 0; i < 12000 && seen.size < 2; i++) {
+    if (i % 90 === 0) { const [x, y] = legs[(i / 90) % legs.length]; h.stick(x, y); }
+    pump(h, 1);
+    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    if (m) seen.add(m[1]);
+  }
+  assert(seen.has('Oliver'), `Oliver never got caught: saw ${[...seen].join(', ') || 'nobody'}`);
+  assert(seen.has('Emsile'), `Emsile never got caught: saw ${[...seen].join(', ') || 'nobody'}`);
+  note(`caught both within ${h.frameCount} frames`);
+  return h;
+});
+
 test('daddy: the pillow party arrives, then packs itself away', note => {
   const h = createHarness('daddy-smash', { seed: 5 });
   h.tap();
@@ -1149,16 +1197,21 @@ test('daddy: swapping which kid you are', note => {
   pump(h, 12);
   assert(h.text('kidTag') === 'Emsile', 'gamepad X did not swap the kids');
 
-  // and the button on the kid's side of the screen does the same
+  // and the button on the kid's side of the screen cycles to the next kid
   h.click('swapBtn');
   pump(h, 12);
-  assert(h.text('kidTag') === 'Oliver', 'the swap button did not swap back');
+  assert(h.text('kidTag') === 'Daddy', 'the swap button did not cycle to Daddy');
+
+  // and cycles back through Oliver
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Oliver', 'the swap button did not cycle back to Oliver');
 
   // the game carries on, and whoever you are can still be caught
   const before = h.num('slams');
   pump(h, 2500);
   assert(h.num('slams') > before, 'the chase stopped after swapping');
-  note(`swapped both ways, ${h.num('slams')} smashes total`);
+  note(`cycled through all three characters, ${h.num('slams')} smashes total`);
   return h;
 });
 
@@ -1174,6 +1227,32 @@ test('daddy: choosing Emsile on the menu sticks across a reload', note => {
   assert(h.text('kidTag') === 'Emsile', `after reload the game forgot, showing "${h.text('kidTag')}"`);
   assert(!h.hidden('startScreen'), 'reload should land back on the menu');
   note('Emsile remembered across a reload');
+  return h;
+});
+
+test('daddy: choosing Daddy on the menu sticks across a reload', note => {
+  let h = createHarness('daddy-smash', { seed: 9 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 30);
+  assert(h.text('kidTag') === 'Daddy', `picking Daddy did not take, got "${h.text('kidTag')}"`);
+  assert(h.store['daddy-smash-kid'] === 'daddy', `storage says "${h.store['daddy-smash-kid']}"`);
+
+  // test swapping away from Daddy and cycling back through Oliver and Emsile
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Oliver', 'swap away from Daddy should cycle to Oliver');
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Emsile', 'swap from Oliver should cycle to Emsile');
+  h.click('swapBtn');
+  pump(h, 12);
+  assert(h.text('kidTag') === 'Daddy', 'swap from Emsile should cycle back to Daddy');
+
+  h = h.reload();
+  assert(h.text('kidTag') === 'Daddy', `after reload the game forgot, showing "${h.text('kidTag')}"`);
+  assert(!h.hidden('startScreen'), 'reload should land back on the menu');
+  note('Daddy remembered across a reload');
   return h;
 });
 
@@ -1225,6 +1304,171 @@ test('daddy: 20000 frames of hard running never throws either', note => {
   assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
   note(`${h.num('slams')} smashes while running, still going`);
   return h;
+});
+
+test('daddy: 20000 frames as Daddy never throws', note => {
+  const h = createHarness('daddy-smash', { seed: 77 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 5);
+  lapTheRoom(h, 20000);
+  assert(h.hidden('startScreen'), 'still playing');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${h.num('slams')} smashes as Daddy over 20000 frames`);
+  return h;
+});
+
+/* The mirror of "20000 frames of never moving": there the kid never moves
+   and Daddy's own chase AI closes the distance regardless. Here Daddy is the
+   one nobody is steering — move(daddy, 0, 0, ...) — and nothing compensates
+   for that the way the AI does for a stationary kid, so a fully idle Daddy
+   may rack up few catches, or none at all, over the whole run. That dry
+   spell is the design working as intended (a long stretch with nobody
+   caught is the failure state the game is tuned against, not a crash), so
+   this does not assert slams > 0 — only that idle play never ends the game
+   or leaks timers. */
+test('daddy: 20000 idle frames as Daddy never throws either', note => {
+  const h = createHarness('daddy-smash', { seed: 3 });
+  h.click('pickDaddy');
+  h.click('startBtn');
+  pump(h, 20000);
+  assert(h.hidden('startScreen'), 'the game must never bounce back to the menu — there is no game over');
+  assert(h.timerCount < 50, `timer leak: ${h.timerCount} still pending`);
+  note(`${h.num('slams')} smashes, ${h.timerCount} timers alive, entirely idle as Daddy`);
+  return h;
+});
+
+/* A blind driver: it laps the room and never reacts to where the kids are,
+   so this measures "can a steered Daddy catch anybody at all", not skill —
+   but it has to be a seed/budget pair the auto-lunge actually has to earn,
+   or a regression to the old AI-committed target would pass it too.
+   Numbers below are first-catch frame, measured with a probe that mirrors
+   this test exactly (click, click, 5 idle frames, then the 90-frame leg
+   pattern) — an earlier version of this measurement skipped that 5-frame
+   gap and gave numbers that didn't hold up here, so re-measure with the
+   probe if this ever needs revisiting rather than trusting a stale table.
+   Before the nearest-catchable retargeting / after: 3 → 1026/1584,
+   9 → 865/1188, 11 → 847/1380, 17 → 2983/3331, 23 → 1104/865,
+   42 → 2899/1452, 77 → 865/709. Most seeds get caught on both sides of the
+   fix (this game is forgiving even to a lucky AI-committed target), so the
+   only seed with real daylight between "before" and "after" is 42: 2899
+   frames before the fix, 1452 after. CHASE_FRAMES = 2200 sits in that gap
+   — 699 frames of margin below the pre-fix catch (a reverted retargeting
+   is still empty-handed here) and 748 above the post-fix one. Confirmed by
+   actually reverting the human branch to `daddy.chase` and re-running:
+   FAILS (0 smashes) before the fix, PASSES after. */
+test('daddy: chasing as Daddy catches a kid, with no button pressed', note => {
+  const CHASE_FRAMES = 2200;
+  const h = createHarness('daddy-smash', { seed: 42 });
+  h.click('pickDaddy');
+  h.click('startBtn');         // the only click; h.tap() is never called again
+  pump(h, 5);
+
+  // catchLine is a transient shout that other events (the pillow party, in
+  // particular) overwrite, so sampling it once at the final frame is a coin
+  // flip on whatever happens to be on screen at that instant. Collect it
+  // across the whole run instead — same approach as "both kids get smashed,
+  // not just the one you drive" above. lapTheRoom() pumps internally and
+  // gives no chance to sample in between, so its leg-changing pattern (same
+  // legs, same 90-frame cadence) is inlined here rather than reused.
+  const legs = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+  const smashed = new Set();
+  for (let i = 0; i < CHASE_FRAMES; i++) {
+    if (i % 90 === 0) {
+      const [x, y] = legs[(i / 90) % legs.length];
+      h.stick(x, y);
+    }
+    pump(h, 1);
+    const m = /^(\w+) got smashed/i.exec(h.text('catchLine'));
+    if (m) smashed.add(m[1]);
+  }
+
+  const slams = h.num('slams');
+  assert(slams > 0, `${CHASE_FRAMES} frames of chasing as Daddy caught nobody`);
+  assert(smashed.size > 0,
+    `${slams} smashes happened but no "got smashed" shout was ever seen on screen`);
+  note(`${slams} smashes as Daddy, steering only (shouted for: ${[...smashed].join(', ') || 'nobody'})`);
+  return h;
+});
+
+/* The raise-phase wiggle gate was widened to `(k === player() ||
+   playerIdx === 2)` so a human-driven Daddy also earns giggle credit for
+   working the stick while he holds a kid overhead — previously only the
+   `k === player()` half (a human-driven kid) was reachable. Nothing
+   exercised the new half.
+
+   Movement during the whole set piece (grab/carry/raise/drop/bounce) never
+   reads player input — only the raise phase's wiggle score does — so if two
+   runs share a seed and share their steering right up until the catch, the
+   catch lands on the exact same frame in both, no matter what either run
+   does with the stick afterwards. That makes an apples-to-apples comparison
+   possible: lap the room identically into the catch, then one run holds the
+   stick hard over through the raise and the other centres it, and read the
+   giggle meter the instant before `land()` adds its own flat +20.
+
+   Centred can only ever produce `wiggle <= 0.5`, so `addGiggle(0.5)`'s
+   Math.random() check never even runs — its contribution during the raise
+   is provably zero, not just usually zero. So the comparison only needs the
+   wiggling run to land one lucky 10%-chance tick in its ~26-frame window,
+   which a quick calibration pass below confirms it does for this seed. */
+test('daddy: wiggling the stick while Daddy holds a kid overhead fills the giggle meter faster', note => {
+  const seed = 42;
+  const legs = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+  const lap = (h, i) => {
+    if (i % 90 === 0) { const [x, y] = legs[(i / 90) % legs.length]; h.stick(x, y); }
+  };
+
+  // A reference run — lapping the room the whole way, never diverging — just
+  // to find which frame the catch resolves on for this seed/script.
+  function findLandFrame(budget) {
+    const h = createHarness('daddy-smash', { seed });
+    h.click('pickDaddy');
+    h.click('startBtn');
+    pump(h, 5);
+    let prevSlams = 0, landAt = -1;
+    for (let i = 0; i < budget && landAt === -1; i++) {
+      lap(h, i);
+      pump(h, 1);
+      if (h.num('slams') > prevSlams) landAt = i;
+      prevSlams = h.num('slams');
+    }
+    h.dispose();
+    return landAt;
+  }
+
+  const refLand = findLandFrame(3000);
+  assert(refLand > 0, 'reference run never caught anybody to calibrate the comparison against');
+  // 60 frames short of the catch is comfortably inside the fixed 16-frame
+  // grab (grab always follows immediately once the catch resolves), so
+  // switching the stick there can never be early enough to change who gets
+  // caught, when, or where.
+  const D = Math.max(0, refLand - 60);
+
+  function runBranch(branch) {
+    const h = createHarness('daddy-smash', { seed });
+    h.click('pickDaddy');
+    h.click('startBtn');
+    pump(h, 5);
+    let prevSlams = 0, landAt = -1, widthBeforeLand = null;
+    for (let i = 0; i < refLand + 50 && landAt === -1; i++) {
+      if (i < D) lap(h, i);
+      else if (i === D) h.stick(branch === 'wiggle' ? 1 : 0, branch === 'wiggle' ? 1 : 0);
+      const w = parseFloat(h.styleOf('giggleFill', 'width')) || 0;
+      pump(h, 1);
+      if (h.num('slams') > prevSlams) { landAt = i; widthBeforeLand = w; }
+      prevSlams = h.num('slams');
+    }
+    h.dispose();
+    return { landAt, widthBeforeLand };
+  }
+
+  const wiggling = runBranch('wiggle');
+  const still = runBranch('still');
+  assert(wiggling.landAt === refLand && still.landAt === refLand,
+    `both runs should catch on the same frame the reference run did (ref ${refLand}, wiggling ${wiggling.landAt}, still ${still.landAt}) — the diverging input leaked into the chase itself`);
+  assert(wiggling.widthBeforeLand > still.widthBeforeLand,
+    `wiggling through the raise should end with strictly more giggle than holding the stick still: wiggling ${wiggling.widthBeforeLand}%, still ${still.widthBeforeLand}%`);
+  note(`seed ${seed}: caught at frame ${refLand}, wiggling ${wiggling.widthBeforeLand}% giggle vs still ${still.widthBeforeLand}% going into the land`);
 });
 
 /* ================================================================ *
