@@ -1284,15 +1284,27 @@ test('daddy: 20000 frames of hard running never throws either', note => {
 });
 
 /* A blind driver: it laps the room and never reacts to where the kids are,
-   so this measures "can a steered Daddy catch anybody at all", not skill.
-   Budget is double the worst first-catch across seeds 3/9/11/17/23/42/77.
-   Measured (first catch / total catches, after the nearest-catchable
-   retargeting): 3 → 1001f/9, 9 → 1031f/11, 11 → 858f/15, 17 → 846f/13,
-   23 → 1391f/13, 42 → 1901f/11, 77 → 564f/15. Worst first catch was 1901
-   frames (seed 42), so 6000 is double that with room to spare. */
+   so this measures "can a steered Daddy catch anybody at all", not skill —
+   but it has to be a seed/budget pair the auto-lunge actually has to earn,
+   or a regression to the old AI-committed target would pass it too.
+   Numbers below are first-catch frame, measured with a probe that mirrors
+   this test exactly (click, click, 5 idle frames, then the 90-frame leg
+   pattern) — an earlier version of this measurement skipped that 5-frame
+   gap and gave numbers that didn't hold up here, so re-measure with the
+   probe if this ever needs revisiting rather than trusting a stale table.
+   Before the nearest-catchable retargeting / after: 3 → 1026/1584,
+   9 → 865/1188, 11 → 847/1380, 17 → 2983/3331, 23 → 1104/865,
+   42 → 2899/1452, 77 → 865/709. Most seeds get caught on both sides of the
+   fix (this game is forgiving even to a lucky AI-committed target), so the
+   only seed with real daylight between "before" and "after" is 42: 2899
+   frames before the fix, 1452 after. CHASE_FRAMES = 2200 sits in that gap
+   — 699 frames of margin below the pre-fix catch (a reverted retargeting
+   is still empty-handed here) and 748 above the post-fix one. Confirmed by
+   actually reverting the human branch to `daddy.chase` and re-running:
+   FAILS (0 smashes) before the fix, PASSES after. */
 test('daddy: chasing as Daddy catches a kid, with no button pressed', note => {
-  const CHASE_FRAMES = 6000;
-  const h = createHarness('daddy-smash', { seed: 23 });
+  const CHASE_FRAMES = 2200;
+  const h = createHarness('daddy-smash', { seed: 42 });
   h.click('pickDaddy');
   h.click('startBtn');         // the only click; h.tap() is never called again
   pump(h, 5);
