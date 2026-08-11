@@ -2965,6 +2965,393 @@ test('boat: swapping who you are mid-voyage', note => {
   return h;
 });
 
+/* ================================================================ *
+ * games/star-wings
+ *
+ * The sixth game and the only one with a GUN in it. Free 2D flight, no
+ * gravity and no floor anywhere — everything on screen is a target and
+ * nothing is an obstacle. Two promises hold this one up:
+ *
+ *   1. THE GUN FIRES ITSELF. A child who only steers still shoots five
+ *      times a second, clears every wave and beats every boss. Tapping
+ *      adds shots to the same counter the clock is filling, so mashing
+ *      can only ever help — the delta-not-total rule again.
+ *   2. NOBODY EVER CRASHES. A bump shoves the rocket backwards and
+ *      flashes it for a second. That is the entire cost of being hit:
+ *      no lives, no shields, no gun taken away, no game over.
+ *
+ * `zapped` is the score and the readout for everything. `wingTag` says
+ * whether the two rockets have joined, which is also the only thing the
+ * DOM exposes about where the rocket IS — the wingman patrols the left
+ * of the screen, so flying down into it is observable and flying up is
+ * not. That is what the steering tests key off.
+ * ================================================================ */
+
+const WING_ZONES = ['Blue Skies', 'Cloud Tops', 'Sunset Run', 'Night Sky',
+                    'Rainbow Road', 'Candy Clouds', 'Deep Space', 'Alien Garden'];
+const WING_BOSSES = ['BIG PUFF', 'CLOUD MUM', 'SKY SNAKE', 'MOON MOTH',
+                     'RAINBOT', 'BIG CAKE', 'STAR WHALE', 'VINE WORM'];
+const WING_GUNS = ['Spread shot', 'Zap laser', 'Chaser bubbles', 'Boulder ball',
+                   'Rainbow ray', 'Little helpers', 'Bumper bubble'];
+
+/* Fly up and down, tapping as you go. A busy passenger, not a clever one —
+   it cannot see what it is shooting at, so use it to keep the machinery hot
+   and to compare one run against another. */
+function wingRun(seed, frames, opts) {
+  const o = opts || {};
+  const h = createHarness('star-wings', { seed });
+  if (o.pick) h.click(o.pick);
+  h.click('startBtn');
+  pump(h, 5);
+  const seen = { zones: new Set(), bosses: new Set(), guns: new Set(), shouts: new Set() };
+  let down = false;
+  if (o.steer) h.keyDown('ArrowUp');
+  for (let i = 0; i < frames; i++) {
+    if (o.steer && i && i % o.steer === 0) {
+      h.keyUp(down ? 'ArrowDown' : 'ArrowUp');
+      down = !down;
+      h.keyDown(down ? 'ArrowDown' : 'ArrowUp');
+    }
+    if (o.tap && i % o.tap === 0) h.key('z');
+    pump(h, 1);
+    if (o.watch) {
+      for (const z of WING_ZONES) if (h.text('zoneTag').includes(z)) seen.zones.add(z);
+      if (!h.hidden('bossBar')) seen.bosses.add(h.text('bossName'));
+      if (!h.hidden('powerTag')) seen.guns.add(h.text('powerTag'));
+      if (h.hasClass('shout', 'show')) seen.shouts.add(h.el('shout').innerHTML);
+    }
+  }
+  seen.zapped = h.num('zapped');
+  seen.h = h;
+  return seen;
+}
+
+test('wings: boots to the menu with nothing zapped', note => {
+  const h = createHarness('star-wings');
+  note(`loaded ${h.loaded.join(', ')}`);
+  assert(!h.hidden('startScreen'), 'start screen should be visible before play');
+  assert(h.num('zapped') === 0, 'should start with nothing zapped');
+  assert(h.text('best') === '', `fresh install should show no best, got "${h.text('best')}"`);
+  assert(h.text('kidTag') === 'Oliver', `expected to default to Oliver, got "${h.text('kidTag')}"`);
+  assert(h.hidden('bossBar'), 'no boss on the menu');
+  assert(h.hidden('powerTag'), 'no gun tag on the menu — you start with the pop gun');
+  assert(h.hidden('wingTag'), 'wings should not be joined on the menu');
+  pump(h, 120);
+  assert(h.num('zapped') === 0, 'nothing should happen while still on the menu');
+  return h;
+});
+
+for (const [label, start] of Object.entries(STARTERS)) {
+  test(`wings: blasts off from ${label}`, note => {
+    const h = createHarness('star-wings', { seed: 42 });
+    start(h);
+    pump(h, 5);
+    assert(h.hidden('startScreen'), `${label} did not blast off`);
+    pump(h, 900);
+    note(`${h.num('zapped')} zapped after 900 frames`);
+    assert(h.num('zapped') > 0, `nothing was zapped under ${label}`);
+    return h;
+  });
+}
+
+/* THE GUN FIRES ITSELF. This is the promise that makes a shooter safe to
+   hand to a five-year-old, and it is worth its own test rather than being
+   an aside in another one: no taps at all, no steering at all, and the run
+   still clears waves and beats mini bosses. */
+test('wings: a child who never presses anything still shoots, and still wins', note => {
+  const r = wingRun(11, 12000, { watch: true });
+  const bosses = /👾(\d+)/.exec(r.h.text('best'));
+  note(`${r.zapped} zapped, ${r.zones.size} zones, bosses met: ${[...r.bosses].join(', ')}, best line "${r.h.text('best')}"`);
+  assert(r.zapped > 200, `a rocket nobody is flying only zapped ${r.zapped} in 12000 frames`);
+  assert(r.bosses.size >= 2, `only ${r.bosses.size} mini boss(es) turned up with no input`);
+  assert(bosses && +bosses[1] >= 1, `no mini boss was ever beaten without touching anything`);
+  return r.h;
+});
+
+/* The delta-not-total guard, and the one measurement that had to be worked
+   out rather than copied.
+ *
+ * Score alone will not show it. Waves arrive on a fixed clock, so once the
+ * rocket is killing everything that crosses its line more bullets have
+ * nothing left to hit and the zap count flattens out — the first cut of
+ * this game fired five times a second on its own and mashing every single
+ * frame scored no better than never touching the screen at all. The button
+ * was decoration. The fix was to make the gun SCARCE (a slow automatic
+ * floor, a tap worth half the gap), and the proof is not the score.
+ *
+ * What tapping really buys is a shorter boss fight — the one place in the
+ * game where damage is the only thing that matters and there is no spawn
+ * clock to saturate against. So that is what gets measured, and it is a
+ * clean five-to-one across the range. The score is still checked, but only
+ * for the house rule it has to satisfy: mashing is NEVER WORSE. */
+test('wings: mashing shoots more, at every possible tapping speed', note => {
+  const CADENCES = [0, 40, 30, 20, 14, 10, 6, 3, 1];
+  const rows = CADENCES.map(every => {
+    let zaps = 0, bossFrames = 0;
+    for (const seed of [11, 5, 33, 7, 21, 42]) {
+      const h = createHarness('star-wings', { seed });
+      h.click('startBtn');
+      pump(h, 5);
+      let down = false;
+      h.keyDown('ArrowUp');
+      for (let i = 0; i < 6000; i++) {
+        if (i && i % 110 === 0) {
+          h.keyUp(down ? 'ArrowDown' : 'ArrowUp');
+          down = !down;
+          h.keyDown(down ? 'ArrowDown' : 'ArrowUp');
+        }
+        if (every && i % every === 0) h.key('z');
+        pump(h, 1);
+        if (!h.hidden('bossBar')) bossFrames++;
+      }
+      zaps += h.num('zapped');
+      h.dispose();
+    }
+    return { every, zaps, bossFrames };
+  });
+  note(rows.map(r => `${r.every || 'never'}:${r.zaps}/${r.bossFrames}f`).join('  '));
+
+  /* The score is allowed to be FLAT, within a few per cent, and that is not
+     a fudge — it is the spawn clock. There is even a small honest channel
+     the other way: killing a critter before it gets its shot off removes a
+     slow bubble that was worth a zap of its own to pop, so a masher clears
+     a fractionally quieter sky. It is worth a per cent or two against a
+     boss effect of four to one. What this catches is a real decline — a
+     clamp pushing the counter the wrong way would take a big bite, not
+     three per cent. */
+  const idle = rows[0];
+  for (const r of rows.slice(1)) {
+    assert(r.zaps >= idle.zaps*0.95,
+      `tapping every ${r.every} frames zapped ${r.zaps}, well under never tapping (${idle.zaps})`);
+  }
+  const tapped = rows.slice(1).reduce((a, r) => a + r.zaps, 0)/(rows.length - 1);
+  assert(tapped >= idle.zaps,
+    `tapping at all averaged ${tapped.toFixed(0)} against ${idle.zaps} for never tapping`);
+  const bf = i => rows[i].bossFrames;
+  const slow = (bf(1) + bf(2) + bf(3))/3;
+  const mid  = (bf(4) + bf(5) + bf(6))/3;
+  const fast = (bf(7) + bf(8))/2;
+  note(`frames stuck in boss fights — never ${idle.bossFrames} → slow ${slow.toFixed(0)} → ` +
+       `mid ${mid.toFixed(0)} → mashing ${fast.toFixed(0)}`);
+  assert(slow < idle.bossFrames, `slow tapping (${slow.toFixed(0)}) did not shorten a boss fight at all`);
+  assert(mid < slow, `middling tapping (${mid.toFixed(0)}) was no quicker than slow tapping (${slow.toFixed(0)})`);
+  assert(fast < mid, `hard mashing (${fast.toFixed(0)}) was no quicker than middling tapping (${mid.toFixed(0)})`);
+  assert(fast < idle.bossFrames/2,
+    `mashing (${fast.toFixed(0)}) should roundly beat never tapping (${idle.bossFrames}) — it is the whole point of the button`);
+});
+
+/* NO GUN IS EVER A HOBBLE — Tower Climb's lesson, where three of six powers
+   were secretly worse than carrying nothing and none of it showed by
+   playing. Rate is measured off the HUD tag, and boss frames are thrown
+   away: a boss fight is long and pays nothing until it ends, so whichever
+   gun happened to be carried through more of them looked worse than it was.
+   The bar is the pop gun you start with — guns may differ from each other,
+   but not one of them may be a downgrade on picking up nothing. */
+test('wings: no gun is ever a hobble', note => {
+  const rate = {};
+  for (const seed of [11, 5, 33, 7]) {
+    const h = createHarness('star-wings', { seed });
+    h.click('startBtn');
+    pump(h, 5);
+    h.keyDown('ArrowUp');
+    let down = false, prev = 0;
+    for (let i = 0; i < 22000; i++) {
+      if (i && i % 140 === 0) {
+        h.keyUp(down ? 'ArrowDown' : 'ArrowUp');
+        down = !down;
+        h.keyDown(down ? 'ArrowDown' : 'ArrowUp');
+      }
+      if (i % 9 === 0) h.key('z');
+      pump(h, 1);
+      const z = h.num('zapped');
+      const dz = Math.max(0, z - prev);
+      prev = z;
+      if (!h.hidden('bossBar')) continue;
+      const tag = h.hidden('powerTag') ? 'Pop gun' : h.text('powerTag');
+      const r = rate[tag] || (rate[tag] = { f: 0, z: 0 });
+      r.f++; r.z += dz;
+    }
+    h.dispose();
+  }
+  const rows = Object.entries(rate)
+    .filter(([, v]) => v.f > 1200)              // ignore a gun barely carried
+    .map(([k, v]) => [k, v.z/v.f])
+    .sort((a, b) => b[1] - a[1]);
+  note(rows.map(([k, r]) => `${k} ${r.toFixed(4)}`).join('  '));
+  const plain = rows.find(r => /Pop gun/.test(r[0]));
+  assert(plain, 'never measured the plain pop gun, so there is nothing to compare against');
+  const seen = WING_GUNS.filter(g => rows.some(r => r[0].includes(g)));
+  assert(seen.length >= 6, `only ${seen.length} of ${WING_GUNS.length} guns were ever carried: ${seen.join(', ')}`);
+  for (const [name, r] of rows) {
+    if (/Pop gun/.test(name)) continue;
+    assert(r >= plain[1],
+      `${name} zaps ${r.toFixed(4)} a frame against the pop gun's ${plain[1].toFixed(4)} — it is a hobble`);
+  }
+});
+
+/* The wingman patrols the left of the screen on its own path, so flying
+   DOWN into it joins wings and flying UP does not. That is the only thing
+   the DOM exposes about where the rocket is, which makes it the honest way
+   to prove each input really moves it. It also guards the bug that made
+   this mechanic unreachable: keeping station off the player's shoulder put
+   the wingman permanently further away than the dock radius, so it backed
+   off exactly as fast as a child chased it. */
+for (const [label, down, up] of [
+  ['held arrow keys', h => h.keyDown('ArrowDown'), h => h.keyDown('ArrowUp')],
+  ['WASD', h => h.keyDown('s'), h => h.keyDown('w')],
+  ['the analogue stick', h => h.stick(0, 1), h => h.stick(0, -1)],
+  ['the d-pad', h => h.padHold('down', true), h => h.padHold('up', true)],
+  ['a finger held on the glass', h => h.pointerHold(0.14, 0.62), h => h.pointerHold(0.9, 0.06)],
+]) {
+  test(`wings: steering with ${label}`, note => {
+    const joinsAt = go => {
+      const h = createHarness('star-wings', { seed: 4 });
+      h.click('startBtn');
+      pump(h, 5);
+      go(h);
+      let at = -1;
+      for (let i = 0; i < 700; i++) { pump(h, 1); if (at < 0 && !h.hidden('wingTag')) at = i; }
+      h.dispose();
+      return at;
+    };
+    const a = joinsAt(down), b = joinsAt(up);
+    note(`towards the wingman: joined at ${a < 0 ? 'never' : a}   away from it: ${b < 0 ? 'never' : b}`);
+    assert(a >= 0, `${label} never reached the wingman — steering towards it did nothing`);
+    assert(b < 0 || b > a*3,
+      `${label} joined just as fast flying away (${b}) as towards (${a}) — it is not steering at all`);
+  });
+}
+
+/* Being knocked apart is a spectacle, never a loss: the wingman spins off,
+   comes straight back, and flying into it joins you up again. So a split
+   must always be followed by another join — never the end of the mechanic
+   for the rest of the run. */
+test('wings: being knocked apart is never the end of it', note => {
+  let joins = 0, splits = 0, endedJoined = 0;
+  for (const seed of [33, 11, 5]) {
+    const h = createHarness('star-wings', { seed });
+    h.click('startBtn');
+    pump(h, 5);
+    let was = false;
+    for (let i = 0; i < 20000; i++) {
+      if (i % 9 === 0) h.key('z');
+      pump(h, 1);
+      const on = !h.hidden('wingTag');
+      if (on && !was) joins++;
+      if (!on && was) splits++;
+      was = on;
+    }
+    if (was) endedJoined++;
+    h.dispose();
+  }
+  note(`${joins} joins and ${splits} splits across three runs; ${endedJoined}/3 ended with wings joined`);
+  assert(joins >= 3, `the two rockets only joined ${joins} times in three whole runs`);
+  assert(joins > splits, `${splits} splits against ${joins} joins — a split was never recovered from`);
+});
+
+test('wings: every zone and every mini boss turns up', note => {
+  const r = wingRun(11, 40000, { steer: 140, tap: 7, watch: true });
+  const missingZ = WING_ZONES.filter(z => !r.zones.has(z));
+  const missingB = WING_BOSSES.filter(b => !r.bosses.has(b));
+  note(`${r.zones.size}/${WING_ZONES.length} zones, ${r.bosses.size}/${WING_BOSSES.length} bosses, ${r.zapped} zapped`);
+  assert(missingZ.length === 0, `never flew through: ${missingZ.join(', ')}`);
+  assert(missingB.length === 0, `never met: ${missingB.join(', ')}`);
+  return r.h;
+});
+
+/* A boss must never be able to trap somebody. A child who parks the rocket
+   in a corner where its shots do not line up has to get out of the fight
+   anyway, so after forty seconds the boss gets bored, gives up and leaves
+   its orb behind. Same shape as Tower Climb's balloons and the dolphins in
+   Treasure Boat: the game gets you out, you do not have to. */
+test('wings: a boss that cannot be beaten gives up and flies off', note => {
+  let gaveUp = 0, showing = false, beaten = 0;
+  for (const seed of [11, 8]) {
+    const h = createHarness('star-wings', { seed });
+    h.click('startBtn');
+    pump(h, 5);
+    for (let i = 0; i < 22000; i++) {
+      pump(h, 1);
+      const up = h.hasClass('shout', 'show') && /GAVE UP/.test(h.el('shout').innerHTML);
+      if (up && !showing) gaveUp++;
+      showing = up;
+    }
+    const m = /👾(\d+)/.exec(h.text('best'));
+    beaten += m ? +m[1] : 0;
+    h.dispose();
+  }
+  note(`${gaveUp} bosses gave up and ${beaten} were beaten outright, across two idle runs`);
+  assert(beaten + gaveUp >= 4, `only ${beaten + gaveUp} boss fights ever ended — one of them is a trap`);
+  assert(gaveUp >= 1, 'no boss ever gave up, so the way out of a stuck fight is untested');
+});
+
+test('wings: survives 20000 frames of hard flying with no exception', note => {
+  const r = wingRun(7, 20000, { steer: 90, tap: 4 });
+  note(`${r.zapped} zapped, best "${r.h.text('best')}"`);
+  assert(r.zapped > 100, 'a hard-flown run zapped almost nothing');
+  return r.h;
+});
+
+test('wings: a press in the dead space around the game still flies the rocket', note => {
+  const h = createHarness('star-wings', { seed: 4 });
+  h.click('startBtn');
+  pump(h, 5);
+  // a telly's cursor, well off to the left of the box and level with the
+  // wingman's patrol — the kit clamps it to the edge, which is a hard left
+  h.pageHold(-1.5, 0.5);
+  let at = -1;
+  for (let i = 0; i < 1600; i++) { pump(h, 1); if (at < 0 && !h.hidden('wingTag')) at = i; }
+  note(`joined wings at frame ${at < 0 ? 'never' : at} steering from outside the box`);
+  assert(at >= 0, 'a press outside the game box did not fly the rocket at all');
+  return h;
+});
+
+test('wings: the best score survives a reload', note => {
+  let h = createHarness('star-wings', { seed: 11 });
+  h.click('startBtn');
+  pump(h, 5);
+  for (let i = 0; i < 6000; i++) { if (i % 9 === 0) h.key('z'); pump(h, 1); }
+  const reached = h.num('zapped');
+  assert(reached > 50, `precondition: expected a decent score, got ${reached}`);
+  assert(/Best/.test(h.text('best')), `the best should show during play, got "${h.text('best')}"`);
+  pump(h, 200);                     // let the throttled save land
+
+  h = h.reload();
+  const kept = parseInt(String(h.text('best')).replace(/[^\d]/g, ''), 10);
+  note(`${reached} zapped before the reload, "${h.text('best')}" after`);
+  assert(kept >= reached, `best did not survive: expected at least ${reached}, kept "${h.text('best')}"`);
+  assert(h.num('zapped') === 0, 'a fresh run should start at nothing zapped');
+  return h;
+});
+
+test('wings: choosing Emsile sticks across a reload', note => {
+  let h = createHarness('star-wings', { seed: 2 });
+  h.click('pickEmsile');
+  assert(h.el('pickEmsile').getAttribute('aria-pressed') === 'true', 'Emsile should be selected');
+  h.click('startBtn');
+  pump(h, 200);
+  assert(h.text('kidTag') === 'Emsile', `expected to be playing Emsile, got "${h.text('kidTag')}"`);
+  h = h.reload();
+  note(`after reload the menu offers ${h.text('kidTag')}`);
+  assert(h.text('kidTag') === 'Emsile', `the choice did not stick: got "${h.text('kidTag')}"`);
+  return h;
+});
+
+test('wings: swapping who you are mid-flight', note => {
+  const h = createHarness('star-wings', { seed: 2 });
+  h.click('startBtn');
+  pump(h, 60);
+  assert(h.text('kidTag') === 'Oliver', 'precondition: starts as Oliver');
+  h.click('swapBtn');
+  pump(h, 10);
+  assert(h.text('kidTag') === 'Emsile', `swap button did nothing: still "${h.text('kidTag')}"`);
+  h.padPress('x');                 // the pad's secondary button does it too
+  pump(h, 10);
+  assert(h.text('kidTag') === 'Oliver', `X on the pad did not swap back: "${h.text('kidTag')}"`);
+  note('swapped by button and by pad');
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * report
  * ---------------------------------------------------------------- */

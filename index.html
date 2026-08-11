@@ -56,6 +56,7 @@
   .art.smash{background:linear-gradient(160deg,#F6E4C6,#E0603E 55%,#2E1B12)}
   .art.climb{background:linear-gradient(160deg,#BFEBFF,#5B8FD6 48%,#1B2A4A)}
   .art.boat{background:linear-gradient(160deg,#8FE0EE,#1B7FC0 46%,#072A44)}
+  .art.wings{background:linear-gradient(160deg,#8FD8F5,#B274EB 46%,#0B0A24)}
   .art.soon{background:linear-gradient(160deg,#1F2340,#2E3357)}
   .meta{padding:13px 15px 15px}
   .meta strong{display:block;font-size:17px;letter-spacing:.02em}
@@ -126,6 +127,15 @@
       <span>Sail an ocean that never ends. Throw the net, ride the whirlpools, land on islands and dig up the X.</span>
     </span>
   </button>
+
+  <button class="card" data-go="games/star-wings/index.html">
+    <span class="best" id="bestWings" hidden></span>
+    <span class="art wings">🚀</span>
+    <span class="meta">
+      <strong>Star Wings</strong>
+      <span>The rocket shoots by itself. Zap everything, join wings with the other rocket, beat the big ones.</span>
+    </span>
+  </button>
 </div>
 
 <div id="pad" hidden>🎮 Controller ready — press any button</div>
@@ -180,6 +190,15 @@
     var boatTag = document.getElementById('bestBoat');
     boatTag.textContent = '\u{1FA99} ' + haul + (boatIsles ? '  \u{1F3DD}️' + boatIsles : '');
     boatTag.hidden = false;
+  }
+
+  // and the biggest haul of zaps on its card
+  var zaps = KidKit.storage.getNumber('star-wings-best', 0);
+  var wingBosses = KidKit.storage.getNumber('star-wings-bosses', 0);
+  if (zaps){
+    var wingTag = document.getElementById('bestWings');
+    wingTag.textContent = '⭐ ' + zaps + (wingBosses ? '  \u{1F47E}' + wingBosses : '');
+    wingTag.hidden = false;
   }
 
   var cards = [].slice.call(document.querySelectorAll('.card:not([disabled])'));

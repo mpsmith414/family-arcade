@@ -13,11 +13,12 @@ games/emsile-fishing/index.html  game two — slow one-tap fishing, 15 creatures
 games/daddy-smash/index.html     game three — chase round the living room, no buttons at all
 games/tower-climb/index.html     game four — climb an endless tower, steer and tap
 games/treasure-boat/index.html   game five — sail an endless ocean, land and dig
-test/harness.js, test/smoke.js   headless tests for all five  (node test/smoke.js)
+games/star-wings/index.html      game six — side-on space shooter, no game over
+test/harness.js, test/smoke.js   headless tests for all six  (node test/smoke.js)
 icons/                           app icons
 ```
 
-The five games are deliberately unlike each other. Oliver Run is fast and loud
+The six games are deliberately unlike each other. Oliver Run is fast and loud
 and scores distance; Emsile Fishing is still and quiet, runs at 84 bpm instead of
 132, and scores a picture book you fill in. Daddy Smash is the odd one out on
 purpose: no button at all, just steering round one room while Daddy chases both
@@ -25,7 +26,7 @@ kids, and **getting caught is the reward** — he body-slams you onto the couch,
 you bounce, you run off again. Tower Climb is the only one you both steer *and*
 tap: a Donkey-Kong-shaped maze of floors that goes up for ever, scoring how many
 you climb. Treasure Boat is the only one with a *world* in it rather than a
-level. Nobody loses any of them.
+level, and Star Wings is the only one with a *gun*. Nobody loses any of them.
 
 Tower Climb's trick is that **it cannot be failed by being bad at it**. Ladders
 are escalators — walk into one and you ride it up, no button and no timing.
@@ -53,6 +54,22 @@ a brand new world each time you press **Set sail**. Nobody is ever marooned
 either: if nothing has been found for eight seconds the dolphins tow the boat
 somewhere new, and a seagull ferries a stranded walker to the X and then back to
 the boat.
+
+Star Wings is a **side-on space shooter** in the shape of Aegis Wing, and the
+trick that makes one safe for a five-year-old is that **the rocket shoots by
+itself**. A child who only steers still fires, still clears every wave and still
+beats every mini boss; tapping adds shots on top and makes the big ones blow up
+about five times quicker. Nothing can crash you — being hit shoves the rocket
+backwards and flashes it for a second, and that is the whole cost. There are no
+lives and nothing to lose. Enemy fire is big, slow and **poppable**, because a
+five-year-old cannot dodge.
+
+Fly into your brother or sister's rocket and the two of you **join wings** into
+one machine with an extra gun. Eight zones from Blue Skies out to the Alien
+Garden, each with its own critters and its own mini boss, dealt from a shuffle
+bag so a full set comes round before any repeat. Eight guns to pick up, one at a
+time. And if a boss somehow cannot be beaten, after forty seconds it gets bored,
+gives up and flies off leaving its prize behind — nobody is ever stuck.
 
 ## Putting it online
 
@@ -136,11 +153,11 @@ Everything is wired through `KidKit.input`, so every game gets all of these free
 | Almost any key | jump |
 | Arrow keys | menu navigation |
 | Gamepad A/B/bumpers/triggers/d-pad, stick up | jump |
-| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing, swaps which kid you are in Daddy Smash, Tower Climb and Treasure Boat) |
+| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing, swaps which kid you are in Daddy Smash, Tower Climb, Treasure Boat and Star Wings) |
 | Gamepad Start | confirm in menus |
 
-Daddy Smash, Tower Climb and Treasure Boat also need to *steer*, so they opt into
-the kit's steering layer and get these on top:
+Daddy Smash, Tower Climb, Treasure Boat and Star Wings also need to *steer*, so
+they opt into the kit's steering layer and get these on top:
 
 | Input | Action |
 |---|---|
@@ -155,9 +172,10 @@ child actually holds one, and reading that as "down" sent them back down every
 ladder. Climbing down is on the keys and the stick, where it has to be asked
 for on purpose.
 
-Treasure Boat reads **both** ways the finger points, because it is a map seen
-from above: south is a real place to sail to, so there is nothing to lose by
-going there. A finger held over the middle of the screen means "stop".
+Treasure Boat and Star Wings read **both** ways the finger points, because both
+are played across the whole screen: in one, south is a real place to sail to; in
+the other, the whole sky is flyable. A finger held over the middle of the boat
+means "stop".
 
 Holding a finger down is the one to show a three-year-old: no virtual joystick to
 find, no button to hit, the kid just runs to your fingertip.

@@ -1,6 +1,6 @@
 /* Family Arcade service worker.
    Bump CACHE when you change a game, otherwise phones keep the old copy. */
-const CACHE = 'arcade-v14';
+const CACHE = 'arcade-v15';
 const FILES = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const FILES = [
   './games/daddy-smash/index.html',
   './games/tower-climb/index.html',
   './games/treasure-boat/index.html',
+  './games/star-wings/index.html',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png'

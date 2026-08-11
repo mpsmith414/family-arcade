@@ -4,8 +4,8 @@ Homemade browser games for my two young kids. Oliver (older) and Emsile (little
 sister) are the characters in both games. Built to be played on a phone, a
 tablet, and a TV with a controller.
 
-Five games, deliberately unlike each other. Keep it that way: a sixth should
-contrast with all five rather than land in between.
+Six games, deliberately unlike each other. Keep it that way: a seventh should
+contrast with all six rather than land in between.
 
 - `games/oliver-run` — endless runner, tap to jump, 14 worlds, 18 bosses, scores
   distance. Adventure deals the worlds from a shuffle bag, so a full set comes
@@ -167,6 +167,45 @@ contrast with all five rather than land in between.
   ashore a seagull ferries the walker to the X, then to the boat the next time.
   Digging plain sand pays but is marked `quiet` so it does not reset that
   timer, or a child happily digging one spot would never be shown the X.
+- `games/star-wings` — a side-on shoot-em-up, Aegis Wing shaped, scored in
+  critters zapped. **The only game with a gun in it**, and the only one with
+  no gravity and no floor anywhere: the whole screen is flyable, everything
+  in it is a target and nothing is an obstacle. That is the line between
+  this and Oliver Run, which shares the scrolling-and-worlds skeleton — over
+  there you are avoiding things on a floor, here you are shooting things in
+  the open. Deliberately eight zones and eight mini bosses, not fourteen and
+  eighteen: Oliver Run is the one with the big world tour in it.
+  **The gun fires itself**, and that is what makes a shooter safe to hand to
+  a five-year-old — a child who only steers still shoots, clears every wave
+  and beats every boss. A tap adds `tapShot` to the same counter the clock
+  is filling, so mashing shortens the gap without ever clamping a total.
+  `fireGap` and `tapShot` are a pair and they were wrong once in a way only
+  measuring found: at 12 and 6 the automatic gun alone killed everything
+  that crossed the rocket's line, so **mashing every frame scored no better
+  than never touching the screen**. See the saturation note below.
+  **Joining wings is the signature** and nothing else in the arcade has a
+  co-op merge: fly into your brother or sister's rocket and the two clip
+  together into one machine with an extra gun and a green ring. Only a boss
+  can knock you apart, and that is a spectacle rather than a loss — the
+  wingman spins off, comes back and can be rejoined. The wingman flies **its
+  own slow circle** round the left of the screen, both axes on one clock. It
+  used to keep station off your shoulder, which put it permanently further
+  away than the dock radius: it backed off exactly as fast as a child chased
+  it and the headline mechanic could only ever happen by accident.
+  Being hit costs a shove backwards and a second of flashing. That is all it
+  costs — there are no lives, no shield to lose and no gun taken away. Enemy
+  fire is big, slow and **poppable**, and popping it pays, because a
+  five-year-old cannot dodge and a bullet you can shoot down is the only
+  kind this game is allowed to have.
+  Eight guns, same rule as Oliver Run and Tower Climb: one at a time, until
+  you take another. `wings: no gun is ever a hobble` measures each one's
+  zaps per frame off the HUD tag and throws away boss frames — a boss fight
+  is long and pays nothing until it ends, so whichever gun happened to be
+  carried through more of them read as worse than it was.
+  **A boss that cannot be beaten gets bored and leaves**, dropping its orb.
+  Forty seconds. That is the balloons of Tower Climb and the dolphins of
+  Treasure Boat: a child who parks the rocket in a corner where its shots
+  never line up must not be stuck in the same fight for ever.
 
 ## Hard constraints — do not break these
 
@@ -199,12 +238,13 @@ way that eyeballing missed (a `ReferenceError` firing every frame a power-up
 was active, and a hitbox that stretched to the ground while jumping).
 
 ```bash
-node test/smoke.js            # all five games, several minutes, no dependencies
+node test/smoke.js            # all six games, several minutes, no dependencies
 node test/smoke.js powers     # only tests matching "powers"
 node test/smoke.js fishing    # only the Emsile Fishing block
 node test/smoke.js daddy      # only the Daddy Smash block
 node test/smoke.js climb      # only the Tower Climb block
 node test/smoke.js boat       # only the Treasure Boat block
+node test/smoke.js wings      # only the Star Wings block
 node test/smoke.js levels     # only the fourteen-worlds block
 ```
 
@@ -369,6 +409,40 @@ every cadence from one tap a frame to one every 40 and asserts the catch count
 rises as tapping gets faster. **When you write a clamp, clamp the delta, not the
 total** — and if a rule says "faster is better", test the whole range, not one
 convenient speed.
+
+## A button can pass "never worse" and still do nothing
+
+The clamp bug above is a button that made things *worse*. Star Wings shipped
+its first draft with the opposite failure, and it is harder to see: a button
+that was neither better nor worse, because it was **saturated**.
+
+The rocket's gun fired on a clock at five shots a second, and a tap added a
+shot on top. That looked right, and the "mashing is never worse" rule was
+satisfied. But waves arrive on a fixed spawn clock, and the automatic gun
+alone was already killing everything that crossed the rocket's line — so
+extra bullets had nothing left to hit. Measured across five seeds and every
+cadence from one tap a frame to one every forty, **the score was flat**.
+Mashing every single frame scored no better than never touching the screen.
+The button was decoration and no test would have noticed, because nothing
+regressed and nothing threw.
+
+Two things came out of it, both worth reusing:
+
+- **A resource the player spends has to be scarce, or spending it faster
+  buys nothing.** The fix was to slow the automatic gun to a floor (a
+  "you're always doing something" rate) and make a tap worth half the gap.
+  Same rule, ten times the range.
+- **Measure the thing the button actually drives, not the headline score.**
+  Zaps are spawn-limited, so they saturate no matter what. Boss fights are
+  not — there is no clock, only damage — so `wings: mashing shoots more`
+  asserts on *frames spent in boss fights*, which falls five to one across
+  the range and cannot be faked. The score is still checked, but only for
+  "never worse", with a stated tolerance and a named reason: killing a
+  critter before it shoots removes a slow bubble that was itself worth a zap
+  to pop, so a masher clears a fractionally quieter sky.
+
+If a game gains a button, ask what would happen if a child held it down for
+ever, and then go and measure it rather than reasoning about it.
 
 ## A debounced save can starve for ever
 

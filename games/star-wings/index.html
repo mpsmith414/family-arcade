@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Star Wings</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#141033">
+<script src="../../shared/kidkit.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100%;
+    overscroll-behavior:none;          /* no pull-to-refresh */
+    touch-action:none;                 /* no double-tap zoom / pan */
+    user-select:none;-webkit-user-select:none;
+    -webkit-touch-callout:none;
+  }
+  body{
+    background:#0B0A24;
+    font-family:"Trebuchet MS","Avenir Next","Segoe UI",system-ui,sans-serif;
+    display:flex;align-items:center;justify-content:center;padding:12px;
+    -webkit-tap-highlight-color:transparent;overflow:hidden;
+  }
+  #stage{
+    position:relative;width:100%;
+    /* 1.8 is this canvas's aspect (900x500). Same cascade as the other five:
+       an old TV browser keeps the plain px cap, a phone gets dvh so the
+       address bar sliding away can't shove the buttons off the bottom. */
+    max-width:980px;
+    max-width:min(100%, calc((100vh - 24px) * 1.8));
+    max-width:min(100%, calc((100dvh - 24px) * 1.8));
+    border-radius:18px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(150,140,255,.28);
+    touch-action:none;cursor:pointer;
+  }
+  canvas{display:block;width:100%;height:auto}
+  body.locked #stage{box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(255,210,61,.75)}
+
+  button:focus{outline:4px solid #FFD23D;outline-offset:4px}
+
+  .hud{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:13px 17px 34px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(8,6,28,.62) 0%,rgba(8,6,28,.3) 58%,rgba(8,6,28,0) 100%);
+    font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;
+    text-shadow:0 2px 8px rgba(0,0,0,.9);
+  }
+  .left{display:flex;flex-direction:column;gap:6px}
+  .where{font-size:clamp(9px,2.1vw,12px);letter-spacing:.16em;opacity:.94}
+  .who{font-size:clamp(9px,2vw,12px);opacity:.7;letter-spacing:.14em}
+  #powerTag{
+    font-size:clamp(10px,2.3vw,13px);color:#FFD23D;letter-spacing:.12em;
+    animation:wobble .55s ease-in-out infinite alternate;
+  }
+  #powerTag[hidden]{display:none}
+  @keyframes wobble{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
+  #wingTag{font-size:clamp(10px,2.3vw,13px);color:#8BE05A;letter-spacing:.12em}
+  #wingTag[hidden]{display:none}
+
+  /* the super meter — fills as you zap things, then fires itself */
+  .meter{
+    width:clamp(84px,20vw,140px);height:11px;border-radius:99px;
+    background:rgba(0,0,0,.4);overflow:hidden;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.5);
+  }
+  .meter i{display:block;height:100%;width:0%;border-radius:99px;
+    background:linear-gradient(90deg,#3DA9F5,#B274EB,#FFD23D);
+    background-size:200% 100%;transition:width .2s}
+  .meter.full i{animation:slide .7s linear infinite}
+  @keyframes slide{to{background-position:-200% 0}}
+
+  .scores{text-align:right}
+  .now{font-size:clamp(24px,5.4vw,38px);line-height:1;color:#FFD23D}
+  .lbl{font-size:clamp(8px,1.9vw,11px);letter-spacing:.26em;opacity:.78}
+  #best{font-size:clamp(9px,2vw,12px);opacity:.72;margin-top:3px;min-height:12px}
+
+  /* the mini boss's name and health, dead centre at the top */
+  #bossBar{
+    position:absolute;top:56px;left:50%;transform:translateX(-50%);
+    width:min(62%,430px);pointer-events:none;text-align:center;
+  }
+  #bossBar[hidden]{display:none}
+  #bossName{
+    font-size:clamp(10px,2.4vw,14px);font-weight:800;letter-spacing:.18em;
+    text-transform:uppercase;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.9);
+    margin-bottom:4px;
+  }
+  #bossHp{height:12px;border-radius:99px;background:rgba(0,0,0,.5);overflow:hidden;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.6), 0 0 0 2px rgba(255,255,255,.25)}
+  #bossHp i{display:block;height:100%;width:100%;border-radius:99px;
+    background:linear-gradient(90deg,#F0453A,#FF8A3D,#FFD23D);transition:width .18s}
+
+  #shout{
+    position:absolute;top:12%;left:50%;transform:translateX(-50%) rotate(-2deg);
+    width:min(70%,540px);text-align:center;pointer-events:none;
+    font-size:clamp(17px,4.1vw,32px);font-weight:800;line-height:1.05;
+    text-transform:uppercase;letter-spacing:-.01em;color:#fff;
+    text-shadow:0 3px 0 rgba(0,0,0,.4), 0 6px 26px rgba(0,0,0,.85);
+    opacity:0;transition:opacity .2s;
+  }
+  #shout.show{opacity:1}
+  #shout em{font-style:normal;color:#FFD23D}
+
+  #padTag{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.6);color:#8BE05A;border-radius:999px;
+    padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;pointer-events:none;
+  }
+  #padTag[hidden]{display:none}
+
+  /* KID side: bottom left. */
+  #swapBtn{
+    position:absolute;bottom:14px;left:14px;pointer-events:auto;
+    display:flex;align-items:center;gap:7px;
+    background:rgba(0,0,0,.55);border:3px solid rgba(255,255,255,.5);
+    border-radius:999px;padding:8px 15px;cursor:pointer;
+    box-shadow:0 5px 16px rgba(0,0,0,.45);
+    transition:transform .18s;font:inherit;color:#fff;
+  }
+  #swapBtn:active{transform:scale(.92)}
+  #swapBtn:focus-visible{outline:3px solid #FFD23D;outline-offset:3px}
+  #swapBtn b{font-size:23px;line-height:1}
+  #swapBtn i{font-style:normal;font-size:15px;opacity:.8}
+
+  #toast{
+    position:absolute;bottom:66px;right:14px;pointer-events:none;
+    background:rgba(0,0,0,.72);color:#fff;border-radius:12px;
+    padding:9px 13px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.03em;max-width:66%;text-align:right;
+    opacity:0;transition:opacity .35s;
+  }
+  #toast.show{opacity:1}
+  #toast em{font-style:normal;color:#FFD23D}
+
+  #sndHint{
+    position:absolute;bottom:66px;left:14px;pointer-events:none;
+    background:rgba(0,0,0,.62);color:#FFD23D;border-radius:12px;
+    padding:8px 12px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.04em;max-width:56%;
+  }
+  #sndHint[hidden]{display:none}
+  #sndHint small{color:#fff;opacity:.75;font-size:10px;font-weight:400;letter-spacing:.02em}
+
+  /* ADULT side: bottom right */
+  .sndbar{position:absolute;bottom:12px;right:14px;display:flex;gap:8px;pointer-events:auto}
+  .sndbtn{
+    background:rgba(255,255,255,.14);border:none;color:#fff;
+    width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:opacity .2s,background .2s;
+  }
+  .sndbtn:hover{background:rgba(255,255,255,.26)}
+  .sndbtn.off{opacity:.34}
+  .sndbtn:focus-visible{outline:3px solid #FFD23D;outline-offset:2px}
+  #lockBtn{position:relative;font-size:17px}
+
+  .screen{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:10px;text-align:center;
+    background:radial-gradient(120% 90% at 50% 42%, rgba(64,46,140,.78), rgba(8,6,28,.96));
+    color:#fff;padding:22px;
+  }
+  .screen[hidden]{display:none}
+  .kicker{font-size:clamp(9px,2.2vw,12px);letter-spacing:.32em;color:#FFD23D;text-transform:uppercase}
+  .title{
+    font-size:clamp(34px,10vw,72px);line-height:.9;font-weight:800;
+    letter-spacing:-.02em;text-transform:uppercase;
+    background:linear-gradient(90deg,#8FD8F5,#B274EB,#FFD23D,#8FD8F5);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 24px rgba(160,140,255,.45));
+  }
+  @supports not ((-webkit-background-clip:text) or (background-clip:text)){
+    .title{color:#FFD23D;background:none}
+  }
+  .sub{font-size:clamp(13px,3.2vw,17px);max-width:32ch;opacity:.92;line-height:1.5}
+
+  .picker{display:flex;gap:14px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+  .pick{
+    background:rgba(255,255,255,.08);border:3px solid rgba(255,255,255,.22);
+    border-radius:20px;padding:10px 18px 12px;cursor:pointer;font:inherit;color:#fff;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    transition:transform .16s,border-color .16s,background .16s;
+  }
+  .pick b{font-size:clamp(30px,7vw,42px);line-height:1}
+  .pick span{font-size:clamp(10px,2.4vw,13px);font-weight:800;letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+  .pick[aria-pressed="true"]{background:rgba(255,210,61,.18);border-color:#FFD23D;transform:translateY(-3px)}
+  .pick[aria-pressed="true"] span{opacity:1;color:#FFD23D}
+
+  .cta{
+    margin-top:6px;background:#FFD23D;color:#241C4C;border:none;
+    font:inherit;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
+    font-size:clamp(15px,3.6vw,19px);padding:15px 40px;border-radius:999px;cursor:pointer;
+    box-shadow:0 6px 0 #C79A3B;
+  }
+  .cta:active{transform:translateY(3px);box-shadow:0 3px 0 #C79A3B}
+  .cta:focus-visible{outline:3px solid #8FD8F5;outline-offset:4px}
+  .hint{font-size:clamp(10px,2.3vw,12px);letter-spacing:.08em;opacity:.62;text-transform:uppercase;line-height:1.7}
+  @media (prefers-reduced-motion:reduce){
+    .meter i,.meter.full i,#powerTag,#bossHp i{transition:none;animation:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="game" width="900" height="500" role="img" aria-label="Flying a little rocket through the sky, zapping friendly space creatures"></canvas>
+
+  <div class="hud">
+    <div class="left">
+      <div class="where" id="zoneTag">☁️ Blue Skies</div>
+      <div class="meter" id="superMeter"><i id="superFill"></i></div>
+      <div class="who" id="kidTag">Oliver</div>
+      <div id="wingTag" hidden>🤝 Wings joined</div>
+      <div id="powerTag" hidden></div>
+    </div>
+    <div class="scores">
+      <div class="now" id="zapped">0</div>
+      <div class="lbl">Zapped</div>
+      <div id="best"></div>
+    </div>
+  </div>
+
+  <div id="bossBar" hidden>
+    <div id="bossName">BIG ONE</div>
+    <div id="bossHp"><i id="bossFill"></i></div>
+  </div>
+
+  <div id="shout"></div>
+
+  <button id="swapBtn" aria-label="Fly as somebody else">
+    <b id="swapFace">👧</b><i>🔁</i>
+  </button>
+
+  <div class="sndbar">
+    <button id="lockBtn" class="sndbtn" aria-label="Turn kid lock on">🔓</button>
+    <button id="music" class="sndbtn" aria-label="Turn music off">🎵</button>
+    <button id="mute" class="sndbtn" aria-label="Turn sound effects off">🔊</button>
+  </div>
+
+  <div id="padTag" hidden>🎮 Controller</div>
+  <div id="toast"></div>
+  <div id="sndHint" hidden>🔇 Sound is blocked — tap the screen<br><small>On iPhone, also flick the side switch off silent</small></div>
+
+  <div class="screen" id="startScreen">
+    <div class="kicker">Nobody ever crashes</div>
+    <h1 class="title">Star Wings</h1>
+    <p class="sub">The rocket shoots all by itself. Fly about, zap everything, and fly into the other rocket to join wings.</p>
+    <div class="picker">
+      <button class="pick" id="pickOliver" aria-pressed="true" aria-label="Fly as Oliver"><b>🧒</b><span>Oliver</span></button>
+      <button class="pick" id="pickEmsile" aria-pressed="false" aria-label="Fly as Emsile"><b>👧</b><span>Emsile</span></button>
+    </div>
+    <button class="cta" id="startBtn">Blast off!</button>
+    <p class="hint">Hold your finger where you want to fly. Tap to shoot faster.<br>Arrows, stick or d-pad work too. Tap 🔓 for kid lock.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 900, H = 500;
+
+  /* ================================================================== *
+   * TUNE — the feel of the flight, all in one place.
+   *
+   * The rule underneath all of it: THE GUN FIRES ITSELF. A child who only
+   * steers still shoots five times a second, clears every wave and beats
+   * every boss; tapping adds shots on top and can only ever help. That is
+   * what makes a shooter safe to hand to a five-year-old — the button is an
+   * accelerator, never a requirement.
+   *
+   * `fireGap` and `tapShot` are a pair. A tap adds tapShot to the same
+   * counter the clock is filling, so mashing shortens the gap between shots
+   * without ever clamping a total — the trap the fishing game fell into
+   * twice. At 12 and 6, leaning on the button roughly triples the fire rate.
+   * ================================================================== */
+  const TUNE = {
+    fly:       4.6,     // top speed of the rocket, pixels a frame
+    ease:      0.22,    // how hard it chases a held finger
+    drag:      0.86,
+    /* These two are the whole feel of the button, and they were wrong once
+       in a way that only measuring found. At 12 and 6 the automatic gun
+       alone already killed everything that crossed the rocket's line, so
+       extra bullets bought nothing at all: tapping every frame scored no
+       better than never touching the screen. The gun has to be SCARCE for
+       the button to mean anything. Now the clock is a gentle floor and a
+       masher fires about ten times as often. */
+    fireGap:   20,      // frames between shots when nobody is tapping
+    tapShot:   10,      // …and how much a tap adds to that counter
+    shotSpeed: 9.5,
+    mateGap:   20,      // the wingman's own, slower trigger
+    dockR:     60,      // fly this close to the other rocket and you join
+    bonkBack:  9,       // how hard a bump shoves you — the only cost there is
+    mercy:     70,      // frames of flashing after a bump, hit by nothing
+    scroll:    2.4,     // background speed
+    waveGap:   50,      // frames between one formation and the next
+    levelLen:  1750,    // ~29s of flying, then the mini boss turns up
+    bossGiveUp:2400,    // a boss that cannot be beaten gets bored and leaves
+    superGoal: 60,      // zaps to fill the meter — then it fires itself
+    margin:    38,      // how close to the edge the rocket may fly
+  };
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const el = {
+    zone:    document.getElementById('zoneTag'),
+    meter:   document.getElementById('superMeter'),
+    fill:    document.getElementById('superFill'),
+    kidTag:  document.getElementById('kidTag'),
+    wing:    document.getElementById('wingTag'),
+    power:   document.getElementById('powerTag'),
+    zapped:  document.getElementById('zapped'),
+    best:    document.getElementById('best'),
+    bossBar: document.getElementById('bossBar'),
+    bossName:document.getElementById('bossName'),
+    bossFill:document.getElementById('bossFill'),
+    shout:   document.getElementById('shout'),
+    swap:    document.getElementById('swapBtn'),
+    swapFace:document.getElementById('swapFace'),
+    start:   document.getElementById('startScreen'),
+    music:   document.getElementById('music'),
+    mute:    document.getElementById('mute'),
+    padTag:  document.getElementById('padTag'),
+  };
+
+  function fit(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener('resize', fit);
+
+  const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+  const rnd  = (a,b) => a + Math.random()*(b-a);
+  const rint = (a,b) => Math.floor(a + Math.random()*(b-a+1));
+  const pick = arr => arr[(Math.random()*arr.length)|0];
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const TAU = Math.PI*2;
+
+  function roundRect(x,y,w,h,r){
+    const rr = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+  }
+  function ellipse(x,y,rx,ry){
+    ctx.beginPath(); ctx.ellipse(x, y, Math.max(0.1,Math.abs(rx)), Math.max(0.1,Math.abs(ry)), 0, 0, TAU);
+  }
+  function star(x, y, r, points){
+    const n = points || 5;
+    ctx.beginPath();
+    for (let i = 0; i < n*2; i++){
+      const a = -Math.PI/2 + i*Math.PI/n;
+      const rr = i % 2 ? r*0.46 : r;
+      const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  }
+
+  /* ---------- sound (primitives live in kidkit.js) ---------- */
+  let muted = false;
+  const tone  = (f,d,type,v,slide) => { if (!muted) KidKit.audio.tone(f,d,type,v,slide); };
+  const noise = (d,v) => { if (!muted) KidKit.audio.noise(d,v); };
+  const seq = (notes, gap, dur, type, v) => notes.forEach((n,i) =>
+    setTimeout(() => tone(n, dur, type, v), i*gap));
+
+  const sfx = {
+    shot:   ()=>tone(880,.05,'square',.022,-380),
+    laser:  ()=>tone(1400,.04,'sawtooth',.016,-600),
+    pop:    ()=>{ noise(.06,.03); tone(rnd(520,760),.07,'square',.03,300); },
+    boom:   ()=>{ noise(.22,.06); tone(150,.2,'sine',.05,-90); },
+    bonk:   ()=>{ tone(190,.16,'square',.05,-80); noise(.09,.04); },
+    dock:   ()=>seq([523,659,784,1047],60,.16,'triangle',.05),
+    undock: ()=>{ tone(500,.2,'triangle',.04,-260); noise(.1,.03); },
+    power:  ()=>seq([523,659,784,1047],55,.16,'square',.05),
+    super:  ()=>{ noise(.5,.06); seq([1047,1319,1568,2093],70,.3,'sawtooth',.05); },
+    warn:   ()=>seq([330,330,330],150,.16,'sawtooth',.05),
+    bossHit:()=>tone(rnd(160,220),.06,'square',.03,-60),
+    fanfare:()=>seq([523,659,784,1047,1319,1047,1319,1568],95,.28,'square',.055),
+    record: ()=>seq([880,1109,1319,1760],70,.24,'triangle',.055),
+    warp:   ()=>{ noise(.5,.05); tone(200,.8,'sawtooth',.045,1100); },
+    swap:   ()=>seq([523,784],80,.14,'triangle',.05),
+    coin:   ()=>seq([1047,1319],55,.11,'triangle',.04),
+  };
+  el.mute.addEventListener('click', e=>{
+    e.stopPropagation(); muted = !muted;
+    el.mute.textContent = muted ? '🔇' : '🔊';
+    el.mute.classList.toggle('off', muted);
+    el.mute.setAttribute('aria-label', muted ? 'Turn sound effects on' : 'Turn sound effects off');
+  });
+
+  /* ---------- music ----------
+     Oliver Run trots at 132, Daddy Smash chases at 126, Tower Climb goes up
+     at 108, Treasure Boat rolls at 100, Emsile Fishing drifts at 84. Flying
+     wants to feel like going forwards fast, so these are driving eighths
+     with the bass on every beat. 138 in the sky, 128 out in space, 156 for
+     a boss. */
+  const R = -1;
+  const TRACKS = {
+    sky:   { bpm:138, drums:'light', wave:'square',
+      lead:[76,R,76,79, 83,R,79,76, 74,R,74,77, 81,R,77,74,
+            72,R,72,76, 79,R,76,72, 74,77,79,81, 83,R,R,R],
+      bass:[40,40,47,47, 38,38,45,45, 36,36,43,43, 41,41,48,48] },
+    space: { bpm:128, drums:'soft', wave:'triangle',
+      lead:[69,R,72,76, 79,R,76,72, 68,R,71,75, 78,R,75,71,
+            67,R,71,74, 77,R,74,71, 69,72,76,79, 81,R,R,R],
+      bass:[33,R,40,R, 32,R,39,R, 31,R,38,R, 33,R,40,R] },
+    boss:  { bpm:156, drums:'heavy', wave:'square',
+      lead:[60,63,60,63, 65,63,60,58, 60,63,60,63, 67,65,63,60,
+            58,61,58,61, 63,61,58,56, 60,63,67,70, 72,R,R,R],
+      bass:[36,36,36,36, 34,34,34,34, 33,33,33,33, 31,31,31,31] },
+    win:   { bpm:150, drums:'heavy', wave:'square',
+      lead:[72,76,79,84, 88,84,79,84, 74,77,81,86, 89,86,81,86,
+            76,79,84,88, 91,88,84,88, 84,88,91,96, 96,R,R,R],
+      bass:[48,48,55,55, 50,50,57,57, 52,52,59,59, 53,53,60,60] },
+  };
+  let musicOn = true;
+  const jukebox = KidKit.audio.music(TRACKS, {volume:.34});
+  el.music.addEventListener('click', e=>{
+    e.stopPropagation();
+    musicOn = !musicOn;
+    el.music.classList.toggle('off', !musicOn);
+    el.music.setAttribute('aria-label', musicOn ? 'Turn music off' : 'Turn music on');
+    jukebox.setEnabled(musicOn);
+  });
+
+  /* ================================================================== *
+   * the zones
+   *
+   * Eight of them, dealt from a shuffle bag so a full set comes round
+   * before any repeat and no two runs open the same way. Deliberately
+   * fewer than Oliver Run's fourteen: that game is the one with a big
+   * world tour in it, and this one should not try to be a second copy.
+   * Each owns a sky, a backdrop, the shape of its critters and its boss.
+   * ================================================================== */
+  const ZONES = [
+    { name:'Blue Skies',   icon:'☁️', sky:['#7EC8F5','#D9F2FF'], far:'#FFFFFF', deco:'clouds',
+      track:'sky',  foe:{ shape:'bug',    c:'#F0453A', c2:'#B62F27', name:'sky bug' },
+      boss:{ kind:'puffer', name:'BIG PUFF',  c:'#FF8A3D', c2:'#C4551F' } },
+    { name:'Cloud Tops',   icon:'🌤️', sky:['#4FA8E8','#BDE9FF'], far:'#F4FBFF', deco:'clouds',
+      track:'sky',  foe:{ shape:'blob',   c:'#7FD8F0', c2:'#3E9EC0', name:'puffling' },
+      boss:{ kind:'mothership', name:'CLOUD MUM', c:'#8FD8F5', c2:'#4A86AE' } },
+    { name:'Sunset Run',   icon:'🌇', sky:['#FF8A5C','#FFD9A8'], far:'#7A4E86', deco:'hills',
+      track:'sky',  foe:{ shape:'bird',   c:'#FFD23D', c2:'#B08A16', name:'sun bird' },
+      boss:{ kind:'snake',  name:'SKY SNAKE', c:'#FFD23D', c2:'#B08A16' } },
+    { name:'Night Sky',    icon:'🌙', sky:['#1B1E4E','#4A3E8C'], far:'#0E1030', deco:'stars',
+      track:'space',foe:{ shape:'ghost',  c:'#F2F0FF', c2:'#9C96D8', name:'sleepy ghost' },
+      boss:{ kind:'star',   name:'MOON MOTH', c:'#F2F0FF', c2:'#8A82C8' } },
+    { name:'Rainbow Road', icon:'🌈', sky:['#B274EB','#FFD9EC'], far:'#FF6FA8', deco:'rainbow',
+      track:'sky',  foe:{ shape:'balloon',c:'#FF6FA8', c2:'#C4407A', name:'floaty' },
+      boss:{ kind:'robot',  name:'RAINBOT',  c:'#B274EB', c2:'#7B45AE' } },
+    { name:'Candy Clouds', icon:'🍭', sky:['#FFB3D9','#FFF0F7'], far:'#FF6FA8', deco:'candy',
+      track:'sky',  foe:{ shape:'blob',   c:'#FF6FA8', c2:'#D2417A', name:'jellybean' },
+      boss:{ kind:'cake',   name:'BIG CAKE', c:'#FF9FC4', c2:'#C4557F' } },
+    { name:'Deep Space',   icon:'🚀', sky:['#0B0620','#2A1A5E'], far:'#080316', deco:'stars',
+      track:'space',foe:{ shape:'saucer', c:'#4FD16A', c2:'#2C8C4E', name:'space blob' },
+      boss:{ kind:'mothership', name:'STAR WHALE', c:'#4FD16A', c2:'#2C8C4E' } },
+    { name:'Alien Garden', icon:'👽', sky:['#1E5E4A','#8FE0B8'], far:'#0E3A2C', deco:'vines',
+      track:'space',foe:{ shape:'bug',    c:'#8BE05A', c2:'#4C8C2C', name:'leaf bug' },
+      boss:{ kind:'snake',  name:'VINE WORM', c:'#8BE05A', c2:'#4C8C2C' } },
+  ];
+
+  /* ================================================================== *
+   * the cast — the same two kids as everywhere else
+   * ================================================================== */
+  const KIDS = [
+    { id:'oliver', name:'Oliver', face:'🧒',
+      skin:'#F6C99B', hair:'#7A4B2A', hull:'#3DA9F5', hull2:'#1E6FB0', trim:'#FFD23D' },
+    { id:'emsile', name:'Emsile', face:'👧',
+      skin:'#F8D2AE', hair:'#C97B3C', hull:'#FF6FA8', hull2:'#D2417A', trim:'#8FD8F5' },
+  ];
+
+  /* ================================================================== *
+   * the guns
+   *
+   * Same rule as Oliver Run and Tower Climb: one at a time, and it lasts
+   * until you pick up another. No timers, nothing to lose, and orbs keep
+   * arriving so there is always something to trade for.
+   *
+   * Every one of these has to be at least as good as the plain gun. Three
+   * of Tower Climb's six were secretly HOBBLES when first written and none
+   * of it showed by playing, so `wings: no gun is ever a hobble` measures
+   * the zaps each one actually lands.
+   * ================================================================== */
+  const GUNS = [
+    { id:'plain',  name:'POP GUN',      tag:'🔫 Pop gun',      c:'#FFD23D' },
+    { id:'spread', name:'SPREAD SHOT',  tag:'🌟 Spread shot',  c:'#FF8A3D' },
+    { id:'laser',  name:'ZAP LASER',    tag:'⚡ Zap laser',    c:'#8FD8F5' },
+    { id:'homing', name:'CHASER BUBBLES',tag:'🫧 Chaser bubbles',c:'#3DA9F5' },
+    { id:'big',    name:'BOULDER BALL', tag:'🔴 Boulder ball', c:'#F0453A' },
+    { id:'rainbow',name:'RAINBOW RAY',  tag:'🌈 Rainbow ray',  c:'#B274EB' },
+    { id:'helper', name:'LITTLE HELPERS',tag:'👾 Little helpers',c:'#4FD16A' },
+    { id:'shield', name:'BUMPER BUBBLE',tag:'🛡️ Bumper bubble',c:'#FFFFFF' },
+  ];
+  /* The plain gun is the fallback, never an orb: trading a power for the
+     thing you started with is the one swap that could feel like a loss. */
+  const ORB_GUNS = GUNS.filter(g => g.id !== 'plain');
+  const gunById = id => GUNS.find(g => g.id === id) || GUNS[0];
+
+  /* ================================================================== *
+   * state
+   * ================================================================== */
+  let state = 'menu';                 // 'menu' | 'play' — there is no third
+  let kidIdx = Math.max(0, KIDS.findIndex(
+    k => k.id === KidKit.storage.get('star-wings-kid', 'oliver')));
+
+  let zapped = 0, bossesBeaten = 0, zonesFlown = 0;
+  let best = KidKit.storage.getNumber('star-wings-best', 0);
+  let bestBosses = KidKit.storage.getNumber('star-wings-bosses', 0);
+  let recordBeaten = false;
+  let saveIv = null;
+
+  let t = 0, shake = 0, flash = 0, scroll = 0;
+  let zi = 0, lvlTimer = 0, lvlBag = [];
+  let boss = null, bossWarn = 0;
+  let superCharge = 0, superBeam = 0;
+  let gun = GUNS[0];
+  let waveIn = 90;
+
+  let shots = [], foes = [], flak = [], orbs = [];
+  let sparks = [], confetti = [], pops = [], puffs = [], booms = [];
+  let stars = [], deco = [];
+
+  /* The rocket you fly, and the one your brother or sister flies. Neither
+     can be destroyed; `hurt` is only a flashing timer after a bump. */
+  const ship = { x: 190, y: H/2, vx: 0, vy: 0, fire: 0, hurt: 0, roll: 0 };
+  const mate = { x: 120, y: H/2 + 90, vx: 0, vy: 0, fire: 0, docked: false,
+                 spin: 0, back: 0 };
+  const KIDOF  = () => KIDS[kidIdx];
+  const MATEOF = () => KIDS[(kidIdx + 1) % KIDS.length];
+  const Z = () => ZONES[zi];
+
+  /* ================================================================== *
+   * particles and shouts
+   * ================================================================== */
+  function sparkAt(x, y, n, colour){
+    for (let i = 0; i < n; i++){
+      sparks.push({ x, y, vx: rnd(-3,3), vy: rnd(-3,3), life: rnd(12,26), max:26,
+                    s: rnd(2,5.5), c: colour || '#FFF3C9' });
+    }
+  }
+  function puffAt(x, y, n, colour){
+    for (let i = 0; i < n; i++){
+      puffs.push({ x, y, vx: rnd(-1.4,1.4), vy: rnd(-1.4,1.4), life: rnd(14,28), max:28,
+                   s: rnd(4,10), c: colour || 'rgba(255,255,255,' });
+    }
+  }
+  function confettiAt(x, y, n){
+    for (let i = 0; i < n; i++){
+      confetti.push({ x, y, vx: rnd(-4,4), vy: rnd(-4,4), r: rnd(0,6.3), spin: rnd(-.3,.3),
+                      life: rnd(50,110), max:110,
+                      c: pick(['#FFD23D','#FF6FA8','#4FD16A','#3DA9F5','#FF8A3D','#FFFFFF']) });
+    }
+  }
+  function boomAt(x, y, r, colour){
+    booms.push({ x, y, r: 4, to: r, life: 26, max: 26, c: colour || '#FFD23D' });
+  }
+  function pop(x, y, text, colour, size){
+    pops.push({ x, y, text, c: colour || '#FFD23D', size: size || 24, life: 40, max: 40 });
+  }
+
+  /* One shout at a time, and when two want the screen the louder one gets
+     it. Dropping the quieter card rather than the older one is Oliver Run's
+     lesson: a kid who just joined wings is owed that news more than the
+     screen is owed a tidy queue. */
+  let shoutPri = -1, shoutIv = null;
+  function shout(text, ms, pri){
+    const level = pri == null ? 1 : pri;
+    if (el.shout.classList.contains('show') && level < shoutPri) return;
+    shoutPri = level;
+    el.shout.innerHTML = text;
+    el.shout.classList.add('show');
+    clearTimeout(shoutIv);
+    shoutIv = setTimeout(()=>{ el.shout.classList.remove('show'); shoutPri = -1; }, ms || 1700);
+  }
+
+  /* ================================================================== *
+   * HUD
+   * ================================================================== */
+  function updateHud(){
+    el.zone.textContent = Z().icon + ' ' + Z().name;
+    el.zapped.textContent = zapped;
+    el.best.textContent = best ? 'Best ' + best + (bestBosses ? '  👾' + bestBosses : '') : '';
+    el.fill.style.width = Math.round(clamp(superCharge/TUNE.superGoal*100, 0, 100)) + '%';
+    el.meter.classList.toggle('full', superCharge >= TUNE.superGoal);
+    el.kidTag.textContent = KIDOF().name;
+    el.swapFace.textContent = MATEOF().face;
+    el.swap.setAttribute('aria-label', 'Fly as ' + MATEOF().name + ' instead');
+    el.wing.hidden = !mate.docked;
+    el.power.hidden = gun.id === 'plain';
+    if (gun.id !== 'plain') el.power.textContent = gun.tag;
+    el.bossBar.hidden = !boss;
+    if (boss){
+      el.bossName.textContent = boss.name;
+      el.bossFill.style.width = Math.round(clamp(boss.hp/boss.hpMax*100, 0, 100)) + '%';
+    }
+  }
+
+  function saveBest(){
+    let dirty = false;
+    if (zapped > best){ best = zapped; dirty = true; }
+    if (bossesBeaten > bestBosses){ bestBosses = bossesBeaten; dirty = true; }
+    if (!dirty || saveIv) return;
+    /* Throttled, NOT debounced — Tower Climb's lesson. A zap happens several
+       times a second, so a debounce that re-armed on every change would be
+       pushed back for ever and the write would never land at all. */
+    saveIv = setTimeout(()=>{
+      saveIv = null;
+      KidKit.storage.set('star-wings-best', best);
+      KidKit.storage.set('star-wings-bosses', bestBosses);
+    }, 1200);
+  }
+
+  function addZap(n, x, y){
+    zapped += n;
+    superCharge += n;
+    saveBest();
+    if (!recordBeaten && best > 0 && zapped > best){
+      recordBeaten = true;
+      shout('<em>NEW RECORD!</em>', 1900, 3);
+      sfx.record();
+      confettiAt(x, y, 26);
+    }
+    if (superCharge >= TUNE.superGoal && superBeam <= 0) fireSuper();
+  }
+
+  /* ================================================================== *
+   * input
+   * ================================================================== */
+  const pads = KidKit.input.create({
+    element: document.getElementById('stage'),
+    steer: true,
+    onPress: () => press(),
+    onAction: () => swapKid(),
+    onNav: dir => { if (state === 'menu') KidKit.input.moveFocus(dir); },
+    onGamepad: on => { el.padTag.hidden = !on; },
+  });
+
+  function press(){
+    if (state === 'menu'){ startGame(); return; }
+    /* A tap is progress towards the next shot, added to the same counter the
+       clock is filling. No clamp, no cooldown to swallow it: tapping twice
+       as fast really does fire twice as often, and a child who never taps
+       still fires on the clock alone. */
+    ship.fire += TUNE.tapShot;
+  }
+
+  /* Hold a finger where you want to fly and the rocket goes there. Both axes
+     are read, like Treasure Boat and unlike Tower Climb: the whole screen is
+     sky, so down is as real a place to go as up. */
+  function steering(){
+    const a = pads.axis();
+    let x = a.x, y = a.y;
+    const pt = pads.pointer();
+    if (pt.active){
+      const dx = pt.nx*W - ship.x, dy = pt.ny*H - ship.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 12){ x = clamp(dx/60, -1, 1); y = clamp(dy/60, -1, 1); }
+      else if (Math.abs(a.x) + Math.abs(a.y) < 0.06){ x = 0; y = 0; }
+    }
+    const m = Math.hypot(x, y);
+    return { x, y, mag: m > 1 ? 1 : m };
+  }
+
+  function swapKid(){
+    if (state !== 'play') return;
+    kidIdx = (kidIdx + 1) % KIDS.length;
+    KidKit.storage.set('star-wings-kid', KIDOF().id);
+    sfx.swap();
+    sparkAt(ship.x, ship.y, 10, '#FFF0C4');
+    updateHud();
+  }
+  el.swap.addEventListener('click', e => { e.stopPropagation(); swapKid(); });
+
+  document.getElementById('pickOliver').addEventListener('click', e => { e.stopPropagation(); pickKid(0); });
+  document.getElementById('pickEmsile').addEventListener('click', e => { e.stopPropagation(); pickKid(1); });
+  function pickKid(i){
+    kidIdx = i;
+    KidKit.storage.set('star-wings-kid', KIDOF().id);
+    document.getElementById('pickOliver').setAttribute('aria-pressed', String(i === 0));
+    document.getElementById('pickEmsile').setAttribute('aria-pressed', String(i === 1));
+    sfx.swap();
+    updateHud();
+  }
+  pickKid(kidIdx);
+
+  document.getElementById('startBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (state === 'menu') startGame();
+  });
+
+  /* Zones come out of a shuffled bag, a full set before any repeat, and
+     never the same one twice across the seam where the bag refills. */
+  function nextZone(){
+    if (!lvlBag.length){
+      lvlBag = ZONES.map((_, i) => i);
+      for (let i = lvlBag.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random()*(i + 1));
+        [lvlBag[i], lvlBag[j]] = [lvlBag[j], lvlBag[i]];
+      }
+      const last = lvlBag.length - 1;
+      if (lvlBag.length > 1 && lvlBag[last] === zi) [lvlBag[last], lvlBag[0]] = [lvlBag[0], lvlBag[last]];
+    }
+    return lvlBag.pop();
+  }
+
+  function startGame(){
+    state = 'play';
+    el.start.hidden = true;
+    zapped = 0; bossesBeaten = 0; zonesFlown = 0; recordBeaten = false;
+    superCharge = 0; superBeam = 0;
+    gun = GUNS[0];
+    shots = []; foes = []; flak = []; orbs = [];
+    sparks = []; confetti = []; pops = []; puffs = []; booms = [];
+    boss = null; bossWarn = 0; waveIn = 90;
+    lvlBag = [];
+    zi = nextZone();
+    lvlTimer = 0;
+    scroll = 0;
+    ship.x = 190; ship.y = H/2; ship.vx = 0; ship.vy = 0; ship.fire = 0; ship.hurt = 0;
+    mate.x = 120; mate.y = H/2 + 90; mate.vx = 0; mate.vy = 0; mate.docked = false;
+    mate.spin = 0; mate.back = 0;
+    makeBackdrop();
+    jukebox.play(Z().track);
+    shout(Z().icon + ' <em>' + Z().name + '</em>', 1800, 2);
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * flying
+   *
+   * There is no gravity anywhere in this game and no floor to stand on —
+   * that is the whole difference between this and the running game. The
+   * rocket goes where it is pointed and stops when it is let go of.
+   * ================================================================== */
+  function flyShip(dt, steer){
+    ship.vx += (steer.x*TUNE.fly - ship.vx)*TUNE.ease*dt;
+    ship.vy += (steer.y*TUNE.fly - ship.vy)*TUNE.ease*dt;
+    if (steer.mag < 0.05){ ship.vx *= Math.pow(TUNE.drag, dt); ship.vy *= Math.pow(TUNE.drag, dt); }
+    ship.x = clamp(ship.x + ship.vx*dt, TUNE.margin, W - TUNE.margin);
+    ship.y = clamp(ship.y + ship.vy*dt, TUNE.margin + 30, H - TUNE.margin);
+    ship.roll += ((steer.y*0.4) - ship.roll)*0.14*dt;
+    if (ship.hurt > 0) ship.hurt -= dt;
+
+    ship.fire += dt;
+    while (ship.fire >= TUNE.fireGap){
+      ship.fire -= TUNE.fireGap;
+      shoot(ship.x + 26, ship.y, true);
+    }
+
+    if (Math.random() < 0.5*dt) puffAt(ship.x - 24, ship.y + rnd(-4,4), 1, 'rgba(255,190,120,');
+  }
+
+  /* The wingman flies itself. It keeps station off your shoulder, shoots on
+     its own slower clock, and joins wings the moment you fly into it. */
+  function flyMate(dt){
+    if (mate.back > 0) mate.back -= dt;
+    if (mate.spin > 0) mate.spin -= dt;
+
+    if (mate.docked){
+      mate.x = ship.x - 14;
+      mate.y = ship.y + 30;
+    } else {
+      /* The wingman flies its OWN slow patrol round the left of the screen,
+         not a station off your shoulder. Keeping station is the obvious
+         reading and it made the headline mechanic unreachable: parked 70px
+         away with a 46px dock radius, it backed off exactly as fast as you
+         chased it, so joining wings could only ever happen by accident when
+         something bumped you into it. A patrol is somewhere you can fly TO. */
+      /* One slow circle, both axes on the same clock. Two drifting sines
+         looked prettier and were worse: they never repeated, so where the
+         wingman would be next was unguessable and reaching it came down to
+         luck. A loop is something a five-year-old can learn — and it takes
+         the wingman right out to the left edge at mid-height, which is
+         where a rocket pinned against the wall ends up. */
+      const tx = 120 + Math.cos(t*0.005)*80;
+      const ty = H/2 + Math.sin(t*0.005)*150;
+      mate.vx += ((tx - mate.x)*0.03 - mate.vx)*0.2*dt;
+      mate.vy += ((ty - mate.y)*0.03 - mate.vy)*0.2*dt;
+      mate.x = clamp(mate.x + mate.vx*dt, TUNE.margin, W - TUNE.margin);
+      mate.y = clamp(mate.y + mate.vy*dt, TUNE.margin + 30, H - TUNE.margin);
+      if (mate.back <= 0 && Math.hypot(mate.x - ship.x, mate.y - ship.y) < TUNE.dockR) joinWings();
+    }
+
+    mate.fire += dt;
+    while (mate.fire >= TUNE.mateGap){
+      mate.fire -= TUNE.mateGap;
+      shoot(mate.x + 22, mate.y, false);
+    }
+    if (Math.random() < 0.3*dt) puffAt(mate.x - 20, mate.y, 1, 'rgba(255,190,120,');
+  }
+
+  function joinWings(){
+    mate.docked = true;
+    sfx.dock();
+    shout('<em>WINGS JOINED!</em>', 1700, 3);
+    confettiAt(ship.x, ship.y, 24);
+    boomAt(ship.x, ship.y, 60, '#8BE05A');
+    updateHud();
+  }
+
+  /* Only a boss can knock the two of you apart, and it is a spectacle
+     rather than a punishment: the wingman spins off, comes straight back,
+     and flying into it joins you up again. Nothing at all is lost. */
+  function splitWings(){
+    if (!mate.docked) return;
+    mate.docked = false;
+    mate.spin = 40;
+    mate.back = 70;
+    mate.x = ship.x - 40; mate.y = ship.y + 60;
+    mate.vx = -3; mate.vy = 3;
+    sfx.undock();
+    pop(ship.x, ship.y - 40, 'WHOA!', '#FF8A3D', 26);
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * shooting
+   * ================================================================== */
+  function shoot(x, y, fromPlayer){
+    const g = fromPlayer ? gun : GUNS[0];
+    const c = fromPlayer ? KIDOF().trim : MATEOF().trim;
+    const add = (vy, kind, extra) => {
+      shots.push(Object.assign({
+        x, y, vx: TUNE.shotSpeed, vy: vy || 0, r: 6, dmg: 1, kind: kind || 'plain',
+        c, life: 130, ph: Math.random()*6.3,
+      }, extra || {}));
+    };
+
+    if (!fromPlayer || g.id === 'plain'){ add(0); }
+    else if (g.id === 'spread'){ add(-2.4); add(0); add(2.4); }
+    else if (g.id === 'laser'){
+      /* A beam is a very fast, very thin shot that goes through things.
+         `pierce` is what keeps it from being a HOBBLE: without it the laser
+         stopped on the first critter in a line and did strictly less than
+         the pop gun, which is exactly the trap Tower Climb's three broken
+         powers fell into. */
+      add(0, 'laser', { r: 5, vx: TUNE.shotSpeed*2.1, pierce: 4, c:'#8FD8F5' });
+    }
+    else if (g.id === 'homing'){ add(-1.2, 'homing', { r: 8, vx: TUNE.shotSpeed*0.8, c:'#3DA9F5' });
+                                 add(1.2, 'homing', { r: 8, vx: TUNE.shotSpeed*0.8, c:'#3DA9F5' }); }
+    else if (g.id === 'big'){ add(0, 'big', { r: 15, dmg: 3, vx: TUNE.shotSpeed*0.8, pierce: 2, c:'#F0453A' }); }
+    else if (g.id === 'rainbow'){
+      for (let i = -1; i <= 1; i++) add(i*1.5, 'rainbow', { r: 10, dmg: 2, c: pick(['#FFD23D','#FF6FA8','#4FD16A','#3DA9F5','#B274EB']) });
+    }
+    else if (g.id === 'helper'){
+      add(0);
+      // the two drones fire from above and below at the same moment
+      shots.push({ x: ship.x + 10, y: ship.y - 44, vx: TUNE.shotSpeed, vy: 0, r: 6, dmg: 1,
+                   kind:'plain', c:'#4FD16A', life: 130, ph: 0 });
+      shots.push({ x: ship.x + 10, y: ship.y + 44, vx: TUNE.shotSpeed, vy: 0, r: 6, dmg: 1,
+                   kind:'plain', c:'#4FD16A', life: 130, ph: 0 });
+    }
+    else if (g.id === 'shield'){ add(0); }
+
+    // joined wings means an extra pair of guns, always
+    if (fromPlayer && mate.docked){
+      shots.push({ x: x - 10, y: y + 30, vx: TUNE.shotSpeed, vy: 0, r: 6, dmg: 1,
+                   kind:'plain', c: MATEOF().trim, life: 130, ph: 0 });
+    }
+    if (!muted && fromPlayer) (g.id === 'laser' ? sfx.laser : sfx.shot)();
+  }
+
+  function fireSuper(){
+    superCharge = 0;
+    superBeam = 46;
+    sfx.super();
+    shake = 12; flash = 0.8;
+    shout('<em>SUPER BEAM!</em>', 1700, 4);
+    updateHud();
+  }
+
+  function updateShots(dt){
+    for (const s of shots){
+      s.life -= dt;
+      if (s.kind === 'homing'){
+        /* Curve towards whatever is nearest and in front. `d > 0.01` rather
+           than `d > 0`: a target sitting exactly on the bullet divides by
+           zero, and a NaN coordinate draws nothing in the harness while
+           throwing IndexSizeError out of the render loop in a real browser. */
+        let best = null, bd = 320;
+        const all = boss ? foes.concat([boss]) : foes;
+        for (const f of all){
+          if (f.x < s.x - 20) continue;
+          const d = Math.hypot(f.x - s.x, f.y - s.y);
+          if (d < bd && d > 0.01){ bd = d; best = f; }
+        }
+        if (best){
+          s.vy += clamp((best.y - s.y)*0.03, -0.7, 0.7)*dt;
+          s.vy = clamp(s.vy, -5, 5);
+        }
+      }
+      s.x += s.vx*dt;
+      s.y += s.vy*dt;
+    }
+    shots = shots.filter(s => s.life > 0 && s.x < W + 60 && s.y > -60 && s.y < H + 60);
+    if (shots.length > 240) shots.splice(0, shots.length - 240);
+  }
+
+  /* ================================================================== *
+   * the critters
+   *
+   * Everything on screen is a TARGET. Nothing here is an obstacle to be
+   * dodged and nothing can end the game — flying into a small one pops it
+   * like a bumper car, and the big ones only ever bump you backwards.
+   * ================================================================== */
+  const SHAPES = ['bug', 'blob', 'bird', 'ghost', 'balloon', 'saucer'];
+
+  function spawnWave(){
+    waveIn = TUNE.waveGap + rnd(-14, 22);
+    if (boss) return;
+    const spec = Z().foe;
+    const form = pick(['line', 'vee', 'wave', 'ring', 'single', 'wave']);
+    const hp = 1 + (Math.random() < 0.22 ? 1 : 0);
+    const y0 = rnd(90, H - 70);
+
+    if (form === 'line'){
+      const n = rint(3, 5);
+      for (let i = 0; i < n; i++) addFoe(W + 40 + i*54, y0, spec, hp, 'straight');
+    } else if (form === 'vee'){
+      const n = rint(2, 3);
+      addFoe(W + 40, y0, spec, hp, 'straight');
+      for (let i = 1; i <= n; i++){
+        addFoe(W + 40 + i*48, y0 - i*40, spec, hp, 'straight');
+        addFoe(W + 40 + i*48, y0 + i*40, spec, hp, 'straight');
+      }
+    } else if (form === 'wave'){
+      const n = rint(4, 6);
+      for (let i = 0; i < n; i++) addFoe(W + 40 + i*62, y0, spec, hp, 'sine', { ph: i*0.7 });
+    } else if (form === 'ring'){
+      const n = 7;
+      for (let i = 0; i < n; i++){
+        const a = i/n*TAU;
+        addFoe(W + 120 + Math.cos(a)*54, clamp(y0 + Math.sin(a)*54, 70, H - 60), spec, hp, 'straight');
+      }
+    } else {
+      addFoe(W + 40, y0, spec, hp + 1, 'swoop');
+    }
+  }
+
+  function addFoe(x, y, spec, hp, move, extra){
+    foes.push(Object.assign({
+      x, y, y0: y, spec, hp, hpMax: hp, move,
+      shape: spec.shape, r: 22, sp: rnd(1.9, 2.9), ph: Math.random()*6.3,
+      hit: 0, shootIn: rnd(90, 260),
+    }, extra || {}));
+  }
+
+  function updateFoes(dt){
+    for (const f of foes){
+      f.ph += 0.06*dt;
+      if (f.hit > 0) f.hit -= dt;
+      if (f.move === 'sine') f.y = f.y0 + Math.sin(f.ph)*46;
+      else if (f.move === 'swoop') f.y += Math.sin(f.ph*0.6)*1.4*dt;
+      f.x -= f.sp*dt;
+      f.y = clamp(f.y, 56, H - 40);
+
+      /* Their shots are big, slow and poppable, and they only ever bump.
+         A five-year-old cannot dodge, so a bullet they can shoot down is
+         the only kind this game is allowed to have. */
+      f.shootIn -= dt;
+      if (f.shootIn <= 0 && f.x < W - 40 && f.x > 120){
+        f.shootIn = rnd(190, 380);
+        const a = Math.atan2(ship.y - f.y, ship.x - f.x);
+        flak.push({ x: f.x - 16, y: f.y, vx: Math.cos(a)*2.1, vy: Math.sin(a)*2.1,
+                    r: 13, ph: Math.random()*6.3, c: f.spec.c2 });
+      }
+    }
+    foes = foes.filter(f => f.x > -70 && f.hp > 0);
+
+    for (const b of flak){
+      b.x += b.vx*dt; b.y += b.vy*dt; b.ph += 0.12*dt;
+    }
+    flak = flak.filter(b => b.x > -40 && b.x < W + 40 && b.y > -40 && b.y < H + 40);
+  }
+
+  /* ================================================================== *
+   * the mini boss
+   *
+   * One per zone, and it has an arc rather than a flat lump of health: it
+   * goes red-hot and quicker at half health, its trick fires more often as
+   * it fades, and it always leaves a gun orb behind. Everything it produces
+   * is a target, never a threat — the no-fail rule does not bend for
+   * bosses any more than it does for anything else.
+   * ================================================================== */
+  function startBoss(){
+    const b = Z().boss;
+    // low enough that the automatic gun alone still gets there, so a child
+    // who never taps beats bosses rather than only ever outlasting them
+    const hp = 46 + zonesFlown*7;
+    boss = {
+      kind: b.kind, name: b.name, c: b.c, c2: b.c2,
+      x: W + 160, y: H/2, hp, hpMax: hp, ph: 0, t: 0,
+      trickIn: 150, rage: false, hit: 0, bump: 0,
+      segs: b.kind === 'snake' ? 6 : 0,
+      r: b.kind === 'snake' ? 34 : 62,
+    };
+    bossWarn = 90;
+    sfx.warn();
+    shout('<em>LOOK OUT!</em><br>' + b.name, 2000, 4);
+    jukebox.play('boss');
+    updateHud();
+  }
+
+  function updateBoss(dt){
+    boss.t += dt;
+    boss.ph += 0.04*dt;
+    if (boss.hit > 0) boss.hit -= dt;
+    if (boss.bump > 0) boss.bump -= dt;
+
+    // it flies in from the right, then hovers and weaves
+    const homeX = W - 170;
+    if (boss.x > homeX) boss.x -= 2.2*dt;
+    else boss.x = homeX + Math.sin(boss.ph*0.7)*26;
+    boss.y = H/2 + Math.sin(boss.ph)*(boss.rage ? 130 : 96);
+
+    if (!boss.rage && boss.hp <= boss.hpMax/2){
+      boss.rage = true;
+      shake = 10;
+      shout('<em>IT IS CROSS NOW!</em>', 1600, 3);
+      boomAt(boss.x, boss.y, 90, '#F0453A');
+    }
+
+    boss.trickIn -= dt;
+    if (boss.trickIn <= 0){
+      boss.trickIn = (boss.rage ? 95 : 150) + rnd(-20, 30);
+      bossTrick();
+    }
+
+    /* A boss that cannot be beaten gets bored and flies off, leaving its
+       orb behind. This is the shape of Tower Climb's balloons: a child who
+       parks the rocket in a corner where its shots never line up must not
+       be stuck in the same fight for ever. Forty seconds and it gives up. */
+    if (boss.t > TUNE.bossGiveUp){
+      shout('<em>IT GAVE UP!</em>', 2000, 3);
+      beatBoss(true);
+    }
+  }
+
+  function bossTrick(){
+    const n = boss.rage ? 6 : 4;
+    if (boss.kind === 'mothership'){
+      // it drops little ones, which are just more things to zap
+      for (let i = 0; i < (boss.rage ? 3 : 2); i++){
+        addFoe(boss.x - 40, boss.y + rnd(-60, 60), Z().foe, 1, 'sine', { ph: Math.random()*6 });
+      }
+    } else if (boss.kind === 'snake' || boss.kind === 'cake'){
+      // a fan of slow rings
+      for (let i = 0; i < n; i++){
+        const a = Math.PI + (i - (n-1)/2)*0.28;
+        flak.push({ x: boss.x - 40, y: boss.y, vx: Math.cos(a)*2.2, vy: Math.sin(a)*2.2,
+                    r: 15, ph: 0, c: boss.c2 });
+      }
+    } else {
+      // aimed, but slowly and with something big enough to shoot down
+      const a = Math.atan2(ship.y - boss.y, ship.x - boss.x);
+      for (let i = -1; i <= 1; i++){
+        flak.push({ x: boss.x - 40, y: boss.y, vx: Math.cos(a + i*0.22)*2.3, vy: Math.sin(a + i*0.22)*2.3,
+                    r: 15, ph: 0, c: boss.c2 });
+      }
+    }
+  }
+
+  function beatBoss(gaveUp){
+    const bx = boss.x, by = boss.y;
+    bossesBeaten++;
+    boss = null;
+    shake = 16; flash = 1;
+    sfx.boom();
+    setTimeout(()=> sfx.fanfare(), 260);
+    for (let i = 0; i < 9; i++){
+      setTimeout(()=>{ boomAt(bx + rnd(-70,70), by + rnd(-70,70), rnd(50,110), pick(['#FFD23D','#FF8A3D','#FFFFFF'])); sfx.boom(); }, i*110);
+    }
+    confettiAt(bx, by, 60);
+    if (!gaveUp) shout('<em>YOU BEAT IT!</em>', 2200, 4);
+    orbs.push({ x: bx, y: by, vx: -1.6, vy: 0, ph: 0 });
+    addZap(25, bx, by);
+    pop(bx, by, '+25', '#FFD23D', 34);
+    saveBest();
+    nextLevel();
+  }
+
+  function nextLevel(){
+    zonesFlown++;
+    zi = nextZone();
+    lvlTimer = 0;
+    makeBackdrop();
+    jukebox.play('win');
+    setTimeout(()=>{ if (state === 'play' && !boss) jukebox.play(Z().track); }, 2600);
+    sfx.warp();
+    setTimeout(()=> shout(Z().icon + ' <em>' + Z().name + '</em>', 1900, 3), 900);
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * hits
+   * ================================================================== */
+  function hitFoe(f, dmg, x, y, colour){
+    f.hp -= dmg;
+    f.hit = 8;
+    sparkAt(x, y, 4, colour);
+    if (f.hp > 0){ sfx.bossHit(); return; }
+    sfx.pop();
+    boomAt(f.x, f.y, 40, f.spec.c);
+    confettiAt(f.x, f.y, 7);
+    addZap(1, f.x, f.y);
+    if (Math.random() < 0.055) orbs.push({ x: f.x, y: f.y, vx: -1.4, vy: 0, ph: 0 });
+  }
+
+  function collide(dt){
+    // player shots against critters, the boss, and the enemy's own slow shots
+    for (const s of shots){
+      if (s.dead) continue;
+      for (const f of foes){
+        if (f.hp <= 0) continue;
+        if (Math.hypot(f.x - s.x, f.y - s.y) > f.r + s.r) continue;
+        hitFoe(f, s.dmg, s.x, s.y, s.c);
+        if (s.pierce > 0) s.pierce--; else s.dead = true;
+        break;
+      }
+      if (s.dead) continue;
+      // shooting down the slow enemy shots is always allowed, and pays
+      for (const b of flak){
+        if (b.dead) continue;
+        if (Math.hypot(b.x - s.x, b.y - s.y) > b.r + s.r) continue;
+        b.dead = true;
+        sparkAt(b.x, b.y, 6, '#FFF3C9');
+        sfx.pop();
+        addZap(1, b.x, b.y);
+        if (s.pierce > 0) s.pierce--; else s.dead = true;
+        break;
+      }
+      if (s.dead || !boss) continue;
+      if (Math.hypot(boss.x - s.x, boss.y - s.y) < boss.r + s.r){
+        boss.hp -= s.dmg;
+        boss.hit = 6;
+        sparkAt(s.x, s.y, 5, s.c);
+        sfx.bossHit();
+        if (s.pierce > 0) s.pierce--; else s.dead = true;
+        if (boss.hp <= 0){ beatBoss(false); break; }
+      }
+    }
+    shots = shots.filter(s => !s.dead);
+    flak = flak.filter(b => !b.dead);
+
+    if (superBeam > 0){
+      /* The beam sweeps the whole screen ahead of the rocket. Everything it
+         touches pops, including the flak — the point of it is the moment
+         where the screen empties. */
+      for (const f of foes){
+        if (f.hp > 0 && f.x > ship.x - 40 && Math.abs(f.y - ship.y) < 90) hitFoe(f, 2, f.x, f.y, '#FFFFFF');
+      }
+      for (const b of flak){
+        if (b.x > ship.x - 40 && Math.abs(b.y - ship.y) < 90){ b.dead = true; sparkAt(b.x, b.y, 4, '#FFFFFF'); }
+      }
+      flak = flak.filter(b => !b.dead);
+      if (boss && boss.x > ship.x - 40 && Math.abs(boss.y - ship.y) < 120){
+        boss.hp -= 0.9*dt;
+        boss.hit = 6;
+        if (boss.hp <= 0) beatBoss(false);
+      }
+    }
+
+    if (ship.hurt > 0) return;
+
+    const shielded = gun.id === 'shield';
+    // critters: the little ones pop like bumper cars, the tough ones bump you
+    for (const f of foes){
+      if (f.hp <= 0) continue;
+      if (Math.hypot(f.x - ship.x, f.y - ship.y) > f.r + 20) continue;
+      if (shielded || f.hpMax <= 1){
+        hitFoe(f, 99, f.x, f.y, '#FFFFFF');
+        if (!shielded) bump(f.x, f.y, true);
+      } else bump(f.x, f.y, false);
+      break;
+    }
+    for (const b of flak){
+      if (Math.hypot(b.x - ship.x, b.y - ship.y) > b.r + 18) continue;
+      b.dead = true;
+      sparkAt(b.x, b.y, 8, '#FFF3C9');
+      if (shielded){ addZap(1, b.x, b.y); }
+      else bump(b.x, b.y, false);
+      break;
+    }
+    flak = flak.filter(b => !b.dead);
+
+    if (boss && Math.hypot(boss.x - ship.x, boss.y - ship.y) < boss.r + 20 && boss.bump <= 0){
+      boss.bump = 40;
+      bump(boss.x, boss.y, false);
+      splitWings();
+    }
+  }
+
+  /* The only thing a bump costs is a moment and a bit of ground. No lives,
+     no shields to lose, no gun taken away — the rocket is shoved backwards,
+     flashes for a second, and carries on. */
+  function bump(fx, fy, gentle){
+    const a = Math.atan2(ship.y - fy, ship.x - fx);
+    const push = gentle ? TUNE.bonkBack*0.4 : TUNE.bonkBack;
+    ship.vx = Math.cos(a)*push;
+    ship.vy = Math.sin(a)*push;
+    ship.hurt = gentle ? TUNE.mercy*0.4 : TUNE.mercy;
+    shake = Math.max(shake, gentle ? 4 : 9);
+    sfx.bonk();
+    if (!gentle){
+      pop(ship.x, ship.y - 40, 'BONK!', '#FF8A3D', 28);
+      puffAt(ship.x, ship.y, 8);
+    }
+  }
+
+  function updateOrbs(dt){
+    for (const o of orbs){
+      o.ph += 0.09*dt;
+      o.x += o.vx*dt;
+      o.y += Math.sin(o.ph)*0.7*dt;
+      // they drift towards the rocket once it is close, so an orb is never
+      // missed by a hair
+      const d = Math.hypot(ship.x - o.x, ship.y - o.y);
+      if (d < 150 && d > 0.01){ o.x += (ship.x - o.x)/d*2.4*dt; o.y += (ship.y - o.y)/d*2.4*dt; }
+      if (d < 34){ o.taken = true; takeGun(); }
+    }
+    orbs = orbs.filter(o => !o.taken && o.x > -50);
+  }
+
+  function takeGun(){
+    const had = gun;
+    let next = pick(ORB_GUNS);
+    for (let i = 0; i < 6 && next.id === had.id; i++) next = pick(ORB_GUNS);
+    gun = next;
+    sfx.power();
+    confettiAt(ship.x, ship.y, 14);
+    shout(had.id !== 'plain' ? '<em>' + gun.name + '!</em> swapped!' : '<em>' + gun.name + '!</em>', 1700, 2);
+    pop(ship.x, ship.y - 54, gun.name, gun.c, 24);
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * update
+   * ================================================================== */
+  function update(dt){
+    t += dt;
+    if (shake > 0) shake = Math.max(0, shake - dt);
+    if (flash > 0) flash = Math.max(0, flash - 0.05*dt);
+    if (superBeam > 0) superBeam -= dt;
+    if (bossWarn > 0) bossWarn -= dt;
+    scroll += TUNE.scroll*dt;
+
+    if (state === 'play'){
+      const steer = steering();
+      flyShip(dt, steer);
+      flyMate(dt);
+      updateShots(dt);
+      updateFoes(dt);
+      updateOrbs(dt);
+
+      if (boss) updateBoss(dt);
+      else {
+        lvlTimer += dt;
+        if (lvlTimer > TUNE.levelLen){
+          /* Time is up: stop sending waves and let the sky clear, so the boss
+             does not fly in through a crowd. The second half of that `or` is
+             load-bearing — waiting only on an empty sky meant the boss never
+             came at all. A wave arrives every 64 frames and takes 400 to
+             cross the screen, so roughly thirty critters are in the air at
+             any moment and `foes.length < 4` was true about never. A child
+             who only steers flew one zone in three minutes. */
+          if (foes.length < 4 || lvlTimer > TUNE.levelLen + 420) startBoss();
+        } else if (waveIn > 0) waveIn -= dt;
+        else spawnWave();
+      }
+      collide(dt);
+    }
+
+    updateBits(dt);
+    if (Math.floor(t) % 6 === 0) updateHud();
+  }
+
+  function updateBits(dt){
+    for (const s of sparks){ s.x += s.vx*dt; s.y += s.vy*dt; s.vx *= 0.96; s.vy *= 0.96; s.life -= dt; }
+    sparks = sparks.filter(s => s.life > 0);
+    for (const q of puffs){ q.x += q.vx*dt - TUNE.scroll*0.5*dt; q.y += q.vy*dt; q.s += 0.2*dt; q.life -= dt; }
+    puffs = puffs.filter(q => q.life > 0);
+    for (const c of confetti){ c.x += c.vx*dt; c.y += c.vy*dt; c.vy += 0.08*dt; c.r += c.spin*dt; c.life -= dt; }
+    confetti = confetti.filter(c => c.life > 0);
+    for (const q of pops){ q.y -= 0.7*dt; q.life -= dt; }
+    pops = pops.filter(q => q.life > 0);
+    for (const b of booms){ b.r += (b.to - b.r)*0.22*dt; b.life -= dt; }
+    booms = booms.filter(b => b.life > 0);
+    if (confetti.length > 280) confetti.splice(0, confetti.length - 280);
+    if (sparks.length > 320) sparks.splice(0, sparks.length - 320);
+  }
+
+  /* ================================================================== *
+   * art — the sky
+   * ================================================================== */
+  function makeBackdrop(){
+    stars = [];
+    for (let i = 0; i < 70; i++){
+      stars.push({ x: Math.random()*W, y: Math.random()*H, s: rnd(0.8, 2.6), z: rnd(0.3, 1) });
+    }
+    deco = [];
+    for (let i = 0; i < 9; i++){
+      deco.push({ x: Math.random()*W*1.4, y: rnd(60, H - 60), s: rnd(0.6, 1.6), z: rnd(0.25, 0.7),
+                  ph: Math.random()*6.3 });
+    }
+  }
+
+  function drawSky(){
+    const z = Z();
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, z.sky[0]);
+    g.addColorStop(1, z.sky[1]);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // stars behind everything, in three depths
+    for (const s of stars){
+      const x = ((s.x - scroll*s.z*0.5) % (W + 20) + W + 20) % (W + 20) - 10;
+      ctx.fillStyle = z.deco === 'stars' ? 'rgba(255,255,255,' + (0.35 + s.z*0.5).toFixed(2) + ')'
+                                         : 'rgba(255,255,255,' + (0.10 + s.z*0.14).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(x, s.y, s.s, 0, TAU); ctx.fill();
+    }
+    for (const d of deco) drawDeco(z, d);
+  }
+
+  function drawDeco(z, d){
+    const x = ((d.x - scroll*d.z) % (W + 400) + W + 400) % (W + 400) - 200;
+    const y = d.y + Math.sin(t*0.01 + d.ph)*6;
+    const s = d.s;
+    ctx.globalAlpha = 0.3 + d.z*0.4;
+    if (z.deco === 'clouds' || z.deco === 'candy'){
+      ctx.fillStyle = z.deco === 'candy' ? '#FFF0F7' : z.far;
+      ellipse(x, y, 60*s, 26*s); ctx.fill();
+      ellipse(x - 34*s, y + 8*s, 34*s, 18*s); ctx.fill();
+      ellipse(x + 36*s, y + 6*s, 38*s, 20*s); ctx.fill();
+      if (z.deco === 'candy'){
+        ctx.fillStyle = '#FF6FA8';
+        ctx.beginPath(); ctx.arc(x + 10*s, y - 8*s, 7*s, 0, TAU); ctx.fill();
+      }
+    } else if (z.deco === 'hills'){
+      /* Peaks are kept to the bottom third. Drawn at full height they read as
+         ground you could crash into, and there is no ground anywhere in this
+         game — the whole sky is flyable and nothing in it is solid. */
+      const py = Math.max(y, H*0.68);
+      ctx.fillStyle = z.far;
+      ctx.beginPath();
+      ctx.moveTo(x - 120*s, H); ctx.lineTo(x, py); ctx.lineTo(x + 120*s, H);
+      ctx.closePath(); ctx.fill();
+    } else if (z.deco === 'rainbow'){
+      const cols = ['#F0453A','#FF8A3D','#FFD23D','#4FD16A','#3DA9F5','#B274EB'];
+      ctx.lineWidth = 9*s;
+      cols.forEach((c, i) => {
+        ctx.strokeStyle = c;
+        ctx.beginPath();
+        ctx.arc(x, y + 150*s, (60 + i*10)*s, Math.PI*1.15, Math.PI*1.85);
+        ctx.stroke();
+      });
+    } else if (z.deco === 'vines'){
+      ctx.strokeStyle = z.far;
+      ctx.lineWidth = 7*s;
+      ctx.beginPath();
+      ctx.moveTo(x, -20);
+      ctx.quadraticCurveTo(x + 40*s, y, x - 10*s, y + 120*s);
+      ctx.stroke();
+      ctx.fillStyle = z.far;
+      for (let i = 0; i < 3; i++) { ellipse(x + 18*s, y - 40*s + i*44*s, 16*s, 9*s); ctx.fill(); }
+    } else {
+      // stars zone: a distant planet
+      ctx.fillStyle = z.far;
+      ctx.beginPath(); ctx.arc(x, y, 42*s, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.35)';
+      ctx.lineWidth = 4*s;
+      ctx.beginPath(); ctx.ellipse(x, y, 66*s, 15*s, 0.4, 0, TAU); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ================================================================== *
+   * art — the rockets
+   * ================================================================== */
+  function drawRocket(r, k, scale, roll, flashing){
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    ctx.rotate(roll || 0);
+    ctx.scale(scale || 1, scale || 1);
+    if (flashing && Math.floor(t*0.4) % 2 === 0) ctx.globalAlpha = 0.45;
+
+    // flame
+    const fl = 12 + Math.sin(t*0.6)*5;
+    ctx.fillStyle = '#FFD23D';
+    ctx.beginPath();
+    ctx.moveTo(-24, -7); ctx.lineTo(-24 - fl, 0); ctx.lineTo(-24, 7);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#FF8A3D';
+    ctx.beginPath();
+    ctx.moveTo(-24, -4); ctx.lineTo(-24 - fl*0.6, 0); ctx.lineTo(-24, 4);
+    ctx.closePath(); ctx.fill();
+
+    // wings
+    ctx.fillStyle = k.hull2;
+    ctx.beginPath();
+    ctx.moveTo(-6, 0); ctx.lineTo(-22, -22); ctx.lineTo(4, -8);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-6, 0); ctx.lineTo(-22, 22); ctx.lineTo(4, 8);
+    ctx.closePath(); ctx.fill();
+
+    // body
+    ctx.fillStyle = k.hull;
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.quadraticCurveTo(10, -14, -24, -11);
+    ctx.quadraticCurveTo(-28, 0, -24, 11);
+    ctx.quadraticCurveTo(10, 14, 30, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = k.trim;
+    ctx.beginPath();
+    ctx.moveTo(30, 0); ctx.quadraticCurveTo(18, -6, 10, -5);
+    ctx.quadraticCurveTo(10, 5, 10, 5); ctx.quadraticCurveTo(18, 6, 30, 0);
+    ctx.closePath(); ctx.fill();
+
+    // the kid in the bubble
+    ctx.fillStyle = 'rgba(220,246,255,.92)';
+    ctx.beginPath(); ctx.arc(0, -2, 12, 0, TAU); ctx.fill();
+    ctx.fillStyle = k.skin;
+    ctx.beginPath(); ctx.arc(1, -1, 7.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = k.hair;
+    ctx.beginPath(); ctx.arc(1, -3, 7.9, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#22202C';
+    ctx.beginPath(); ctx.arc(4, -1, 1.4, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(-1, -1, 1.4, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#22202C';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(1.5, 1.6, 3, 0.25, Math.PI - 0.25); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, -2, 12, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawShips(){
+    if (mate.docked){
+      // one bigger machine: the wingman clipped under your wing, with a ring
+      const pulse = 0.4 + 0.25*Math.sin(t*0.12);
+      ctx.strokeStyle = 'rgba(139,224,90,' + pulse.toFixed(3) + ')';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ship.x - 4, ship.y + 14, 62, 0, TAU); ctx.stroke();
+      drawRocket(mate, MATEOF(), 0.8, 0.2, false);
+      // the strut holding them together
+      ctx.strokeStyle = '#C8CEDA';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(ship.x - 6, ship.y + 8); ctx.lineTo(mate.x - 2, mate.y - 10); ctx.stroke();
+    } else {
+      drawRocket(mate, MATEOF(), 0.85, mate.spin > 0 ? mate.spin*0.25 : 0, false);
+      // a little arrow pointing at the wingman when it is off doing its own
+      // thing, so joining up is always findable
+      if (Math.hypot(mate.x - ship.x, mate.y - ship.y) > 190){
+        const a = Math.atan2(mate.y - ship.y, mate.x - ship.x);
+        ctx.save();
+        ctx.translate(ship.x + Math.cos(a)*54, ship.y + Math.sin(a)*54);
+        ctx.rotate(a);
+        ctx.globalAlpha = 0.5 + 0.3*Math.sin(t*0.1);
+        ctx.fillStyle = '#8BE05A';
+        ctx.beginPath(); ctx.moveTo(12,0); ctx.lineTo(-6,7); ctx.lineTo(-6,-7); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+    }
+    drawRocket(ship, KIDOF(), 1, ship.roll, ship.hurt > 0);
+    if (gun.id === 'shield'){
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.4 + 0.3*Math.sin(t*0.16)).toFixed(3) + ')';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ship.x, ship.y, 40, 0, TAU); ctx.stroke();
+    }
+    if (gun.id === 'helper'){
+      for (const s of [-1, 1]){
+        ctx.fillStyle = '#4FD16A';
+        ellipse(ship.x + 10, ship.y + s*44, 12, 9); ctx.fill();
+        ctx.fillStyle = '#22202C';
+        ctx.beginPath(); ctx.arc(ship.x + 14, ship.y + s*44, 2.4, 0, TAU); ctx.fill();
+      }
+    }
+  }
+
+  /* ================================================================== *
+   * art — the critters, composed from one spec per zone
+   * ================================================================== */
+  function drawFoe(f){
+    const x = f.x, y = f.y, s = f.spec;
+    const wob = Math.sin(f.ph*1.6)*3;
+    ctx.save();
+    if (f.hit > 0){ ctx.globalAlpha = 0.9; }
+    const body = f.hit > 0 ? '#FFFFFF' : s.c;
+
+    if (f.shape === 'bug'){
+      ctx.fillStyle = s.c2;
+      ellipse(x + 12, y - 12 + wob, 13, 7); ctx.fill();
+      ellipse(x + 12, y + 12 - wob, 13, 7); ctx.fill();
+      ctx.fillStyle = body;
+      ellipse(x, y, 20, 15); ctx.fill();
+      ctx.fillStyle = s.c2;
+      ellipse(x - 14, y, 9, 11); ctx.fill();
+    } else if (f.shape === 'blob'){
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.arc(x, y, 20 + Math.sin(f.ph*2)*2, 0, TAU); ctx.fill();
+      ctx.fillStyle = s.c2;
+      for (let i = 0; i < 3; i++){
+        ellipse(x + 14, y - 12 + i*12 + wob*0.4, 7, 4); ctx.fill();
+      }
+    } else if (f.shape === 'bird'){
+      ctx.fillStyle = body;
+      ellipse(x, y, 18, 13); ctx.fill();
+      ctx.fillStyle = s.c2;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y); ctx.lineTo(x - 6, y - 18 - wob); ctx.lineTo(x - 14, y - 2);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y); ctx.lineTo(x - 6, y + 18 + wob); ctx.lineTo(x - 14, y + 2);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#FF8A3D';
+      ctx.beginPath();
+      ctx.moveTo(x - 18, y); ctx.lineTo(x - 26, y - 4); ctx.lineTo(x - 26, y + 4);
+      ctx.closePath(); ctx.fill();
+    } else if (f.shape === 'ghost'){
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.arc(x, y - 3, 18, Math.PI, 0);
+      ctx.lineTo(x + 18, y + 14);
+      for (let i = 0; i < 3; i++) ctx.quadraticCurveTo(x + 12 - i*12, y + 22, x + 6 - i*12, y + 14);
+      ctx.lineTo(x - 18, y - 3);
+      ctx.closePath(); ctx.fill();
+    } else if (f.shape === 'balloon'){
+      ctx.strokeStyle = s.c2;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, y + 18); ctx.quadraticCurveTo(x + 6, y + 28, x - 2, y + 36); ctx.stroke();
+      ctx.fillStyle = body;
+      ellipse(x, y, 17, 20); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      ellipse(x - 6, y - 7, 5, 7); ctx.fill();
+    } else {
+      // saucer
+      ctx.fillStyle = s.c2;
+      ellipse(x, y + 4, 24, 8); ctx.fill();
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.arc(x, y - 2, 14, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = 'rgba(220,246,255,.9)';
+      ctx.beginPath(); ctx.arc(x, y - 4, 8, Math.PI, 0); ctx.fill();
+    }
+
+    // everybody gets a face — the audience is five and nothing here is scary
+    ctx.fillStyle = '#22202C';
+    ctx.beginPath(); ctx.arc(x - 6, y - 2, 2.4, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 2, y - 2, 2.4, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#22202C';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(x - 2, y + 4, 4, 0.2, Math.PI - 0.2); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBoss(){
+    const b = boss, x = b.x, y = b.y;
+    const hot = b.hit > 0 ? '#FFFFFF' : (b.rage ? '#F0453A' : b.c);
+    ctx.save();
+
+    if (b.kind === 'snake'){
+      for (let i = b.segs; i >= 0; i--){
+        const sx = x + i*46 + Math.sin(b.ph + i*0.5)*10;
+        const sy = y + Math.sin(b.ph*1.2 + i*0.6)*26;
+        ctx.fillStyle = i === 0 ? hot : (i % 2 ? b.c2 : b.c);
+        ctx.beginPath(); ctx.arc(sx, sy, i === 0 ? 34 : 26 - i, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(x - 12, y - 8, 9, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x - 12, y + 10, 9, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#22202C';
+      ctx.beginPath(); ctx.arc(x - 15, y - 8, 4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x - 15, y + 10, 4, 0, TAU); ctx.fill();
+    } else if (b.kind === 'cake'){
+      for (let i = 0; i < 3; i++){
+        ctx.fillStyle = i === 1 ? b.c2 : hot;
+        roundRect(x - 58 + i*6, y - 54 + i*38, 116 - i*12, 34, 8); ctx.fill();
+      }
+      ctx.fillStyle = '#FFD23D';
+      for (let i = -2; i <= 2; i++){
+        roundRect(x + i*20 - 3, y - 76, 6, 20, 3); ctx.fill();
+      }
+      ctx.fillStyle = '#F0453A';
+      for (let i = -2; i <= 2; i++){ ctx.beginPath(); ctx.arc(x + i*20, y - 80, 5, 0, TAU); ctx.fill(); }
+    } else if (b.kind === 'robot'){
+      ctx.fillStyle = hot;
+      roundRect(x - 54, y - 52, 108, 104, 16); ctx.fill();
+      ctx.fillStyle = b.c2;
+      roundRect(x - 66, y - 30 + Math.sin(b.ph*2)*14, 18, 60, 8); ctx.fill();
+      roundRect(x + 48, y - 30 - Math.sin(b.ph*2)*14, 18, 60, 8); ctx.fill();
+      ctx.fillStyle = 'rgba(220,246,255,.95)';
+      roundRect(x - 36, y - 30, 72, 34, 10); ctx.fill();
+      ctx.fillStyle = '#22202C';
+      ctx.beginPath(); ctx.arc(x - 16, y - 13, 8, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 16, y - 13, 8, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#22202C';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(x, y + 16, 18, 0.25, Math.PI - 0.25); ctx.stroke();
+    } else if (b.kind === 'star'){
+      ctx.fillStyle = hot;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(b.ph*0.5);
+      star(0, 0, 64, 6); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = b.c2;
+      ctx.beginPath(); ctx.arc(x, y, 30, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#22202C';
+      ctx.beginPath(); ctx.arc(x - 11, y - 5, 5, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 11, y - 5, 5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#22202C';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y + 6, 12, 0.25, Math.PI - 0.25); ctx.stroke();
+    } else if (b.kind === 'puffer'){
+      const pf = 1 + Math.sin(b.ph*1.6)*0.12;
+      ctx.fillStyle = hot;
+      ctx.beginPath(); ctx.arc(x, y, 60*pf, 0, TAU); ctx.fill();
+      ctx.fillStyle = b.c2;
+      for (let i = 0; i < 12; i++){
+        const a = i/12*TAU + b.ph*0.3;
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a)*58*pf, y + Math.sin(a)*58*pf);
+        ctx.lineTo(x + Math.cos(a)*76*pf, y + Math.sin(a)*76*pf);
+        ctx.lineTo(x + Math.cos(a + 0.2)*58*pf, y + Math.sin(a + 0.2)*58*pf);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(x - 20, y - 12, 13, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 16, y - 12, 13, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#22202C';
+      ctx.beginPath(); ctx.arc(x - 23, y - 12, 6, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 13, y - 12, 6, 0, TAU); ctx.fill();
+    } else {
+      // mothership
+      ctx.fillStyle = b.c2;
+      ellipse(x, y + 12, 84, 22); ctx.fill();
+      ctx.fillStyle = hot;
+      ctx.beginPath(); ctx.arc(x, y + 4, 54, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = 'rgba(220,246,255,.95)';
+      ctx.beginPath(); ctx.arc(x, y - 4, 30, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#22202C';
+      ctx.beginPath(); ctx.arc(x - 11, y - 12, 5, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 11, y - 12, 5, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#FFD23D';
+      for (let i = -2; i <= 2; i++){
+        ctx.globalAlpha = 0.5 + 0.5*Math.sin(b.ph*3 + i);
+        ctx.beginPath(); ctx.arc(x + i*30, y + 16, 6, 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  /* ================================================================== *
+   * art — the rest
+   * ================================================================== */
+  function drawShots(){
+    for (const s of shots){
+      if (s.kind === 'laser'){
+        ctx.strokeStyle = s.c;
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath(); ctx.moveTo(s.x - 26, s.y); ctx.lineTo(s.x + 12, s.y); ctx.stroke();
+        ctx.globalAlpha = 1;
+        continue;
+      }
+      ctx.fillStyle = s.c;
+      if (s.kind === 'big' || s.kind === 'rainbow'){
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.6)';
+        ctx.beginPath(); ctx.arc(s.x - s.r*0.3, s.y - s.r*0.3, s.r*0.35, 0, TAU); ctx.fill();
+      } else if (s.kind === 'homing'){
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else {
+        ellipse(s.x, s.y, s.r*1.5, s.r*0.7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.75)';
+        ellipse(s.x + 2, s.y, s.r*0.7, s.r*0.3); ctx.fill();
+      }
+    }
+  }
+
+  function drawFlak(){
+    for (const b of flak){
+      const pulse = 1 + Math.sin(b.ph)*0.12;
+      ctx.fillStyle = b.c;
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r*pulse, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,.85)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r*pulse, 0, TAU); ctx.stroke();
+      // a face on the enemy shots too, so they read as things to pop
+      ctx.fillStyle = 'rgba(255,255,255,.9)';
+      ctx.beginPath(); ctx.arc(b.x - 4, b.y - 2, 2.6, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x + 4, b.y - 2, 2.6, 0, TAU); ctx.fill();
+    }
+  }
+
+  function drawOrbs(){
+    for (const o of orbs){
+      const r = 15 + Math.sin(o.ph*1.5)*2.5;
+      const g = ctx.createRadialGradient(o.x, o.y, 1, o.x, o.y, Math.max(2, r*1.7));
+      g.addColorStop(0, '#FFFFFF');
+      g.addColorStop(0.45, '#FFD23D');
+      g.addColorStop(1, 'rgba(255,210,61,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(o.x, o.y, r*1.7, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      star(o.x, o.y, r*0.62, 5); ctx.fill();
+    }
+  }
+
+  function drawSuper(){
+    if (superBeam <= 0) return;
+    const a = clamp(superBeam/16, 0, 1);
+    const h = 90*Math.min(1, superBeam/8);
+    const g = ctx.createLinearGradient(ship.x, 0, W, 0);
+    g.addColorStop(0, 'rgba(255,255,255,' + (0.9*a).toFixed(3) + ')');
+    g.addColorStop(0.4, 'rgba(178,116,235,' + (0.75*a).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(143,216,245,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(ship.x, ship.y - h/2, W - ship.x, h);
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.85*a).toFixed(3) + ')';
+    ctx.fillRect(ship.x, ship.y - h/6, W - ship.x, h/3);
+  }
+
+  function drawBits(){
+    for (const q of puffs){
+      const a = q.life/q.max;
+      ctx.fillStyle = q.c + (a*0.5).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.s, 0, TAU); ctx.fill();
+    }
+    for (const b of booms){
+      const a = b.life/b.max;
+      ctx.globalAlpha = a*0.8;
+      ctx.fillStyle = b.c;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r*1.15, 0, TAU); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    for (const s of sparks){
+      const a = s.life/s.max;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = s.c;
+      star(s.x, s.y, s.s, 4); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    for (const c of confetti){
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.r);
+      ctx.globalAlpha = Math.min(1, c.life/40);
+      ctx.fillStyle = c.c;
+      ctx.fillRect(-4, -2.5, 8, 5);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    for (const q of pops){
+      ctx.globalAlpha = clamp(q.life/q.max*1.6, 0, 1);
+      ctx.font = '800 ' + q.size + 'px "Trebuchet MS", sans-serif';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(8,6,28,.85)';
+      ctx.strokeText(q.text, q.x, q.y);
+      ctx.fillStyle = q.c;
+      ctx.fillText(q.text, q.x, q.y);
+      ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'left';
+  }
+
+  /* ================================================================== *
+   * render
+   * ================================================================== */
+  function render(){
+    ctx.save();
+    if (shake > 0) ctx.translate(rnd(-1,1)*shake*0.5, rnd(-1,1)*shake*0.5);
+
+    drawSky();
+    drawOrbs();
+    drawShots();
+    for (const f of foes) drawFoe(f);
+    if (boss) drawBoss();
+    drawFlak();
+    drawSuper();
+    drawShips();
+    drawBits();
+
+    /* The warning stripe before a boss arrives. The words live in the shout
+       at the top, which already names the thing that is coming — printing
+       "LOOK OUT!" across the middle as well just put the same two words on
+       the screen twice, over the top of the boss flying in. */
+    if (bossWarn > 0 && Math.floor(bossWarn*0.2) % 2 === 0){
+      ctx.fillStyle = 'rgba(240,69,58,.22)';
+      ctx.fillRect(0, H/2 - 60, W, 120);
+    }
+
+    // the finger being held, so a parent can see what a kid is doing
+    const pt = pads.pointer();
+    if (pt.active && state === 'play'){
+      ctx.strokeStyle = 'rgba(255,210,61,.7)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(pt.nx*W, pt.ny*H, 15 + Math.sin(t*0.3)*3, 0, TAU); ctx.stroke();
+    }
+
+    ctx.restore();
+
+    if (flash > 0){
+      ctx.fillStyle = 'rgba(255,250,220,' + (flash*0.4).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  /* ---------- kid lock (implementation lives in kidkit.js) ---------- */
+  const lockBtn = document.getElementById('lockBtn');
+  const toastEl = document.getElementById('toast');
+  let toastIv = null;
+  function toast(html, ms){
+    toastEl.innerHTML = html;
+    toastEl.classList.add('show');
+    clearTimeout(toastIv);
+    toastIv = setTimeout(()=> toastEl.classList.remove('show'), ms || 4200);
+  }
+  KidKit.kidLock(lockBtn, {
+    holdMs: 3000,
+    onHold: pct => {
+      lockBtn.style.background = pct
+        ? 'conic-gradient(#FFD23D '+pct+'%, rgba(255,255,255,.14) 0)' : '';
+    },
+    onChange: on => {
+      document.body.classList.toggle('locked', on);
+      lockBtn.textContent = on ? '\u{1F512}' : '\u{1F513}';
+      lockBtn.style.background = '';
+      lockBtn.setAttribute('aria-label', on
+        ? 'Kid lock is on — hold three seconds to turn off'
+        : 'Turn kid lock on');
+      toast(on ? '<em>Kid lock on.</em><br>Hold \u{1F512} for 3 seconds to exit.' : 'Kid lock off.',
+            on ? 4200 : 2200);
+    }
+  });
+
+  /* ---------- go ---------- */
+  makeBackdrop();
+  updateHud();
+  document.getElementById('startBtn').focus();
+
+  let last = performance.now();
+  const hintEl = document.getElementById('sndHint');
+  let hintCheck = 0;
+  function frame(now){
+    let dt = (now - last)/(1000/60); last = now;
+    dt = Math.min(dt, 1.8);           // never integrate a long catch-up step
+    pads.poll();
+    update(dt); render();
+    if (state !== 'menu' && ++hintCheck % 30 === 0){
+      const blocked = !KidKit.audio.running;
+      hintEl.hidden = !(blocked && (musicOn || !muted));
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
