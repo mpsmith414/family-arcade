@@ -73,6 +73,29 @@
   }
   #pad{margin-top:16px;font-size:12px;color:#8BE05A;letter-spacing:.14em;text-transform:uppercase}
   #pad[hidden]{display:none}
+
+  /* Controller test. Not for the kids — it is here so that when a pad does
+     something odd there is somewhere to look, instead of guessing at
+     hardware nobody can see. */
+  #padTestBtn{
+    display:inline-block;margin-top:14px;background:rgba(255,255,255,.1);
+    color:#fff;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    padding:9px 18px;border-radius:999px;cursor:pointer;opacity:.6;
+  }
+  #padTestBtn:hover{opacity:1}
+  #padTest{
+    margin-top:16px;width:min(100%,620px);background:rgba(0,0,0,.55);
+    border:2px solid rgba(255,255,255,.2);border-radius:16px;padding:16px 18px;
+    font-size:12px;line-height:1.6;letter-spacing:.02em;text-align:left;
+  }
+  #padTest[hidden]{display:none}
+  #padTest h2{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#FFD23D;margin-bottom:8px}
+  #padTest .row{display:flex;gap:10px;margin-bottom:5px;align-items:baseline}
+  #padTest .row b{min-width:92px;opacity:.6;font-weight:700;font-size:11px;
+    letter-spacing:.1em;text-transform:uppercase}
+  #padTest .row span{font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-word}
+  #padTest .big{font-size:26px;font-weight:800;color:#8BE05A;letter-spacing:.1em}
+  #padTest .note{margin-top:10px;opacity:.55;font-size:11px;line-height:1.6}
 </style>
 </head>
 <body>
@@ -139,6 +162,24 @@
 </div>
 
 <div id="pad" hidden>🎮 Controller ready — press any button</div>
+
+<!-- deliberately not a <button>: the kit's d-pad menu navigation walks every
+     button on the page, and this is an adult's diagnostic that small hands
+     should not be able to land on by holding right -->
+<span id="padTestBtn" role="button">🎮 Controller test</span>
+<div id="padTest" hidden>
+  <h2>Controller test</h2>
+  <div class="row"><b>Kit sees</b><span class="big" id="ptDir">—</span></div>
+  <div class="row"><b>Pad</b><span id="ptName">no controller found — press a button on it</span></div>
+  <div class="row"><b>Mapping</b><span id="ptMap">—</span></div>
+  <div class="row"><b>Buttons</b><span id="ptBtn">—</span></div>
+  <div class="row"><b>Axes</b><span id="ptAx">—</span></div>
+  <div class="row"><b>Keys</b><span id="ptKey">—</span></div>
+  <p class="note">Push the d-pad in each direction and watch <b>Kit sees</b>. If that
+  moves but the games do not, the games are at fault. If it stays on <b>—</b> while
+  <b>Buttons</b> or <b>Axes</b> change, the pad is reporting the d-pad somewhere new —
+  send a photo of this panel and it can be taught to read it.</p>
+</div>
 
 <footer>
   Works offline once loaded. Add to your home screen for a proper app icon.<br>
@@ -210,11 +251,91 @@
   // same input layer the games use, so a pad or remote drives the menu
   var pads = KidKit.input.create({
     element: document.body,
-    onPress: function(){ KidKit.input.activateFocused(); },
-    onNav: function(dir){ KidKit.input.moveFocus(dir); },
+    steer: true,               // so the test panel can show what .axis() sees
+    onPress: function(){ if (!testOn) KidKit.input.activateFocused(); },
+    onNav: function(dir){ if (!testOn) KidKit.input.moveFocus(dir); },
     onGamepad: function(on){ document.getElementById('pad').hidden = !on; }
   });
-  (function loop(){ pads.poll(); requestAnimationFrame(loop); })();
+
+  /* ---------------------------------------------------------------- *
+   * Controller test.
+   *
+   * A d-pad only lands on buttons 12-15 when the browser says the pad is on
+   * the standard mapping, and a great many are not — they report the d-pad
+   * as a hat axis, or somewhere else again. When one of the games will not
+   * steer there is no way to tell which of those it is by staring at the
+   * game, so this shows what the browser is actually handing over and, next
+   * to it, what the kit makes of it.
+   * ---------------------------------------------------------------- */
+  var testOn = false;
+  var pt = {
+    dir:  document.getElementById('ptDir'),
+    name: document.getElementById('ptName'),
+    map:  document.getElementById('ptMap'),
+    btn:  document.getElementById('ptBtn'),
+    ax:   document.getElementById('ptAx'),
+    key:  document.getElementById('ptKey')
+  };
+  var panel = document.getElementById('padTest');
+  /* On pointerdown, not click, and swallowing the event. The kit listens for
+     pointerdown on the document — which fires well before click — so a plain
+     click handler here opened the panel and launched whichever card had the
+     focus at the same time. */
+  var testBtn = document.getElementById('padTestBtn');
+  function toggleTest(e){
+    if (e){ e.preventDefault(); e.stopPropagation(); }
+    testOn = !testOn;
+    panel.hidden = !testOn;
+  }
+  testBtn.addEventListener('pointerdown', toggleTest);
+  testBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); });
+  var lastKeys = [];
+  window.addEventListener('keydown', function(e){
+    lastKeys.unshift(e.key);
+    if (lastKeys.length > 6) lastKeys.pop();
+  });
+
+  function padSnapshot(){
+    var list;
+    try { list = navigator.getGamepads ? navigator.getGamepads() : []; }
+    catch (err) { list = []; }
+    for (var i = 0; i < list.length; i++) if (list[i]) return list[i];
+    return null;
+  }
+
+  function refreshTest(){
+    if (!testOn) return;
+    var a = pads.axis();
+    var dir = [];
+    if (a.y < -0.4) dir.push('UP');
+    if (a.y > 0.4) dir.push('DOWN');
+    if (a.x < -0.4) dir.push('LEFT');
+    if (a.x > 0.4) dir.push('RIGHT');
+    pt.dir.textContent = dir.length ? dir.join(' + ') : '—';
+
+    var p = padSnapshot();
+    if (!p){
+      pt.name.textContent = 'no controller found — press a button on it';
+      pt.map.textContent = pt.btn.textContent = pt.ax.textContent = '—';
+    } else {
+      pt.name.textContent = p.id || '(no name)';
+      pt.map.textContent = p.mapping ? p.mapping : "'' (not standard — this is the usual cause)";
+      var down = [];
+      for (var b = 0; b < p.buttons.length; b++){
+        var v = p.buttons[b];
+        if (v === true || (v && (v.pressed || v.value > 0.5))) down.push(b);
+      }
+      pt.btn.textContent = down.length ? down.join(', ') : 'none';
+      var ax = [];
+      for (var j = 0; j < (p.axes || []).length; j++){
+        ax.push(j + ':' + Number(p.axes[j]).toFixed(2));
+      }
+      pt.ax.textContent = ax.length ? ax.join('  ') : 'none';
+    }
+    pt.key.textContent = lastKeys.length ? lastKeys.join(', ') : 'none yet';
+  }
+
+  (function loop(){ pads.poll(); refreshTest(); requestAnimationFrame(loop); })();
 
   // offline support
   if ('serviceWorker' in navigator){

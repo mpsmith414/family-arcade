@@ -93,6 +93,45 @@
   var AXIS = 0.55;
   var STICK_DEAD = 0.22;             // generous: cheap pads drift a long way
 
+  /* ------------------------------------------------------------------ *
+   * The d-pad is not always buttons 12-15.
+   *
+   * That layout is the "standard mapping", and a browser only promises it
+   * when gamepad.mapping === 'standard'. Plenty of real controllers — cheap
+   * Bluetooth pads especially, and most of them once they are talking to a
+   * telly rather than a desktop — report mapping:'' and hand the d-pad over
+   * as a HAT AXIS instead, so buttons 12-15 are never pressed at all and
+   * reading only those means the d-pad does nothing whatsoever.
+   *
+   * A hat encodes eight directions as eight evenly spaced values from -1
+   * (up) round clockwise to 1 (up-left), and parks OUTSIDE that range when
+   * it is centred. Decoding is easy; not decoding something else by mistake
+   * is the careful bit, so a value only counts when it sits within a shred
+   * of one of the eight. Dead zero is deliberately not one of them, which is
+   * what stops an unused axis reading as a direction that is always held.
+   * ------------------------------------------------------------------ */
+  var HAT_X = [0, 1, 1, 1, 0, -1, -1, -1];
+  var HAT_Y = [-1, -1, 0, 1, 1, 1, 0, -1];
+
+  function hatVec(ax) {
+    /* Only axes 9 and 10, where hats actually live. Scanning wider reaches
+       the triggers, which on some pads rest at -1 for ever — and -1 is a
+       perfectly good hat value meaning "up", so a trigger nobody is touching
+       would steer the player into the ceiling for the whole game. */
+    for (var i = 9; i <= 10 && i < ax.length; i++) {
+      var v = ax[i];
+      if (typeof v !== 'number' || !isFinite(v)) continue;
+      if (v > 1.02 || v < -1.02) continue;      // centred: hats park out of range
+      if (v > -0.08 && v < 0.08) continue;      // dead centre, or an axis nobody uses
+      var k = (v + 1) * 3.5;                    // 0..7 across the eight directions
+      var r = Math.round(k);
+      if (r < 0 || r > 7) continue;
+      if (Math.abs(k - r) > 0.22) continue;     // not one of the eight — leave it alone
+      return { x: HAT_X[r], y: HAT_Y[r] };
+    }
+    return null;
+  }
+
   var createCount = 0;
 
   KidKit.input = {
@@ -155,7 +194,30 @@
       var steer = !!opts.steer;
       var keyHeld = {};
       var padVec = { x: 0, y: 0 };
-      var ptr = { active: false, id: null, nx: 0.5, ny: 0.5 };
+      var ptr = { active: false, id: null, nx: 0.5, ny: 0.5, hoverAt: -1e9 };
+
+      /* A CURSOR THAT IS MOVING COUNTS, with no button held down.
+       *
+       * On a telly the left stick does not reach the page as a stick at all
+       * — the browser eats it and drives its own mouse cursor with it. That
+       * left "hold A and waggle the stick" as the only way to move, which is
+       * a ridiculous thing to ask of a five-year-old and is exactly what got
+       * reported. A cursor being pushed about IS steering, so it steers.
+       *
+       * It lapses shortly after the cursor stops, which is what keeps a
+       * cursor parked in the middle of the screen from pinning the player
+       * against it for ever. Touch never hovers, so phones and tablets are
+       * untouched by this; a desktop mouse gains the same nicety. */
+      var hoverMs = opts.hoverMs == null ? 1500 : opts.hoverMs;
+      function nowMs() {
+        try {
+          if (global.performance && global.performance.now) return global.performance.now();
+        } catch (e) {}
+        return Date.now();
+      }
+      function hovering() {
+        return hoverMs > 0 && (nowMs() - ptr.hoverAt) < hoverMs;
+      }
 
       function onInteractive(e) {
         var t = e.target;
@@ -229,9 +291,15 @@
 
       if (steer) {
         bind('pointermove', function (e) {
-          if (!ptr.active || (ptr.id !== null && e.pointerId !== ptr.id)) return;
+          /* A press being dragged is followed as it always was. A cursor
+             merely moving over the page counts too, but only from a mouse:
+             a finger cannot hover, so this can never fire on a tablet. */
+          var held = ptr.active && (ptr.id === null || e.pointerId === ptr.id);
+          var hover = !ptr.active && (!e.pointerType || e.pointerType === 'mouse');
+          if (!held && !hover) return;
           lastSource = 'touch';
           trackPointer(e);
+          if (hover) ptr.hoverAt = nowMs();
         });
         // release listens on the window as well: a finger that slides off the
         // canvas mid-drag never sends pointerup to the element, and the kid
@@ -249,7 +317,8 @@
       }
 
       function endPointer() { ptr.active = false; ptr.id = null; }
-      function clearHeld() { keyHeld = {}; endPointer(); }
+      // a cursor that wandered off the page is not steering any more either
+      function clearHeld() { keyHeld = {}; ptr.hoverAt = -1e9; endPointer(); }
 
       // --- keyboard: almost any key jumps, so TV remotes just work ---
       global.addEventListener('keydown', function (e) {
@@ -335,6 +404,29 @@
           if (upNow) padDown = true;
           st.ax.up = upNow; st.ax.l = lNow; st.ax.r = rNow;
 
+          /* d-pad, however this pad happens to report it. Buttons first,
+             and the hat only when none of them is down — a standard pad
+             therefore behaves exactly as it always did. A hat direction has
+             to do everything the buttons do, edges included, or d-pad up
+             would steer but never jump. */
+          var dx = 0, dy = 0;
+          if (st.b[BTN_LEFT]) dx -= 1;
+          if (st.b[BTN_RIGHT]) dx += 1;
+          if (st.b[BTN_UP]) dy -= 1;
+          if (st.b[BTN_DOWN]) dy += 1;
+          if (!dx && !dy) {
+            var hv = hatVec(ax);
+            if (hv) {
+              dx = hv.x; dy = hv.y;
+              if (dx < 0 && !st.ax.hl) onNav('left');
+              if (dx > 0 && !st.ax.hr) onNav('right');
+              if (dy && !st.ax.hv) { lastSource = 'pad'; onPress('pad'); }
+              if (dx || dy) lastSource = 'pad';
+              if (dy) padDown = true;
+            }
+          }
+          st.ax.hl = dx < 0; st.ax.hr = dx > 0; st.ax.hv = !!dy;
+
           if (st.suppressed) {
             // Force this pad off until it's observed with nothing pressed —
             // only then is its suppression genuinely satisfied and lifted.
@@ -346,10 +438,7 @@
           if (steer) {
             var sx = Math.abs(ax[0] || 0) > STICK_DEAD ? ax[0] : 0;
             var sy = Math.abs(ax[1] || 0) > STICK_DEAD ? ax[1] : 0;
-            if (st.b[BTN_LEFT]) sx -= 1;
-            if (st.b[BTN_RIGHT]) sx += 1;
-            if (st.b[BTN_UP]) sy -= 1;
-            if (st.b[BTN_DOWN]) sy += 1;
+            sx += dx; sy += dy;
             // several pads plugged in: whichever one is being pushed wins
             if (Math.abs(sx) + Math.abs(sy) > Math.abs(padVec.x) + Math.abs(padVec.y)) {
               padVec.x = sx; padVec.y = sy;
@@ -388,8 +477,12 @@
         padCount: padCount,
         axis: axis,
         /* Where a finger is being held, 0..1 across the element. `active`
-           false means nobody is touching — not "touching the top left". */
-        pointer: function () { return { active: ptr.active, nx: ptr.nx, ny: ptr.ny }; },
+           false means nobody is steering — not "steering at the top left".
+           True for a held press, and for a mouse cursor that has moved in
+           the last moment or so, which is how a telly's stick arrives. */
+        pointer: function () {
+          return { active: ptr.active || hovering(), nx: ptr.nx, ny: ptr.ny };
+        },
         releaseSteer: clearHeld,
         get lastSource() { return lastSource; },
         get held() { return wasHeld; }

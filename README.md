@@ -164,6 +164,7 @@ they opt into the kit's steering layer and get these on top:
 | Hold a finger anywhere | run to it — the whole control scheme |
 | Arrow keys or WASD, held | run that way |
 | Left stick / d-pad, held | run that way |
+| A mouse or TV cursor being moved | run to it, no button needed |
 
 In Tower Climb one finger does both jobs: hold it where you want to go and the
 climber runs there, and every fresh tap is a jump. Only the finger's *side* is
@@ -196,6 +197,21 @@ stick shove it about. Two things follow from that, and both are handled:
   and covers the screen with **Press any button** — pressing anywhere over the
   game hands focus back, and if a controller is connected that same press takes
   the page fullscreen so there is no outside left to get lost in.
+
+### If the d-pad does nothing
+
+Buttons 12–15 are the d-pad only when the browser reports the pad on the
+*standard mapping*. Plenty of controllers don't — they report the d-pad as a
+hat axis instead — so the kit reads both. If a pad still won't steer, open
+**🎮 Controller test** at the bottom of the arcade menu: it shows what the
+browser is handing over (name, mapping, live buttons and axes) next to what
+the kit makes of it, which says straight away whether the pad or the game is
+at fault.
+
+The other half of the same problem: a TV browser eats the left stick to drive
+its own mouse cursor, so the stick never arrives as a stick. **A cursor being
+moved now steers on its own**, with no button held — you no longer have to
+hold A and waggle the stick to move.
 
 Best of all is to press 🔒 (kid lock) at the start: it goes fullscreen straight
 away, and the cursor can never leave. **Steering with the d-pad rather than the

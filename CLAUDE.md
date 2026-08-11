@@ -367,6 +367,52 @@ Gamepad mapping is deliberate: **almost every button jumps**, because a
 five-year-old shouldn't have to find the right one. Only X/Y are a separate
 action. Don't "fix" this by narrowing it.
 
+### The d-pad is not always buttons 12-15
+
+Reported from a real controller: the d-pad did nothing in any game, and the
+only way to move was to hold A and shove the telly's cursor about with the
+stick. Buttons 12-15 are the d-pad **only when `gamepad.mapping` is
+`'standard'`**, and a great many pads — cheap Bluetooth ones especially, and
+most of them once they are talking to a TV box rather than a desktop —
+report `mapping:''` and hand the d-pad over as a **hat axis** instead,
+usually `axes[9]`. Reading only the buttons means those pads have no d-pad at
+all. `hatVec()` decodes it; a hat encodes eight directions as eight evenly
+spaced values from -1 (up) clockwise to 1, and parks *outside* -1..1 when
+centred.
+
+The careful part is not decoding something else by mistake, and there are two
+traps. A value only counts when it lands within a shred of one of the eight,
+which is what keeps an idle axis sitting at zero from reading as a direction
+that is always held — zero is deliberately not one of the eight. And only
+axes 9 and 10 are scanned, because some pads rest a **trigger** at -1 for
+ever, and -1 is a perfectly good hat value meaning "up": scan wider and the
+player walks into the ceiling for the whole game with nobody touching
+anything. `kit: a centred hat is not a direction` is the guard on both.
+
+### A cursor that is moving counts, with no button held
+
+Same report, other half. A TV browser eats the left stick to drive its own
+mouse cursor, so the stick never reaches the page as a stick — which left
+"hold A down and waggle the stick" as the only way to move. A cursor being
+pushed around *is* steering, so `pointer()` now reports active for a mouse
+that has moved in the last `hoverMs` (1.5s), not only for a held press.
+
+It lapses shortly after the cursor stops, and that is load-bearing: a cursor
+parked in the middle of the screen would otherwise pin the player against it
+for ever. Touch never hovers, so phones and tablets are untouched; a desktop
+mouse gains the same nicety.
+
+### When a pad misbehaves, look at the menu
+
+The arcade menu has a **Controller test** panel on it (not a `<button>`, so
+d-pad menu navigation can't land a small child on it). It shows the pad's
+name and mapping, which buttons and axes are live, which keys are arriving,
+and — next to all of that — what `axis()` makes of it. That last line is the
+one that matters: if it moves and a game doesn't, the game is at fault; if it
+stays blank while the axes change, the pad is reporting the d-pad somewhere
+new and the kit needs teaching. Guessing at hardware nobody can see is how
+this bug survived five games.
+
 ## Design rules for these games
 
 - **One button.** Tap to jump, nothing else. Any new ability must map onto that.

@@ -1711,6 +1711,114 @@ test('kit: steering works with the cursor parked outside the game too', note => 
   return h;
 });
 
+/* ---------------------------------------------------------------- *
+ * the d-pad, on pads that are not on the standard mapping
+ *
+ * Reported from a real controller: the d-pad did nothing in any game, and
+ * the only way to move was to hold A and shove the telly's mouse cursor
+ * about with the stick. The cause is that buttons 12-15 are the d-pad only
+ * when gamepad.mapping === 'standard'; a great many pads report mapping:''
+ * and hand the d-pad over as a hat axis instead, which the kit was not
+ * reading at all.
+ * ---------------------------------------------------------------- */
+const HAT_STEER = [
+  ['right', SPOTS.dogbed],
+  ['left', SPOTS.plant],
+];
+
+for (const [dir, want] of HAT_STEER) {
+  test(`kit: a d-pad reported as a hat axis steers ${dir}`, note => {
+    const { h, seen } = holdRun(g => g.hat(dir), 900);
+    note(`hat ${dir} → ${[...seen].join(' / ')}`);
+    assert(seen.has(want),
+      `a hat-axis d-pad held ${dir} should have reached ${want}, only saw ${[...seen].join(', ')}`);
+    return h;
+  });
+}
+
+test('kit: a centred hat is not a direction, and neither is an idle axis', note => {
+  /* The careful half. A hat parks OUTSIDE -1..1 when centred, but plenty of
+     axes simply sit at zero, and some pads rest a trigger at -1 for ever —
+     and -1 is a perfectly good hat value meaning "up". Read any of those as
+     a direction and the player walks into a wall for the whole game with
+     nobody touching anything. */
+  const still = holdRun(g => g.hat(null), 700);
+  const zero = holdRun(g => g.setAxis(9, 0), 700);
+  const trig = holdRun(g => { g.setAxis(6, -1); g.setAxis(7, -1); }, 700);
+  const idle = holdRun(() => {}, 700);
+  const where = r => [...r.seen].join(' / ');
+  note(`centred: ${where(still)} | zero: ${where(zero)} | resting triggers: ${where(trig)} | nothing: ${where(idle)}`);
+  for (const [label, r] of [['a centred hat', still], ['an axis at zero', zero], ['resting triggers', trig]]) {
+    assert(r.seen.size <= idle.seen.size + 1,
+      `${label} moved the player about (${where(r)}) when nothing was pressed (${where(idle)})`);
+    r.h.dispose();
+  }
+  still.h.dispose(); zero.h.dispose(); trig.h.dispose();
+  return idle.h;
+});
+
+test('kit: a hat direction jumps as well as steers', note => {
+  // d-pad up is a jump everywhere else, so a hat has to do it too
+  const h = createHarness('oliver-run', { seed: 5 });
+  let presses = 0;
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'),
+    steer: true,
+    onPress: () => presses++,
+  });
+  h.frames(1); pads.poll();
+  assert(presses === 0, 'precondition: nothing pressed yet');
+  h.hat('up');
+  pads.poll();
+  assert(presses === 1, `a hat pushed up should press once, got ${presses}`);
+  pads.poll(); pads.poll();
+  assert(presses === 1, `holding it is still one press, got ${presses}`);
+  assert(pads.axis().y < -0.5, `a hat pushed up should steer up, got ${pads.axis().y}`);
+  h.hat(null);
+  pads.poll();
+  h.hat('up');
+  pads.poll();
+  note(`${presses} presses from press, hold, release, press`);
+  assert(presses === 2, `a fresh push should press again, got ${presses}`);
+  return h;
+});
+
+/* A telly's browser eats the left stick to drive its own mouse cursor, so
+   the stick never reaches the page as a stick. Before this, the only way to
+   move was to hold A down and waggle the cursor about — which is not a
+   thing to ask of a five-year-old. A cursor being pushed around IS steering. */
+test('kit: a moving cursor steers with no button held down', note => {
+  const g = createHarness('daddy-smash', { seed: 11 });
+  g.tap();
+  pump(g, 5);
+  const where = new Set();
+  for (let i = 0; i < 900; i++) {
+    g.hover(0.98, 0.99);            // the cursor keeps moving to the far corner
+    pump(g, 1);
+    where.add(g.text('whereTag'));
+  }
+  note(`cursor alone, no button: ${[...where].join(' / ')}`);
+  assert(where.has(SPOTS.dogbed),
+    `a moving cursor should have walked to the dog bed, only saw ${[...where].join(', ')}`);
+  return g;
+});
+
+test('kit: a cursor that stops moving stops steering', note => {
+  const g = createHarness('daddy-smash', { seed: 11 });
+  g.tap();
+  pump(g, 5);
+  for (let i = 0; i < 300; i++) { g.hover(0.98, 0.99); pump(g, 1); }
+  const moved = new Set();
+  for (let i = 0; i < 200; i++) { pump(g, 1); moved.add(g.text('whereTag')); }
+  // 200 frames is over three seconds of virtual time, well past the lapse
+  const settled = new Set();
+  for (let i = 0; i < 200; i++) { pump(g, 1); settled.add(g.text('whereTag')); }
+  note(`after the cursor stopped: ${[...moved].join(' / ')} then ${[...settled].join(' / ')}`);
+  assert(settled.size === 1,
+    `a parked cursor should leave the player still, but they wandered across ${[...settled].join(', ')}`);
+  return g;
+});
+
 test('kit: losing focus puts up a way back, and a press takes it', note => {
   const h = createHarness('daddy-smash', { seed: 9 });
   h.tap();

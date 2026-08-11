@@ -858,6 +858,34 @@ function createHarness(gameName, options) {
       if (pads.length) { pads[0].axes[0] = x; pads[0].axes[1] = y; pads[0].timestamp = clock.now; }
       return api;
     },
+    /* Any axis by index, for pads that are not on the standard mapping — a
+       d-pad reported as a hat on axes[9], a trigger resting at -1, and so
+       on. The array is grown as needed, because a real pad with a hat
+       reports more axes than the four a standard one does. */
+    setAxis(index, value, padIndex) {
+      const p = pads[padIndex == null ? 0 : padIndex];
+      if (!p) return api;
+      while (p.axes.length <= index) p.axes.push(0);
+      p.axes[index] = value;
+      p.timestamp = clock.now;
+      return api;
+    },
+    /* The eight values a hat switch reports, clockwise from up. Centred
+       hats park outside -1..1, which is what `null` sends. */
+    hat(dir, padIndex) {
+      const NAMES = ['up', 'upright', 'right', 'downright', 'down', 'downleft', 'left', 'upleft'];
+      const i = NAMES.indexOf(dir);
+      if (dir !== null && i === -1) throw new Error(`unknown hat direction: ${dir}`);
+      return api.setAxis(9, dir === null ? 3.2857 : -1 + i*2/7, padIndex);
+    },
+    /* A mouse cursor moving across the page with no button held — what a TV
+       browser sends when the stick pushes its cursor around. */
+    hover(nx, ny, id) {
+      const el = doc.getElementById(id || 'stage');
+      el.dispatchEvent(makeEvent('pointermove', el,
+        Object.assign({ pointerId: 7, pointerType: 'mouse' }, at(el, nx, ny))));
+      return api;
+    },
     /* Hold any pad button down across frames — d-pad steering, unlike
        padPress which is a single edge. Dispatches NO pointer events, so it
        isolates the gamepad path when a test needs to prove the pad alone
