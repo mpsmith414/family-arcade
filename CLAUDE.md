@@ -445,19 +445,28 @@ so `pointer()` reports active for a mouse that has moved in the last
 `hoverMs` (1.5s) and not only for a held press. That is what stops a plain
 mouse needing a button held down to move at all.
 
-It gives way to anything better: off **while a controller is visible**, and
-off **for three seconds after any real direction**, so it can never fight a
-d-pad on a telly where the stick drives the cursor.
+It gives way to anything better, and **"better" means a direction that has
+actually arrived, never a controller that merely exists.** The cursor is off
+for three seconds after any real direction — d-pad, arrows, stick — so it can
+never fight a pad that works.
 
-The lapse when the cursor stops moving is the interesting one, because it
-depends on whether anything better exists. If a real direction has ever
-arrived on this device (`everDir`), the cursor is a fallback and lapses
-after `hoverMs`, so a mouse resting over the page does not pin the player.
-If none ever has — a Fire TV swallows the d-pad and gives the stick to its
-own cursor — then the cursor is not a fallback, it is **the control
-scheme**, and it must not lapse: a short lapse there stopped the character
-dead every time the child held still. Left as the only input it behaves
-exactly like the finger these games were designed around, which is the point.
+Judging it on `padCount() > 0` instead was tried and was the worst bug in
+this whole saga, because a browser hides gamepads until the first button is
+pressed. On a Fire TV, where the pad cannot steer at all, the cursor worked
+perfectly right up until the child pressed A to jump — at which point the pad
+became visible, the cursor switched off for good, and holding A down was
+again the only way to move. It deferred to a controller that could not
+steer. `kit: a controller that cannot steer does not switch the cursor off`
+is the guard, and the rule behind it generalises: **judge an input by what
+it sends, not by whether it is plugged in.**
+
+The lapse when the cursor stops moving depends on the same question. If a
+real direction has arrived in the last thirty seconds the cursor is a
+fallback and lapses after `hoverMs`, so a mouse resting over the page does
+not pin the player. If none has — a Fire TV swallows the d-pad and gives the
+stick to its own cursor — then the cursor is not a fallback, it is **the
+control scheme**, and it must not lapse: a short lapse there stopped the
+character dead every time the child held still.
 
 Touch never hovers, so phones and tablets are untouched by any of this.
 

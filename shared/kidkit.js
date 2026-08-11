@@ -268,7 +268,6 @@
        * untouched by this; a desktop mouse gains the same nicety. */
       var hoverMs = opts.hoverMs == null ? 1500 : opts.hoverMs;
       var dirAt = -1e9;                  // last time a real direction was pushed
-      var everDir = false;               // …and whether one has EVER arrived
       function nowMs() {
         try {
           if (global.performance && global.performance.now) return global.performance.now();
@@ -290,9 +289,17 @@
        * The short lapse comes back the moment something better turns up. */
       function hovering() {
         if (hoverMs <= 0) return false;
-        if (nowMs() - dirAt < 3000) return false;
-        if (padCount() > 0) return false;
-        return (nowMs() - ptr.hoverAt) < (everDir ? hoverMs : 60000);
+        var since = nowMs() - dirAt;
+        if (since < 3000) return false;      // something better is in use right now
+        /* Judged on whether a direction has actually ARRIVED lately, never on
+           whether a controller is plugged in. Suppressing the cursor because
+           a pad exists was a bad rule and it broke the exact device it was
+           meant to help: a browser hides gamepads until the first button is
+           pressed, so on a Fire TV the cursor steered beautifully until the
+           child pressed A to jump — at which point the pad appeared, the
+           cursor switched off for good, and the only way to move was to hold
+           A down again. The pad it deferred to could not steer at all. */
+        return (nowMs() - ptr.hoverAt) < (since < 30000 ? hoverMs : 60000);
       }
 
       function onInteractive(e) {
@@ -392,7 +399,10 @@
              merely moving over the page counts too, but only from a mouse:
              a finger cannot hover, so this can never fire on a tablet. */
           var held = ptr.active && (ptr.id === null || e.pointerId === ptr.id);
-          var hover = !ptr.active && (!e.pointerType || e.pointerType === 'mouse');
+          /* Anything that is not a finger counts as a cursor. Testing for
+             'mouse' specifically was too narrow: a telly's synthetic cursor
+             can report an empty pointerType, or 'pen', or nothing at all. */
+          var hover = !ptr.active && e.pointerType !== 'touch';
           if (!held && !hover) return;
           lastSource = 'touch';
           trackPointer(e);
@@ -439,7 +449,7 @@
         if (steer && dir) {
           lastSource = 'key';
           keyHeld[dir] = 1;
-          dirAt = nowMs(); everDir = true;
+          dirAt = nowMs();
           if (e.preventDefault) e.preventDefault();
         }
 
@@ -573,7 +583,7 @@
             if (Math.abs(sx) + Math.abs(sy) > Math.abs(padVec.x) + Math.abs(padVec.y)) {
               padVec.x = sx; padVec.y = sy;
             }
-            if (sx || sy) { lastSource = 'pad'; dirAt = nowMs(); everDir = true; }
+            if (sx || sy) { lastSource = 'pad'; dirAt = nowMs(); }
           }
         }
 

@@ -1948,18 +1948,38 @@ test('kit: once a real direction exists, a parked cursor lapses again', note => 
   return h;
 });
 
-/* The half that matters on a telly. The stick drives the browser's own
-   cursor, so if the cursor kept steering it would fight the d-pad every
-   time a child let go of it. A controller in the room wins outright. */
-test('kit: a cursor is ignored while a controller is plugged in', note => {
+/* REGRESSION GUARD, and the sharpest lesson in this whole file: judge a
+   controller by what it SENDS, never by whether it is there.
+ *
+ * "Switch the cursor off while a pad is connected" sounds obviously right
+ * and broke the one device it was written for. A browser hides gamepads
+ * until the first button is pressed, so on a Fire TV — where the pad cannot
+ * steer at all, the d-pad being swallowed and the stick going to the
+ * browser's own cursor — the cursor worked beautifully right up until the
+ * child pressed A to jump. At that moment the pad appeared, the cursor
+ * switched off for good, and the only way to move was to hold A down. It
+ * deferred to a controller that could not steer. */
+test('kit: a controller that cannot steer does not switch the cursor off', note => {
   const h = createHarness('oliver-run', { seed: 5 });   // harness has a pad
   const pads = global.KidKit.input.create({
     element: h.document.getElementById('stage'), steer: true,
   });
+  pads.poll();                        // the pad is present and quiet
   h.hover(0.9, 0.5);
-  note(`with a pad present, cursor steering is ${pads.pointer().active ? 'ON' : 'off'}`);
+  assert(pads.pointer().active === true,
+    'a connected pad that sends no direction must not disable cursor steering');
+
+  h.stick(1, 0);                      // now it really is steering
+  pads.poll();
   assert(pads.pointer().active === false,
-    'a cursor must not steer while there is a controller to steer with');
+    'a stick actually being pushed should take over from the cursor');
+
+  h.stick(0, 0);
+  pads.poll();
+  h.frames(200);                      // let the three-second hold-off lapse
+  h.hover(0.9, 0.5);
+  note('cursor on with a quiet pad, off while the stick is pushed, back on afterwards');
+  assert(pads.pointer().active === true, 'the cursor should come back once the stick is let go');
   return h;
 });
 
