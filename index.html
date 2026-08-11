@@ -175,10 +175,13 @@
   <div class="row"><b>Buttons</b><span id="ptBtn">—</span></div>
   <div class="row"><b>Axes</b><span id="ptAx">—</span></div>
   <div class="row"><b>Keys</b><span id="ptKey">—</span></div>
-  <p class="note">Push the d-pad in each direction and watch <b>Kit sees</b>. If that
-  moves but the games do not, the games are at fault. If it stays on <b>—</b> while
-  <b>Buttons</b> or <b>Axes</b> change, the pad is reporting the d-pad somewhere new —
-  send a photo of this panel and it can be taught to read it.</p>
+  <p class="note">Push the d-pad in each direction and watch <b>Kit sees</b>.
+  If it says the direction, steering is working and any game that disagrees is
+  at fault. If it stays on <b>—</b>, look at <b>Keys</b>: a new line for each push
+  means the d-pad is arriving under a name nothing recognises yet, and a photo of
+  this panel is enough to teach it. <b>No new line at all</b> means this browser is
+  keeping the d-pad to itself and no page can see it — on a Fire TV that is the
+  left stick's usual fate, and the d-pad is normally the one that gets through.</p>
 </div>
 
 <footer>
@@ -289,13 +292,23 @@
   }
   testBtn.addEventListener('pointerdown', toggleTest);
   testBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); });
-  /* key AND keyCode, because on a television the interesting one is keyCode:
-     Fire TV reports a d-pad press as key:'Unidentified' and puts the
-     direction in keyCode alone. Seeing both is what says which it is. */
+  /* Every field of every key event, because on a television the useful one
+     varies: Fire TV reports a d-pad press as key:'Unidentified' and puts the
+     direction in keyCode, some Android browsers pass Android's own d-pad
+     codes (19-22) through raw, and others send nothing at all. All three
+     look identical from inside a game and completely different here.
+     If pressing the d-pad adds NO line at all, the browser is keeping the
+     event to itself and nothing in the page can reach it. */
   var lastKeys = [];
+  var keyCount = 0;
   window.addEventListener('keydown', function(e){
-    lastKeys.unshift(String(e.key) + ' (code ' + (e.keyCode == null ? e.which : e.keyCode) + ')');
-    if (lastKeys.length > 5) lastKeys.pop();
+    keyCount++;
+    lastKeys.unshift(
+      'key=' + JSON.stringify(e.key) +
+      '  code=' + JSON.stringify(e.code) +
+      '  keyCode=' + (e.keyCode == null ? e.which : e.keyCode) +
+      (e.repeat ? '  (repeat)' : ''));
+    if (lastKeys.length > 6) lastKeys.pop();
   });
 
   function padSnapshot(){
@@ -335,7 +348,9 @@
       }
       pt.ax.textContent = ax.length ? ax.join('  ') : 'none';
     }
-    pt.key.textContent = lastKeys.length ? lastKeys.join(', ') : 'none yet';
+    pt.key.innerHTML = lastKeys.length
+      ? (keyCount + ' so far<br>' + lastKeys.join('<br>'))
+      : 'NO KEY EVENTS AT ALL — if the d-pad adds nothing here, this browser is keeping them to itself';
   }
 
   (function loop(){ pads.poll(); refreshTest(); requestAnimationFrame(loop); })();

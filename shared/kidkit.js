@@ -98,17 +98,38 @@
      an anonymous keypress. Deprecated or not, keyCode is load-bearing on a
      television and has to be read. `which` is checked too, for the older
      browsers that only ever had that. */
-  var STEER_CODES = { 37: 'L', 38: 'U', 39: 'R', 40: 'D' };
+  /* 37-40 are the browser arrows. 19-22 are ANDROID's own d-pad key codes
+     (DPAD_UP/DOWN/LEFT/RIGHT), which some Android and Fire TV browsers pass
+     through raw instead of translating. On a desktop those four are Pause,
+     CapsLock and two IME keys — all of which report a real `key` and are
+     caught by IGNORE_KEYS before ever reaching here, so taking them costs
+     nothing and covers a whole family of tellies. */
+  var STEER_CODES = {
+    37: 'L', 38: 'U', 39: 'R', 40: 'D',
+    21: 'L', 19: 'U', 22: 'R', 20: 'D'
+  };
   var ARROW_KEYS = {
     ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D',
     Left: 'L', Right: 'R', Up: 'U', Down: 'D'
   };
+  /* Last resort: a name that ENDS in a direction, with a prefix from a short
+     list. Catches 'DPadUp', 'GamepadLeft' and friends without catching
+     'PageDown', which would otherwise read as a direction. */
+  var DIR_NAME = /^(?:arrow|dpad|d-pad|gamepad|pad)?(up|down|left|right)$/i;
+  var NAME_DIR = { up: 'U', down: 'D', left: 'L', right: 'R' };
+
+  function nameDir(s) {
+    if (!s) return null;
+    var m = DIR_NAME.exec(String(s));
+    return m ? NAME_DIR[m[1].toLowerCase()] : null;
+  }
 
   function dirOf(e) {
     var d = STEER_KEYS[e.key];
     if (d) return d;
     var c = e.keyCode == null ? e.which : e.keyCode;
-    return STEER_CODES[c] || null;
+    if (STEER_CODES[c]) return STEER_CODES[c];
+    return nameDir(e.key) || nameDir(e.code);
   }
   /* Arrows and d-pads only, never WASD. Menu navigation is an arrow's job;
      a letter has to stay an ordinary keypress, or `a` would stop jumping. */
@@ -116,7 +137,8 @@
     var d = ARROW_KEYS[e.key];
     if (d) return d;
     var c = e.keyCode == null ? e.which : e.keyCode;
-    return STEER_CODES[c] || null;
+    if (STEER_CODES[c]) return STEER_CODES[c];
+    return nameDir(e.key) || nameDir(e.code);
   }
   // one stable name per physical key, even when `key` is 'Unidentified'
   function keyId(e) {
@@ -375,7 +397,6 @@
 
       // --- keyboard: almost any key jumps, so TV remotes just work ---
       global.addEventListener('keydown', function (e) {
-        if (e.repeat) return;
         if (IGNORE_KEYS[e.key]) return;
 
         // If a button has focus, let Enter/Space activate it natively.
@@ -383,10 +404,21 @@
         var onBtn = a && a.tagName === 'BUTTON';
         if (onBtn && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) return;
 
-        // Held direction keys feed axis() as well as doing whatever they
-        // already did, so ArrowUp still starts a game that waits on onPress.
+        /* Held direction keys feed axis() as well as doing whatever they
+           already did, so ArrowUp still starts a game that waits on onPress.
+           Note this runs BEFORE the repeat guard below: a key being held
+           down auto-repeats, and some televisions send nothing but repeats
+           after the first event. Skipping those would drop the direction on
+           the floor while the child is still pressing it. */
         var dir = dirOf(e);
-        if (steer && dir) { lastSource = 'key'; keyHeld[dir] = 1; dirAt = nowMs(); }
+        if (steer && dir) {
+          lastSource = 'key';
+          keyHeld[dir] = 1;
+          dirAt = nowMs();
+          if (e.preventDefault) e.preventDefault();
+        }
+
+        if (e.repeat) return;          // everything past here is edge-triggered
 
         var nav = arrowDirOf(e);
         if (nav === 'L' || nav === 'R' || nav === 'D') {

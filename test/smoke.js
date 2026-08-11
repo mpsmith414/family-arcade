@@ -1752,6 +1752,59 @@ test("kit: a telly's d-pad lets go when it is released", note => {
   return h;
 });
 
+/* Android's own d-pad codes, which some tellies pass through raw instead of
+   translating to the browser arrows. On a desktop 19/20/21/22 are Pause,
+   CapsLock and two IME keys, and every one of those reports a real `key`
+   that IGNORE_KEYS catches first — so reading them costs nothing. */
+test("kit: a telly that sends Android's own d-pad codes still steers", note => {
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.tap();
+  pump(h, 5);
+  h.keyDown('Unidentified', 22);        // Android KEYCODE_DPAD_RIGHT
+  const seen = new Set();
+  for (let i = 0; i < 900; i++) { pump(h, 1); seen.add(h.text('whereTag')); }
+  note(`keyCode 22 → ${[...seen].join(' / ')}`);
+  assert(seen.has(SPOTS.dogbed),
+    `Android's d-pad-right code should have reached the dog bed, only saw ${[...seen].join(', ')}`);
+  return h;
+});
+
+test('kit: CapsLock is still not a direction', note => {
+  // keyCode 20 is Android's d-pad down AND a desktop CapsLock. The one that
+  // says which is `key`, and IGNORE_KEYS reads it before anything else.
+  const idle = holdRun(() => {}, 700);
+  const caps = holdRun(g => g.keyDown('CapsLock', 20), 700);
+  note(`nothing: ${[...idle.seen].join(' / ')} | CapsLock: ${[...caps.seen].join(' / ')}`);
+  assert(caps.seen.size <= idle.seen.size + 1,
+    `CapsLock steered the player about: ${[...caps.seen].join(', ')}`);
+  idle.h.dispose();
+  return caps.h;
+});
+
+test('kit: a direction that only ever auto-repeats is still held', note => {
+  /* Some televisions send one keydown and then nothing but repeats. The
+     repeat guard used to sit at the very top of the handler, so those were
+     dropped on the floor while the child was still pressing the button. */
+  const h = createHarness('oliver-run', { seed: 5, gamepad: false });
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'), steer: true,
+  });
+  let presses = 0;
+  const pads2 = global.KidKit.input.create({
+    element: h.document.getElementById('stage'), steer: true, onPress: () => presses++,
+  });
+  const repeat = () => global.dispatchEvent({
+    type: 'keydown', key: 'Unidentified', keyCode: 39, repeat: true,
+    preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {},
+  });
+  repeat(); repeat(); repeat();
+  note(`axis after three repeat-only events: x=${pads.axis().x}, presses fired: ${presses}`);
+  assert(pads.axis().x > 0.5, 'a repeat-only direction should still steer');
+  assert(presses === 0, `repeats must not machine-gun the jump button, got ${presses}`);
+  void pads2;
+  return h;
+});
+
 test("kit: a telly's d-pad is swallowed, not handed back to the browser", note => {
   /* Left and right used to bail out of the handler before preventDefault,
      which on a television hands them straight back to scroll the page or

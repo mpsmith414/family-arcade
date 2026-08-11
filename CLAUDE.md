@@ -387,6 +387,22 @@ Left and right also used to `return` out of the handler *before*
 `preventDefault()`, which on a television hands them straight back to scroll
 the page or shove its own cursor around. Steering keys are ours now.
 
+`dirOf()` casts a deliberately wide net, because every telly does this
+differently and none of them can be tested from here: the browser arrows
+(37-40), **Android's own d-pad codes** (19-22, which some Fire TV and
+Android browsers pass through raw), and finally a name ending in a direction
+with a short list of allowed prefixes, which picks up `DPadUp` and friends
+without picking up `PageDown`. The desktop meanings of 19-22 are Pause,
+CapsLock and two IME keys — every one of which reports a real `key` that
+`IGNORE_KEYS` catches first, which is what makes reading them free.
+`kit: CapsLock is still not a direction` is the guard on that.
+
+The **repeat guard moved**. It used to sit at the top of the handler, so a
+television that sends one keydown and then nothing but auto-repeats had its
+direction dropped on the floor while the child was still pressing. Held
+directions are now recorded before the guard; only the edge-triggered half
+(jump, menu nav) sits after it.
+
 The other thing to know about this platform: **the left stick cannot be read
 at all.** Fire TV takes it at the OS level to drive the browser's mouse
 cursor, and no web page can intercept that. The d-pad is the real control
