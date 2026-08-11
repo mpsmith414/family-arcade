@@ -268,23 +268,31 @@
        * untouched by this; a desktop mouse gains the same nicety. */
       var hoverMs = opts.hoverMs == null ? 1500 : opts.hoverMs;
       var dirAt = -1e9;                  // last time a real direction was pushed
+      var everDir = false;               // …and whether one has EVER arrived
       function nowMs() {
         try {
           if (global.performance && global.performance.now) return global.performance.now();
         } catch (e) {}
         return Date.now();
       }
-      /* A cursor is the LAST resort, never the control scheme. It is
-         switched off entirely while a controller is plugged in, and for a
-         few seconds after any real direction — d-pad, arrows, stick — so
-         that steering never quietly reverts to chasing a cursor around.
-         On a telly the stick drives the browser's own cursor, so without
-         this the two would fight each other every time a child let go. */
+      /* A cursor gives way to anything better: it is off while a controller
+         is visible, and off for a few seconds after any real direction, so
+         it can never fight a d-pad.
+       *
+       * But when it is the ONLY thing there is, it stops being a fallback
+       * and becomes the control scheme — and then it must not lapse. On a
+       * Fire TV the d-pad is swallowed by the browser and the stick only
+       * drives the cursor, so a cursor is genuinely all a child has; the
+       * short lapse meant the character stopped dead every time they held
+       * still, which is not a control scheme, it is a fault. Left as the
+       * only input, the cursor works exactly like the finger these games
+       * were designed around: put it where you want to go, and off they go.
+       * The short lapse comes back the moment something better turns up. */
       function hovering() {
         if (hoverMs <= 0) return false;
         if (nowMs() - dirAt < 3000) return false;
         if (padCount() > 0) return false;
-        return (nowMs() - ptr.hoverAt) < hoverMs;
+        return (nowMs() - ptr.hoverAt) < (everDir ? hoverMs : 60000);
       }
 
       function onInteractive(e) {
@@ -338,8 +346,25 @@
         } catch (er) {}
       }
 
+      /* Keep DOM focus somewhere inside the page, or no keydown ever arrives.
+         Every game focuses its start button and then HIDES it on the first
+         press — and a browser handed a focused element that just vanished
+         may drop focus to nowhere, after which the d-pad and the arrow keys
+         are talking to the browser rather than to us. Parking focus on the
+         game box costs nothing and rules that out. tabIndex -1 keeps it out
+         of the tab order, so moveFocus() still only walks real buttons. */
+      function grabFocus() {
+        try {
+          // never the menu, whose focus belongs to whichever card is picked
+          if (!el || !el.focus || el === global.document.body) return;
+          if (el.tabIndex == null || el.tabIndex < 0) el.tabIndex = -1;
+          el.focus({ preventScroll: true });
+        } catch (er) {}
+      }
+
       bind('pointerdown', function (e) {
         if (onInteractive(e)) return;
+        grabFocus();
         lastSource = 'touch';
         pointerHeld = true;
         if (steer) {
@@ -414,7 +439,7 @@
         if (steer && dir) {
           lastSource = 'key';
           keyHeld[dir] = 1;
-          dirAt = nowMs();
+          dirAt = nowMs(); everDir = true;
           if (e.preventDefault) e.preventDefault();
         }
 
@@ -462,6 +487,16 @@
 
       function poll() {
         var pads;
+        /* Keep a focused element inside the page. A game's start button is
+           focused and then hidden on the first press, which can leave focus
+           on nothing at all — and from then on every keydown, d-pad
+           included, is talking to the browser instead of to us. Checking
+           here rather than once at startup is what makes it self-healing. */
+        try {
+          var ae = global.document.activeElement;
+          if (!ae || ae === global.document.body) grabFocus();
+        } catch (e) {}
+
         padVec.x = 0; padVec.y = 0;      // no pad, no push — never stick on
         try { pads = global.navigator && global.navigator.getGamepads ? global.navigator.getGamepads() : null; }
         catch (e) { return; }
@@ -538,7 +573,7 @@
             if (Math.abs(sx) + Math.abs(sy) > Math.abs(padVec.x) + Math.abs(padVec.y)) {
               padVec.x = sx; padVec.y = sy;
             }
-            if (sx || sy) { lastSource = 'pad'; dirAt = nowMs(); }
+            if (sx || sy) { lastSource = 'pad'; dirAt = nowMs(); everDir = true; }
           }
         }
 

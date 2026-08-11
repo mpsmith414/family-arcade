@@ -1908,7 +1908,13 @@ test('kit: a hat direction jumps as well as steers', note => {
    Tested against the kit directly rather than through a game, because in a
    game the player is also being chased, carried and bumped about, and none
    of that would tell you anything about the cursor. */
-test('kit: a moving cursor steers, and stops when the cursor stops', note => {
+/* When a cursor is the only input there is — a Fire TV swallows the d-pad
+   and gives the stick to its own cursor — it stops being a fallback and
+   becomes the control scheme, and then it must NOT lapse. A short lapse
+   meant the character stopped dead whenever the child held still, which is
+   not a control scheme but a fault. It works like the finger these games
+   were built around: put it where you want to go. */
+test('kit: a cursor that is the only input keeps steering', note => {
   const h = createHarness('oliver-run', { seed: 5, gamepad: false });
   const pads = global.KidKit.input.create({
     element: h.document.getElementById('stage'), steer: true,
@@ -1916,12 +1922,29 @@ test('kit: a moving cursor steers, and stops when the cursor stops', note => {
   assert(pads.pointer().active === false, 'nothing should be steering yet');
   h.hover(0.9, 0.5);
   assert(pads.pointer().active === true, 'a moving cursor should steer');
-  h.frames(40);
-  assert(pads.pointer().active === true, 'still steering half a second later');
-  h.frames(200);                       // over three seconds of virtual time
-  note('steered on the move, lapsed once parked');
+  h.frames(600);                       // ten seconds of holding perfectly still
+  note('still steering ten seconds after the cursor last moved');
+  assert(pads.pointer().active === true,
+    'a cursor with nothing to defer to must keep steering, or the player stops dead');
+  return h;
+});
+
+/* …but the moment something better has been seen, it goes back to being a
+   fallback that gets out of the way. */
+test('kit: once a real direction exists, a parked cursor lapses again', note => {
+  const h = createHarness('oliver-run', { seed: 5, gamepad: false });
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'), steer: true,
+  });
+  h.keyDown('ArrowRight');             // a real direction exists on this box
+  h.keyUp('ArrowRight');
+  h.frames(200);                       // let the three-second hold-off pass
+  h.hover(0.9, 0.5);
+  assert(pads.pointer().active === true, 'the cursor should still work as a fallback');
+  h.frames(200);
+  note('lapsed once parked, now that arrows are known to work here');
   assert(pads.pointer().active === false,
-    'a cursor left parked should stop steering, or it pins the player against it');
+    'with a keyboard in the room a parked cursor should stop steering');
   return h;
 });
 

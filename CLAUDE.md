@@ -427,26 +427,39 @@ ever, and -1 is a perfectly good hat value meaning "up": scan wider and the
 player walks into the ceiling for the whole game with nobody touching
 anything. `kit: a centred hat is not a direction` is the guard on both.
 
-### A cursor is the last resort, never the control scheme
+### Keep a focused element inside the page
+
+Every game focuses its start button and then **hides** it on the first press.
+A browser handed a focused element that has just vanished may drop focus to
+nothing at all, and from that moment every keydown — d-pad included — is
+talking to the browser rather than to the page. `poll()` checks each frame
+whether `document.activeElement` is null or the body and parks focus on the
+game box if so, which makes it self-healing rather than a one-shot at
+startup. The box gets `tabIndex = -1`, so it is focusable in code without
+joining the tab order and `moveFocus()` still walks only real buttons.
+
+### A cursor is the last resort — unless it is the only thing there is
 
 A mouse being pushed around *is* steering for somebody who has nothing else,
 so `pointer()` reports active for a mouse that has moved in the last
 `hoverMs` (1.5s) and not only for a held press. That is what stops a plain
 mouse needing a button held down to move at all.
 
-It is switched off in three cases, and all three matter:
+It gives way to anything better: off **while a controller is visible**, and
+off **for three seconds after any real direction**, so it can never fight a
+d-pad on a telly where the stick drives the cursor.
 
-- **while any controller is connected** — on a telly the stick drives the
-  cursor, so a cursor that kept steering would fight the d-pad every time a
-  child let go of it;
-- **for three seconds after any real direction** (d-pad, arrows, stick), so
-  steering never quietly reverts to chasing a cursor;
-- **shortly after the cursor stops moving**, or one parked mid-screen would
-  pin the player against it for ever.
+The lapse when the cursor stops moving is the interesting one, because it
+depends on whether anything better exists. If a real direction has ever
+arrived on this device (`everDir`), the cursor is a fallback and lapses
+after `hoverMs`, so a mouse resting over the page does not pin the player.
+If none ever has — a Fire TV swallows the d-pad and gives the stick to its
+own cursor — then the cursor is not a fallback, it is **the control
+scheme**, and it must not lapse: a short lapse there stopped the character
+dead every time the child held still. Left as the only input it behaves
+exactly like the finger these games were designed around, which is the point.
 
-Touch never hovers, so phones and tablets are untouched by any of this. Do
-not promote this path: it is a fallback, and the reported complaint was
-specifically that steering should NOT be cursor-driven.
+Touch never hovers, so phones and tablets are untouched by any of this.
 
 ### When a pad misbehaves, look at the menu
 
