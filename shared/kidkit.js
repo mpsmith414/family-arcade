@@ -81,11 +81,47 @@
      WASD both, and both cases of the letters — a five-year-old leaves caps
      lock on for weeks at a time. */
   var STEER_KEYS = {
-    ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
-    Left: [-1, 0], Right: [1, 0], Up: [0, -1], Down: [0, 1],
-    a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1],
-    A: [-1, 0], D: [1, 0], W: [0, -1], S: [0, 1]
+    ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D',
+    Left: 'L', Right: 'R', Up: 'U', Down: 'D',
+    a: 'L', d: 'R', w: 'U', s: 'D',
+    A: 'L', D: 'R', W: 'U', S: 'D'
   };
+  var DIR_VEC = { L: [-1, 0], R: [1, 0], U: [0, -1], D: [0, 1] };
+
+  /* …and the same four by keyCode, which is the only way a lot of tellies
+     will tell you about them.
+
+     THIS IS WHY THE D-PAD DID NOTHING ON A FIRE TV. Its browser reports
+     `e.key` for a d-pad press as 'Unidentified' — Amazon's own guidance for
+     web apps on the platform is to read keyCode, because `key` cannot be
+     relied on — so every lookup above missed and the arrows fell through as
+     an anonymous keypress. Deprecated or not, keyCode is load-bearing on a
+     television and has to be read. `which` is checked too, for the older
+     browsers that only ever had that. */
+  var STEER_CODES = { 37: 'L', 38: 'U', 39: 'R', 40: 'D' };
+  var ARROW_KEYS = {
+    ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D',
+    Left: 'L', Right: 'R', Up: 'U', Down: 'D'
+  };
+
+  function dirOf(e) {
+    var d = STEER_KEYS[e.key];
+    if (d) return d;
+    var c = e.keyCode == null ? e.which : e.keyCode;
+    return STEER_CODES[c] || null;
+  }
+  /* Arrows and d-pads only, never WASD. Menu navigation is an arrow's job;
+     a letter has to stay an ordinary keypress, or `a` would stop jumping. */
+  function arrowDirOf(e) {
+    var d = ARROW_KEYS[e.key];
+    if (d) return d;
+    var c = e.keyCode == null ? e.which : e.keyCode;
+    return STEER_CODES[c] || null;
+  }
+  // one stable name per physical key, even when `key` is 'Unidentified'
+  function keyId(e) {
+    return String(e.key) + '/' + String(e.keyCode == null ? e.which : e.keyCode);
+  }
 
   // standard gamepad mapping
   var BTN_X = 2, BTN_Y = 3, BTN_SELECT = 8, BTN_START = 9;
@@ -209,14 +245,24 @@
        * against it for ever. Touch never hovers, so phones and tablets are
        * untouched by this; a desktop mouse gains the same nicety. */
       var hoverMs = opts.hoverMs == null ? 1500 : opts.hoverMs;
+      var dirAt = -1e9;                  // last time a real direction was pushed
       function nowMs() {
         try {
           if (global.performance && global.performance.now) return global.performance.now();
         } catch (e) {}
         return Date.now();
       }
+      /* A cursor is the LAST resort, never the control scheme. It is
+         switched off entirely while a controller is plugged in, and for a
+         few seconds after any real direction — d-pad, arrows, stick — so
+         that steering never quietly reverts to chasing a cursor around.
+         On a telly the stick drives the browser's own cursor, so without
+         this the two would fight each other every time a child let go. */
       function hovering() {
-        return hoverMs > 0 && (nowMs() - ptr.hoverAt) < hoverMs;
+        if (hoverMs <= 0) return false;
+        if (nowMs() - dirAt < 3000) return false;
+        if (padCount() > 0) return false;
+        return (nowMs() - ptr.hoverAt) < hoverMs;
       }
 
       function onInteractive(e) {
@@ -224,11 +270,15 @@
         return !!(t && t.closest && t.closest('button,a,input,select,textarea'));
       }
 
+      /* keyHeld is keyed by direction ('L','R','U','D'), not by key name.
+         It has to be: a telly gives a d-pad press a keyCode and no usable
+         `key`, so keydown and keyup would file the same button under two
+         different names and the direction would stick on for ever. */
       function keyVec() {
         var x = 0, y = 0;
         for (var k in keyHeld) {
           if (!Object.prototype.hasOwnProperty.call(keyHeld, k)) continue;
-          var v = STEER_KEYS[k];
+          var v = DIR_VEC[k];
           if (v) { x += v[0]; y += v[1]; }
         }
         return { x: x, y: y };
@@ -308,7 +358,10 @@
           el.addEventListener(ev, endPointer);
           global.addEventListener(ev, endPointer);
         });
-        global.addEventListener('keyup', function (e) { delete keyHeld[e.key]; });
+        global.addEventListener('keyup', function (e) {
+          var d = dirOf(e);
+          if (d) delete keyHeld[d];
+        });
         try {
           global.document.addEventListener('visibilitychange', function () {
             if (global.document.hidden) clearHeld();
@@ -332,25 +385,35 @@
 
         // Held direction keys feed axis() as well as doing whatever they
         // already did, so ArrowUp still starts a game that waits on onPress.
-        if (steer && STEER_KEYS[e.key]) { lastSource = 'key'; keyHeld[e.key] = 1; }
+        var dir = dirOf(e);
+        if (steer && dir) { lastSource = 'key'; keyHeld[dir] = 1; dirAt = nowMs(); }
 
-        if (NAV_KEYS[e.key]) {
+        var nav = arrowDirOf(e);
+        if (nav === 'L' || nav === 'R' || nav === 'D') {
           // arrows navigate menus but still jump during play
           lastSource = 'key';
-          onNav(NAV_KEYS[e.key]);
-          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') return;
+          onNav(nav === 'L' ? 'left' : nav === 'R' ? 'right' : 'down');
+          if (nav === 'L' || nav === 'R') {
+            /* Left and right used to bail out here, BEFORE preventDefault,
+               which on a telly hands them straight back to the browser to
+               scroll the page or shove its own cursor around with. Steering
+               keys are ours; swallow them. */
+            if (steer && e.preventDefault) e.preventDefault();
+            return;
+          }
         }
-        if (e.key === 'Escape') { onPause('key'); return; }
+        if (e.key === 'Escape' || e.keyCode === 27) { onPause('key'); return; }
 
         if (e.preventDefault) e.preventDefault();
         lastSource = 'key';
-        keysDown[e.key] = 1;
+        keysDown[keyId(e)] = 1;
         onPress('key');
         syncHold('key');
       });
 
       global.addEventListener('keyup', function (e) {
-        if (keysDown[e.key]) { delete keysDown[e.key]; syncHold('key'); }
+        var id = keyId(e);
+        if (keysDown[id]) { delete keysDown[id]; syncHold('key'); }
       });
 
       global.addEventListener('blur', function () { releaseAll('blur'); });
@@ -443,7 +506,7 @@
             if (Math.abs(sx) + Math.abs(sy) > Math.abs(padVec.x) + Math.abs(padVec.y)) {
               padVec.x = sx; padVec.y = sy;
             }
-            if (sx || sy) lastSource = 'pad';
+            if (sx || sy) { lastSource = 'pad'; dirAt = nowMs(); }
           }
         }
 

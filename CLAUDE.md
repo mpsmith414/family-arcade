@@ -367,18 +367,40 @@ Gamepad mapping is deliberate: **almost every button jumps**, because a
 five-year-old shouldn't have to find the right one. Only X/Y are a separate
 action. Don't "fix" this by narrowing it.
 
-### The d-pad is not always buttons 12-15
+### A telly's d-pad sends a keyCode and no usable key
 
-Reported from a real controller: the d-pad did nothing in any game, and the
-only way to move was to hold A and shove the telly's cursor about with the
-stick. Buttons 12-15 are the d-pad **only when `gamepad.mapping` is
-`'standard'`**, and a great many pads — cheap Bluetooth ones especially, and
-most of them once they are talking to a TV box rather than a desktop —
+**This is the one that was actually broken**, on an Xbox pad through the
+browser app on a Fire TV Cube: the d-pad did nothing in any game, and the
+only way to move was to hold A and shove the cursor about with the stick.
+
+Fire TV's browser reports a d-pad press as `e.key === 'Unidentified'` and
+puts the direction in the deprecated **`e.keyCode`** (37-40). Amazon's own
+guidance for web apps on the platform is to read keyCode, precisely because
+`key` cannot be relied on there. The kit keyed everything off `e.key`, so
+every arrow missed its lookup and fell through as an anonymous keypress: it
+jumped, and it never steered. `dirOf()` now reads `key` first and `keyCode`
+second, and `keyHeld` is filed by DIRECTION rather than by key name — keyed
+by name, keydown and keyup would file the same physical button under two
+different 'Unidentified' entries and the direction would stick on for ever.
+
+Left and right also used to `return` out of the handler *before*
+`preventDefault()`, which on a television hands them straight back to scroll
+the page or shove its own cursor around. Steering keys are ours now.
+
+The other thing to know about this platform: **the left stick cannot be read
+at all.** Fire TV takes it at the OS level to drive the browser's mouse
+cursor, and no web page can intercept that. The d-pad is the real control
+there; the cursor path below is the only thing that can ever make the stick
+do anything, which is why it exists.
+
+### The d-pad is not always buttons 12-15 either
+
+The same complaint has a second cause worth guarding. Buttons 12-15 are the
+d-pad **only when `gamepad.mapping` is `'standard'`**, and plenty of pads
 report `mapping:''` and hand the d-pad over as a **hat axis** instead,
-usually `axes[9]`. Reading only the buttons means those pads have no d-pad at
-all. `hatVec()` decodes it; a hat encodes eight directions as eight evenly
-spaced values from -1 (up) clockwise to 1, and parks *outside* -1..1 when
-centred.
+usually `axes[9]`. `hatVec()` decodes it; a hat encodes eight directions as
+eight evenly spaced values from -1 (up) clockwise to 1, and parks *outside*
+-1..1 when centred.
 
 The careful part is not decoding something else by mistake, and there are two
 traps. A value only counts when it lands within a shred of one of the eight,
@@ -389,18 +411,26 @@ ever, and -1 is a perfectly good hat value meaning "up": scan wider and the
 player walks into the ceiling for the whole game with nobody touching
 anything. `kit: a centred hat is not a direction` is the guard on both.
 
-### A cursor that is moving counts, with no button held
+### A cursor is the last resort, never the control scheme
 
-Same report, other half. A TV browser eats the left stick to drive its own
-mouse cursor, so the stick never reaches the page as a stick — which left
-"hold A down and waggle the stick" as the only way to move. A cursor being
-pushed around *is* steering, so `pointer()` now reports active for a mouse
-that has moved in the last `hoverMs` (1.5s), not only for a held press.
+A mouse being pushed around *is* steering for somebody who has nothing else,
+so `pointer()` reports active for a mouse that has moved in the last
+`hoverMs` (1.5s) and not only for a held press. That is what stops a plain
+mouse needing a button held down to move at all.
 
-It lapses shortly after the cursor stops, and that is load-bearing: a cursor
-parked in the middle of the screen would otherwise pin the player against it
-for ever. Touch never hovers, so phones and tablets are untouched; a desktop
-mouse gains the same nicety.
+It is switched off in three cases, and all three matter:
+
+- **while any controller is connected** — on a telly the stick drives the
+  cursor, so a cursor that kept steering would fight the d-pad every time a
+  child let go of it;
+- **for three seconds after any real direction** (d-pad, arrows, stick), so
+  steering never quietly reverts to chasing a cursor;
+- **shortly after the cursor stops moving**, or one parked mid-screen would
+  pin the player against it for ever.
+
+Touch never hovers, so phones and tablets are untouched by any of this. Do
+not promote this path: it is a fallback, and the reported complaint was
+specifically that steering should NOT be cursor-driven.
 
 ### When a pad misbehaves, look at the menu
 

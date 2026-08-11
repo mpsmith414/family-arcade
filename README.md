@@ -200,18 +200,26 @@ stick shove it about. Two things follow from that, and both are handled:
 
 ### If the d-pad does nothing
 
-Buttons 12–15 are the d-pad only when the browser reports the pad on the
-*standard mapping*. Plenty of controllers don't — they report the d-pad as a
-hat axis instead — so the kit reads both. If a pad still won't steer, open
-**🎮 Controller test** at the bottom of the arcade menu: it shows what the
-browser is handing over (name, mapping, live buttons and axes) next to what
-the kit makes of it, which says straight away whether the pad or the game is
-at fault.
+**On a Fire TV, use the d-pad, not the left stick.** Fire TV takes the stick
+at the operating-system level to drive the browser's mouse cursor, and no web
+page can intercept that — so the stick can never be read as a stick there.
+The d-pad is the real control.
 
-The other half of the same problem: a TV browser eats the left stick to drive
-its own mouse cursor, so the stick never arrives as a stick. **A cursor being
-moved now steers on its own**, with no button held — you no longer have to
-hold A and waggle the stick to move.
+Fire TV's browser also reports a d-pad press with no usable `key`, putting
+the direction in the deprecated `keyCode` instead, which is why the d-pad
+did nothing at all until the kit was taught to read both. Separately, the
+gamepad d-pad is only on buttons 12–15 when the browser reports the *standard
+mapping*; plenty of pads use a hat axis instead, so the kit reads that too.
+
+If a pad still won't steer, open **🎮 Controller test** at the bottom of the
+arcade menu. It shows what the browser is handing over — pad name, mapping,
+live buttons and axes, and each key with its keyCode — next to what the kit
+makes of it, which says straight away whether the pad or the game is at fault.
+
+A moving mouse cursor will also steer, with no button held, for anyone who
+has nothing better. It is strictly a fallback: it switches off while any
+controller is connected and for a few seconds after any real direction, so
+it can never get in the d-pad's way.
 
 Best of all is to press 🔒 (kid lock) at the start: it goes fullscreen straight
 away, and the cursor can never leave. **Steering with the d-pad rather than the

@@ -289,10 +289,13 @@
   }
   testBtn.addEventListener('pointerdown', toggleTest);
   testBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); });
+  /* key AND keyCode, because on a television the interesting one is keyCode:
+     Fire TV reports a d-pad press as key:'Unidentified' and puts the
+     direction in keyCode alone. Seeing both is what says which it is. */
   var lastKeys = [];
   window.addEventListener('keydown', function(e){
-    lastKeys.unshift(e.key);
-    if (lastKeys.length > 6) lastKeys.pop();
+    lastKeys.unshift(String(e.key) + ' (code ' + (e.keyCode == null ? e.which : e.keyCode) + ')');
+    if (lastKeys.length > 5) lastKeys.pop();
   });
 
   function padSnapshot(){

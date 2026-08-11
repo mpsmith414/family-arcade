@@ -1712,6 +1712,72 @@ test('kit: steering works with the cursor parked outside the game too', note => 
 });
 
 /* ---------------------------------------------------------------- *
+ * a television's d-pad, which sends a keyCode and no usable key
+ *
+ * THIS IS WHAT WAS ACTUALLY BROKEN. An Xbox pad on a Fire TV Cube, through
+ * the browser app: the d-pad did nothing in any game. Its browser reports
+ * `e.key` for a d-pad press as 'Unidentified' and puts the direction in the
+ * deprecated `keyCode` — Amazon's own guidance for the platform says to read
+ * keyCode, because `key` cannot be relied on. The kit looked only at `key`,
+ * so every arrow missed its lookup and fell through as an anonymous
+ * keypress: it jumped, and it never steered.
+ * ---------------------------------------------------------------- */
+for (const [dir, want] of [['right', SPOTS.dogbed], ['left', SPOTS.plant]]) {
+  test(`kit: a telly's d-pad (keyCode, no key) steers ${dir}`, note => {
+    const { h, seen } = holdRun(g => g.tvDown(dir), 900);
+    note(`keyCode-only ${dir} → ${[...seen].join(' / ')}`);
+    assert(seen.has(want),
+      `a d-pad reporting only keyCode should have reached ${want}, only saw ${[...seen].join(', ')}`);
+    return h;
+  });
+}
+
+test("kit: a telly's d-pad lets go when it is released", note => {
+  /* keydown and keyup have to file the same physical button under the same
+     name. Keyed by `key` they would not: both arrive as 'Unidentified', so
+     one direction could clear another and a child would be left walking
+     into a wall with nothing held down. */
+  const h = createHarness('daddy-smash', { seed: 11 });
+  h.tap();
+  pump(h, 5);
+  h.tvDown('right');
+  pump(h, 400);
+  const ranRight = h.text('whereTag');
+  h.tvUp('right');
+  h.tvDown('left');
+  pump(h, 600);
+  const ranLeft = h.text('whereTag');
+  note(`right → ${ranRight}, then released and went left → ${ranLeft}`);
+  assert(ranRight !== ranLeft, 'letting go of right and pressing left changed nothing');
+  return h;
+});
+
+test("kit: a telly's d-pad is swallowed, not handed back to the browser", note => {
+  /* Left and right used to bail out of the handler before preventDefault,
+     which on a television hands them straight back to scroll the page or
+     shove its own cursor about. */
+  const h = createHarness('oliver-run', { seed: 5 });
+  global.KidKit.input.create({
+    element: h.document.getElementById('stage'), steer: true,
+  });
+  const seen = [];
+  for (const dir of ['left', 'right', 'up', 'down']) {
+    const ev = {
+      type: 'keydown', key: 'Unidentified', repeat: false,
+      keyCode: { left: 37, up: 38, right: 39, down: 40 }[dir],
+      defaultPrevented: false,
+      preventDefault() { this.defaultPrevented = true; },
+      stopPropagation() {}, stopImmediatePropagation() {},
+    };
+    global.dispatchEvent(ev);
+    seen.push(dir + ':' + (ev.defaultPrevented ? 'swallowed' : 'LET THROUGH'));
+  }
+  note(seen.join('  '));
+  assert(seen.every(s => /swallowed/.test(s)),
+    `a steering key was handed back to the browser: ${seen.join(', ')}`);
+});
+
+/* ---------------------------------------------------------------- *
  * the d-pad, on pads that are not on the standard mapping
  *
  * Reported from a real controller: the d-pad did nothing in any game, and
@@ -1783,40 +1849,76 @@ test('kit: a hat direction jumps as well as steers', note => {
   return h;
 });
 
-/* A telly's browser eats the left stick to drive its own mouse cursor, so
-   the stick never reaches the page as a stick. Before this, the only way to
-   move was to hold A down and waggle the cursor about — which is not a
-   thing to ask of a five-year-old. A cursor being pushed around IS steering. */
-test('kit: a moving cursor steers with no button held down', note => {
-  const g = createHarness('daddy-smash', { seed: 11 });
-  g.tap();
-  pump(g, 5);
-  const where = new Set();
-  for (let i = 0; i < 900; i++) {
-    g.hover(0.98, 0.99);            // the cursor keeps moving to the far corner
-    pump(g, 1);
-    where.add(g.text('whereTag'));
-  }
-  note(`cursor alone, no button: ${[...where].join(' / ')}`);
-  assert(where.has(SPOTS.dogbed),
-    `a moving cursor should have walked to the dog bed, only saw ${[...where].join(', ')}`);
-  return g;
+/* A mouse cursor being pushed around is steering, for somebody who has
+   nothing else. But it is the LAST resort and never the control scheme:
+   these three say when it counts and, more importantly, when it must not.
+   Tested against the kit directly rather than through a game, because in a
+   game the player is also being chased, carried and bumped about, and none
+   of that would tell you anything about the cursor. */
+test('kit: a moving cursor steers, and stops when the cursor stops', note => {
+  const h = createHarness('oliver-run', { seed: 5, gamepad: false });
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'), steer: true,
+  });
+  assert(pads.pointer().active === false, 'nothing should be steering yet');
+  h.hover(0.9, 0.5);
+  assert(pads.pointer().active === true, 'a moving cursor should steer');
+  h.frames(40);
+  assert(pads.pointer().active === true, 'still steering half a second later');
+  h.frames(200);                       // over three seconds of virtual time
+  note('steered on the move, lapsed once parked');
+  assert(pads.pointer().active === false,
+    'a cursor left parked should stop steering, or it pins the player against it');
+  return h;
 });
 
-test('kit: a cursor that stops moving stops steering', note => {
-  const g = createHarness('daddy-smash', { seed: 11 });
-  g.tap();
-  pump(g, 5);
-  for (let i = 0; i < 300; i++) { g.hover(0.98, 0.99); pump(g, 1); }
-  const moved = new Set();
-  for (let i = 0; i < 200; i++) { pump(g, 1); moved.add(g.text('whereTag')); }
-  // 200 frames is over three seconds of virtual time, well past the lapse
-  const settled = new Set();
-  for (let i = 0; i < 200; i++) { pump(g, 1); settled.add(g.text('whereTag')); }
-  note(`after the cursor stopped: ${[...moved].join(' / ')} then ${[...settled].join(' / ')}`);
-  assert(settled.size === 1,
-    `a parked cursor should leave the player still, but they wandered across ${[...settled].join(', ')}`);
-  return g;
+/* The half that matters on a telly. The stick drives the browser's own
+   cursor, so if the cursor kept steering it would fight the d-pad every
+   time a child let go of it. A controller in the room wins outright. */
+test('kit: a cursor is ignored while a controller is plugged in', note => {
+  const h = createHarness('oliver-run', { seed: 5 });   // harness has a pad
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'), steer: true,
+  });
+  h.hover(0.9, 0.5);
+  note(`with a pad present, cursor steering is ${pads.pointer().active ? 'ON' : 'off'}`);
+  assert(pads.pointer().active === false,
+    'a cursor must not steer while there is a controller to steer with');
+  return h;
+});
+
+test('kit: a cursor is ignored for a while after a real direction', note => {
+  const h = createHarness('oliver-run', { seed: 5, gamepad: false });
+  const pads = global.KidKit.input.create({
+    element: h.document.getElementById('stage'), steer: true,
+  });
+  h.keyDown('ArrowRight');
+  h.keyUp('ArrowRight');
+  h.hover(0.9, 0.5);
+  assert(pads.pointer().active === false,
+    'the cursor should stay out of the way just after a d-pad or arrow was used');
+  h.frames(200);                       // let the three-second hold-off lapse
+  h.hover(0.9, 0.5);
+  note('cursor held off right after an arrow, allowed again once it went quiet');
+  assert(pads.pointer().active === true, 'the cursor should come back once nothing else is steering');
+  return h;
+});
+
+test('kit: a moving cursor flies the rocket with no button held down', note => {
+  // Star Wings joins wings when you reach the wingman, which is the one
+  // thing the DOM exposes about where the rocket actually is.
+  const h = createHarness('star-wings', { seed: 4, gamepad: false });
+  h.click('startBtn');
+  pump(h, 5);
+  let at = -1;
+  for (let i = 0; i < 700; i++) {
+    h.hover(0.14, 0.5);               // the cursor keeps moving towards the wingman
+    pump(h, 1);
+    if (at < 0 && !h.hidden('wingTag')) at = i;
+  }
+  note(`joined wings at frame ${at < 0 ? 'never' : at} on a moving cursor alone`);
+  assert(at >= 0, 'a moving cursor never flew the rocket anywhere');
+  return h;
 });
 
 test('kit: losing focus puts up a way back, and a press takes it', note => {

@@ -801,13 +801,27 @@ function createHarness(gameName, options) {
       api.keyUp(k);
       return api;
     },
-    keyDown(k) {
-      winDispatch(makeEvent('keydown', doc.body, { key: k, code: k, repeat: false }));
+    keyDown(k, keyCode) {
+      winDispatch(makeEvent('keydown', doc.body,
+        { key: k, code: k, repeat: false, keyCode: keyCode }));
       return api;
     },
-    keyUp(k) {
-      winDispatch(makeEvent('keyup', doc.body, { key: k, code: k }));
+    keyUp(k, keyCode) {
+      winDispatch(makeEvent('keyup', doc.body, { key: k, code: k, keyCode: keyCode }));
       return api;
+    },
+    /* A television's d-pad. Fire TV's browser reports `key` as
+       'Unidentified' and puts the direction in the deprecated keyCode —
+       Amazon's own advice for the platform is to read keyCode, because
+       `key` cannot be relied on. This is what that looks like. */
+    tvDown(dir) {
+      const CODES = { left: 37, up: 38, right: 39, down: 40 };
+      if (!(dir in CODES)) throw new Error(`unknown tv direction: ${dir}`);
+      return api.keyDown('Unidentified', CODES[dir]);
+    },
+    tvUp(dir) {
+      const CODES = { left: 37, up: 38, right: 39, down: 40 };
+      return api.keyUp('Unidentified', CODES[dir]);
     },
     /* Sustained hold of the gamepad A button *and* a pointer together —
        one call for "the child is leaning on the button". Unlike holdJump()
