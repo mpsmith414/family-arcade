@@ -2560,6 +2560,411 @@ test('climb: swapping who you are mid-climb', note => {
   return h;
 });
 
+/* ================================================================ *
+ * games/treasure-boat
+ *
+ * The fifth game and the first with a WORLD in it rather than a level:
+ * an ocean generated square by square out of a hash of the coordinates,
+ * unbounded in every direction, with islands you land on and dig up.
+ * That shape brings two promises the other four never had to make, and
+ * most of this block is about them.
+ *
+ *   1. The sea stays where you left it. Squares are thrown away once
+ *      they are over the horizon and rebuilt from the seed on the way
+ *      back, so world content must come from cellRnd() and never from
+ *      Math.random(). This is the sky-lane rule again in a new shape.
+ *   2. Nobody is ever marooned. Not by empty water, not on an island,
+ *      not by doing nothing at all. Dolphins tow a drifting boat to
+ *      somewhere new and a seagull ferries a stranded walker to the X
+ *      and then back to the boat.
+ *
+ * Everything is read off the same stub DOM the game writes to: `gold` is
+ * the score, `tally` carries miles / islands / chests, `hereTag` is which
+ * square of the map the boat is in, and `zoneTag` names the water — or
+ * the island, when somebody is standing on one.
+ * ================================================================ */
+
+const BOAT_ZONES = ['Home Bay', 'Sunny Sea', 'Coral Cove', 'Misty Waters',
+                    'The Deep Blue', 'Frosty North', 'Volcano Isles', 'Golden Sea'];
+
+/* miles, islands, chests — the three little numbers under the gold */
+function tally(h) {
+  const n = String(h.text('tally')).match(/\d+/g) || [];
+  return { miles: +n[0] || 0, isles: +n[1] || 0, chests: +n[2] || 0 };
+}
+function square(h) {
+  const n = String(h.text('hereTag')).match(/-?\d+/g) || [];
+  return { x: +n[0] || 0, y: +n[1] || 0 };
+}
+const ashore = h => String(h.text('zoneTag')).indexOf('\u{1F3DD}') === 0;
+
+/* Sail somewhere, tapping as you go. A busy passenger rather than a clever
+   one — it cannot see where the islands are, so use it to keep the
+   machinery hot and to compare one run against another, never as a measure
+   of how well a person would do. `turn` steers a square-ish course. */
+function boatRun(seed, frames, opts) {
+  const o = opts || {};
+  const h = createHarness('treasure-boat', { seed });
+  if (o.pick) h.click(o.pick);
+  h.click('startBtn');
+  pump(h, 5);
+  const DIRS = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'];
+  const seen = { zones: new Set(), shouts: new Set(), finds: new Set(), landed: new Set() };
+  let d = 0;
+  if (o.steer !== false) h.keyDown(DIRS[0]);
+  for (let i = 0; i < frames; i++) {
+    if (o.turn && i && i % o.turn === 0) {
+      h.keyUp(DIRS[d]); d = (d + 1) % 4; h.keyDown(DIRS[d]);
+    }
+    if (o.tap && i % o.tap === 0) h.key('z');
+    pump(h, 1);
+    if (o.watch) {
+      const z = h.text('zoneTag');
+      for (const name of BOAT_ZONES) if (z.includes(name)) seen.zones.add(name);
+      if (ashore(h)) seen.landed.add(z);
+      if (h.hasClass('shout', 'show')) seen.shouts.add(h.el('shout').innerHTML);
+      if (!h.hidden('findTag')) seen.finds.add(h.text('findTag'));
+    }
+  }
+  Object.assign(seen, tally(h), { gold: h.num('gold'), h });
+  return seen;
+}
+
+test('boat: boots to the menu in home water with nothing found', note => {
+  const h = createHarness('treasure-boat');
+  note(`loaded ${h.loaded.join(', ')}`);
+  assert(!h.hidden('startScreen'), 'start screen should be visible before play');
+  assert(h.num('gold') === 0, 'should start with no gold');
+  assert(h.text('best') === '', `fresh install should show no best, got "${h.text('best')}"`);
+  assert(h.text('kidTag') === 'Oliver', `expected to default to Oliver, got "${h.text('kidTag')}"`);
+  assert(h.text('zoneTag').includes('Home Bay'), `should start in Home Bay, got "${h.text('zoneTag')}"`);
+  assert(h.text('actWord') === 'Net', `the button should be the net at sea, got "${h.text('actWord')}"`);
+  assert(h.hidden('findTag'), 'nothing has been found yet');
+  pump(h, 120);
+  assert(h.num('gold') === 0, 'nothing should happen while still on the menu');
+  return h;
+});
+
+for (const [label, start] of Object.entries(STARTERS)) {
+  test(`boat: sets sail from ${label}`, note => {
+    const h = createHarness('treasure-boat', { seed: 42 });
+    start(h);
+    pump(h, 5);
+    assert(h.hidden('startScreen'), `${label} did not set sail`);
+    h.keyDown('ArrowRight');
+    for (let i = 0; i < 900; i++) { if (i % 12 === 0) start(h); pump(h, 1); }
+    const t = tally(h);
+    note(`${t.miles} miles and ${t.isles} islands after 900 frames`);
+    assert(t.miles > 3, `the boat went nowhere under ${label}: ${t.miles} miles`);
+    return h;
+  });
+}
+
+/* Unlike Tower Climb, BOTH axes of a held finger are read here. Up there a
+   thumb parked low is how a child holds a phone and reading it as "down"
+   rode every ladder back to the floor below; on a map seen from above,
+   south is a real place to go and there is nothing to lose by going there. */
+for (const [label, go, axis, want] of [
+  ['held arrow keys', h => h.keyDown('ArrowRight'), 'x', 1],
+  ['WASD', h => h.keyDown('s'), 'y', 1],
+  ['the analogue stick', h => h.stick(-1, 0), 'x', -1],
+  ['the d-pad', h => h.padHold('up', true), 'y', -1],
+  ['a finger held low', h => h.pointerHold(0.5, 0.95), 'y', 1],
+  ['a finger held high', h => h.pointerHold(0.5, 0.05), 'y', -1],
+]) {
+  test(`boat: steering with ${label}`, note => {
+    const h = createHarness('treasure-boat', { seed: 4 });
+    h.click('startBtn');
+    pump(h, 5);
+    go(h);
+    pump(h, 2200);
+    const sq = square(h);
+    note(`${tally(h).miles} miles, ended in square ${sq.x}, ${sq.y}`);
+    assert(tally(h).miles > 5, `${label} moved the boat almost nowhere`);
+    assert(Math.sign(sq[axis]) === want,
+      `${label} should have sailed ${axis === 'x' ? (want > 0 ? 'east' : 'west') : (want > 0 ? 'south' : 'north')}, ` +
+      `ended at square ${sq.x}, ${sq.y}`);
+    return h;
+  });
+}
+
+/* The world is meant to be enormous. One long run in a straight line should
+   cross every band of sea there is and still be going. */
+test('boat: one long voyage crosses every sea in the world', note => {
+  const r = boatRun(11, 20000, { tap: 11, watch: true });
+  note(`square ${square(r.h).x}, ${square(r.h).y} after 20000 frames — ` +
+       `${r.miles} miles, ${r.isles} islands, seas: ${[...r.zones].join(', ')}`);
+  assert(r.zones.size === BOAT_ZONES.length,
+    `only ${r.zones.size} of ${BOAT_ZONES.length} seas were reached: ${[...r.zones].join(', ')}`);
+  assert(r.isles > 20, `only ${r.isles} islands found in a whole voyage`);
+  return r.h;
+});
+
+/* THE NET NEVER COMES UP EMPTY. Junk is the joke, exactly as it is in
+   Emsile's fishing game — the boot is worth a gold piece and a laugh, so a
+   child who throws the net all afternoon is never once told "nothing". */
+test('boat: every haul is worth something, and gold never goes backwards', note => {
+  const h = createHarness('treasure-boat', { seed: 21 });
+  h.click('startBtn');
+  pump(h, 5);
+  let last = 0, drops = 0, blanks = 0;
+  const kinds = new Set();
+  for (let i = 0; i < 9000; i++) {
+    if (i % 9 === 0) h.key('z');
+    pump(h, 1);
+    const g = h.num('gold');
+    if (g < last) drops++;
+    last = g;
+    if (!h.hidden('findTag')) {
+      const f = h.text('findTag');
+      if (!f.trim()) blanks++; else kinds.add(f);
+    }
+  }
+  note(`${last} gold, ${kinds.size} different things caught`);
+  assert(drops === 0, `gold went down ${drops} times — nothing at sea may ever take it away`);
+  assert(blanks === 0, 'the net came up with a blank');
+  assert(kinds.size >= 10, `only ${kinds.size} different things came up in 9000 frames`);
+  // the boot and the crown both have to be in there
+  const all = [...kinds].join(' ');
+  assert(/Boot|Sock|Driftwood|Rusty Tin|Sponge|Sunnies/.test(all), 'no junk ever came up — the joke is missing');
+  assert(/Fish|Crab|Squid|Prawn|Octopus|Turtle|Starfish|Shell/.test(all), 'nothing alive ever came up');
+  assert(/Coins|Gem|Key|Pot|Anchor|Ring|Beads|Fork/.test(all), 'no treasure ever came up');
+  return h;
+});
+
+/* The guard the fishing game bought so dearly. Every clamp in here adds to
+   the DELTA — a tap is progress towards the haul, never a value pushed back
+   to a bound — so tapping faster can only ever land more. Measured across
+   four seeds because a single run's events (a gull dropping a coin, a whale
+   surfacing) are worth more than the difference between two nearby
+   cadences, and this is a test of the mechanism, not of the weather. */
+test('boat: mashing the net catches more, at every possible tapping speed', note => {
+  const CADENCES = [0, 40, 30, 20, 14, 10, 6, 3, 1];
+  const totals = CADENCES.map(every => {
+    let sum = 0;
+    for (const seed of [5, 21, 33, 44]) {
+      const h = createHarness('treasure-boat', { seed });
+      h.click('startBtn');
+      pump(h, 5);
+      // no steering: a boat that never lands can only earn from the net
+      for (let i = 0; i < 5000; i++) { if (every && i % every === 0) h.key('z'); pump(h, 1); }
+      sum += h.num('gold');
+      h.dispose();
+    }
+    return sum;
+  });
+  note(CADENCES.map((c, i) => `${c || 'never'}:${totals[i]}`).join('  '));
+  const idle = totals[0];
+  for (let i = 1; i < totals.length; i++) {
+    assert(totals[i] > idle,
+      `tapping every ${CADENCES[i]} frames earned ${totals[i]}, no better than never tapping (${idle})`);
+  }
+  /* Binned, not pairwise: two adjacent cadences are within the noise of one
+     passing whale, but slow-vs-fast is not close. */
+  const slow = totals[1] + totals[2] + totals[3];
+  const mid  = totals[4] + totals[5] + totals[6];
+  const fast = totals[7] + totals[8];
+  assert(mid > slow, `middling tapping (${mid}) did no better than slow tapping (${slow})`);
+  assert(fast > mid, `hard mashing (${fast}) did no better than middling tapping (${mid})`);
+  assert(totals[totals.length - 1] > totals[1] * 3,
+    `mashing every frame (${totals[totals.length - 1]}) should thoroughly beat one tap in forty (${totals[1]})`);
+});
+
+test('boat: landing on an island and digging up the X', note => {
+  const r = boatRun(12, 15000, { tap: 7, watch: true });
+  const finds = [...r.finds].join(' | ');
+  note(`${r.chests} chests out of the sand, landed on ${r.landed.size} islands`);
+  assert(r.landed.size > 0, 'the boat never landed on anything');
+  assert(r.chests > 0, 'a whole voyage and not one X was ever dug up');
+  assert(/Chest of Gold|Pirate Crown|Giant Diamond|Golden Cup|Golden Compass|Little Statue|Wooden Parrot|Sand Timer|Ship's Bell|Bone Whistle/.test(finds),
+    `no chest treasure was ever named: ${finds}`);
+  // digging anywhere else still turns something up — the spade's version of junk
+  assert(/Little Shell|Sandy Crab|Funny Pebble|Old Bottle|One Coin|Fish Bone/.test(finds),
+    `digging plain sand never gave anything back: ${finds}`);
+  return r.h;
+});
+
+/* REGRESSION GUARD, and the promise this game rests on: the sea stays where
+   you left it. Squares go over the horizon and are rebuilt from a hash of
+   their own coordinates, so an island sailed away from is the same island
+   on the way back.
+ *
+ * This is guarded at the source rather than through play, and deliberately
+ * so: island identity is the cell key, so a world that quietly rearranged
+ * itself would still report the same island count, the same chart and the
+ * same score. Reaching for a behavioural test here was checked and found
+ * wanting — the ocean was rebuilt from Math.random() on purpose and every
+ * black-box assertion tried still passed. What actually changes is which
+ * dice are rolled, so that is what gets asserted. */
+test('boat: the sea is built from its own dice, never Math.random()', note => {
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'games', 'treasure-boat', 'index.html'), 'utf8');
+  const from = src.indexOf('function cellRnd');
+  const to = src.indexOf('const cellAt =');
+  assert(from > 0 && to > from, 'could not find the world generator in the game source');
+  const gen = src.slice(from, to);
+  const strays = (gen.match(/Math\.random/g) || []).length;
+  note(`${gen.split('\n').length} lines of world generation, ${strays} calls to Math.random()`);
+  assert(strays === 0,
+    `the world generator calls Math.random() ${strays} time(s) — squares would come back different`);
+  assert(/Math\.imul\(cx/.test(gen) && /worldSeed/.test(gen),
+    'cellRnd should be seeded from the square coordinates and the run seed');
+});
+
+/* Mirror of Daddy Smash's "nothing makes catches rarer" and Tower Climb's
+   "nothing makes the climb slower". Everything in this ocean is a gift: the
+   whirlpool is a fairground ride that throws you somewhere new, the monster
+   gives you a lift, the pirates hand over a chest and sail on. */
+test('boat: the sea does things while you sail, and all of them help', note => {
+  const r = boatRun(11, 20000, { turn: 330, tap: 11, watch: true });
+  const shouts = [...r.shouts].join(' | ');
+  const wanted = ['Dolphins', 'Seagulls', 'A whale', 'A bottle', 'Crates', 'SEA MONSTER', 'Friendly pirates'];
+  const seen = wanted.filter(w => shouts.toLowerCase().includes(w.toLowerCase()));
+  note(`seen: ${seen.join(', ')}`);
+  assert(seen.length >= 5, `only ${seen.length} of ${wanted.length} things happened: ${seen.join(', ')}`);
+  return r.h;
+});
+
+test('boat: nothing added to the sea makes a voyage poorer', note => {
+  const rates = [];
+  for (const seed of [11, 3, 42]) {
+    const r = boatRun(seed, 12000, { turn: 330, tap: 11 });
+    rates.push(r.gold);
+    r.h.dispose();
+  }
+  note(`gold per 12000 frames across three seeds: ${rates.join(', ')}`);
+  // measured at 2700-3300 while the events were being written
+  for (const g of rates) assert(g >= 900, `only ${g} gold in 12000 frames — the voyage got poorer`);
+});
+
+test('boat: the whirlpool is a ride, not a hazard', note => {
+  let rides = 0;
+  const golds = [];
+  for (const seed of [11, 3, 99, 42, 7]) {
+    const h = createHarness('treasure-boat', { seed });
+    h.click('startBtn');
+    pump(h, 5);
+    h.keyDown('ArrowRight');
+    let before = 0, showing = false;
+    for (let i = 0; i < 20000; i++) {
+      if (i % 11 === 0) h.key('z');
+      const g = h.num('gold');
+      pump(h, 1);
+      const up = h.hasClass('shout', 'show') && /WHEEEEE/.test(h.el('shout').innerHTML);
+      if (up && !showing) { rides++; before = g; golds.push(h.num('gold') - before); }
+      showing = up;
+    }
+    h.dispose();
+  }
+  note(`${rides} rides across five voyages, gold change each time: ${golds.join(', ')}`);
+  assert(rides >= 2, `only ${rides} whirlpool rides in five whole voyages`);
+  for (const d of golds) assert(d >= 0, `a whirlpool cost ${-d} gold — it is supposed to be a present`);
+});
+
+/* NOBODY IS EVER MAROONED. This is the mirror of Tower Climb's balloons and
+   it has to hold for a child who does nothing whatsoever: the dolphins tow a
+   drifting boat somewhere new, a seagull ferries a stranded walker to the X
+   and then back to the boat, and the loop begins again. A tow that was
+   started at sea and finished on a beach once latched the "somebody is
+   already helping" flag on for good, and the game quietly stopped helping. */
+test('boat: a child who never touches anything is still shown the world', note => {
+  const h = createHarness('treasure-boat', { seed: 8 });
+  h.click('startBtn');
+  let wasAshore = false, landings = 0, castOffs = 0;
+  for (let i = 0; i < 12000; i++) {
+    pump(h, 1);
+    const now = ashore(h);
+    if (now && !wasAshore) landings++;
+    if (!now && wasAshore) castOffs++;
+    wasAshore = now;
+  }
+  const t = tally(h);
+  note(`${t.isles} islands, ${landings} landings and ${castOffs} departures with no input at all`);
+  assert(t.isles >= 2, `a boat nobody is steering found only ${t.isles} island(s)`);
+  assert(landings >= 2, `nobody was ever taken to a second island (${landings} landings)`);
+  assert(castOffs >= 1, 'the walker was left on the island for good — nobody came to fetch them');
+  return h;
+});
+
+test('boat: survives 20000 frames of hard sailing with no exception', note => {
+  const r = boatRun(7, 20000, { turn: 190, tap: 5 });
+  note(`${r.gold} gold, ${r.miles} miles, ${r.isles} islands, ${r.chests} chests`);
+  assert(r.gold > 0, 'a hard-sailed voyage found nothing at all');
+  return r.h;
+});
+
+test('boat: 20000 frames of never moving never throws either', note => {
+  const h = createHarness('treasure-boat', { seed: 8 });
+  h.click('startBtn');
+  pump(h, 20000);
+  note(`${h.num('gold')} gold and ${tally(h).isles} islands after doing nothing for 20000 frames`);
+  assert(h.num('gold') >= 0, 'gold went negative');
+  return h;
+});
+
+test('boat: a press in the dead space around the game still steers', note => {
+  const h = createHarness('treasure-boat', { seed: 12 });
+  h.click('startBtn');
+  pump(h, 5);
+  h.pageHold(-1.5, 0.5);            // a telly's cursor, well off to the left
+  pump(h, 2500);
+  const sq = square(h);
+  note(`ended in square ${sq.x}, ${sq.y} after ${tally(h).miles} miles`);
+  assert(sq.x < 0, `a hard-left press outside the box should sail west, ended at ${sq.x}`);
+  return h;
+});
+
+test('boat: the best haul survives a reload', note => {
+  let h = createHarness('treasure-boat', { seed: 11 });
+  h.click('startBtn');
+  pump(h, 5);
+  h.keyDown('ArrowRight');
+  for (let i = 0; i < 6000; i++) { if (i % 11 === 0) h.key('z'); pump(h, 1); }
+  h.keyUp('ArrowRight');
+  const reached = h.num('gold');
+  assert(reached > 100, `precondition: expected a decent haul, got ${reached} gold`);
+  assert(/Best/.test(h.text('best')), `the best should show during play, got "${h.text('best')}"`);
+  pump(h, 200);                     // let the throttled save land
+
+  h = h.reload();
+  const kept = parseInt(String(h.text('best')).replace(/[^\d]/g, ''), 10);
+  note(`${reached} gold before the reload, "${h.text('best')}" after`);
+  /* >= rather than ===: the save is throttled, so gold earned in the last
+     moments of a run can legitimately be ahead of the last number read off
+     the HUD. What must never happen is the record going BACKWARDS. */
+  assert(kept >= reached, `best did not survive: expected at least ${reached}, kept "${h.text('best')}"`);
+  assert(h.num('gold') === 0, 'a fresh voyage should start with no gold');
+  return h;
+});
+
+test('boat: choosing Emsile sticks across a reload', note => {
+  let h = createHarness('treasure-boat', { seed: 2 });
+  h.click('pickEmsile');
+  assert(h.el('pickEmsile').getAttribute('aria-pressed') === 'true', 'Emsile should be selected');
+  h.click('startBtn');
+  pump(h, 200);
+  assert(h.text('kidTag') === 'Emsile', `expected to be playing Emsile, got "${h.text('kidTag')}"`);
+  h = h.reload();
+  note(`after reload the menu offers ${h.text('kidTag')}`);
+  assert(h.text('kidTag') === 'Emsile', `the choice did not stick: got "${h.text('kidTag')}"`);
+  return h;
+});
+
+test('boat: swapping who you are mid-voyage', note => {
+  const h = createHarness('treasure-boat', { seed: 2 });
+  h.click('startBtn');
+  pump(h, 60);
+  assert(h.text('kidTag') === 'Oliver', 'precondition: starts as Oliver');
+  h.click('swapBtn');
+  pump(h, 10);
+  assert(h.text('kidTag') === 'Emsile', `swap button did nothing: still "${h.text('kidTag')}"`);
+  h.padPress('x');                 // the pad's secondary button does it too
+  pump(h, 10);
+  assert(h.text('kidTag') === 'Oliver', `X on the pad did not swap back: "${h.text('kidTag')}"`);
+  note('swapped by button and by pad');
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * report
  * ---------------------------------------------------------------- */

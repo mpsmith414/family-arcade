@@ -55,6 +55,7 @@
   .art.fish{background:linear-gradient(160deg,#8FD8F5,#2A8FC4 45%,#04203A)}
   .art.smash{background:linear-gradient(160deg,#F6E4C6,#E0603E 55%,#2E1B12)}
   .art.climb{background:linear-gradient(160deg,#BFEBFF,#5B8FD6 48%,#1B2A4A)}
+  .art.boat{background:linear-gradient(160deg,#8FE0EE,#1B7FC0 46%,#072A44)}
   .art.soon{background:linear-gradient(160deg,#1F2340,#2E3357)}
   .meta{padding:13px 15px 15px}
   .meta strong{display:block;font-size:17px;letter-spacing:.02em}
@@ -116,6 +117,15 @@
       <span>Climb a tower that never ends. Ladders carry you up by themselves. Every eight floors it flies up and starts again.</span>
     </span>
   </button>
+
+  <button class="card" data-go="games/treasure-boat/index.html">
+    <span class="best" id="bestBoat" hidden></span>
+    <span class="art boat">⛵</span>
+    <span class="meta">
+      <strong>Treasure Boat</strong>
+      <span>Sail an ocean that never ends. Throw the net, ride the whirlpools, land on islands and dig up the X.</span>
+    </span>
+  </button>
 </div>
 
 <div id="pad" hidden>🎮 Controller ready — press any button</div>
@@ -161,6 +171,15 @@
     var climbTag = document.getElementById('bestClimb');
     climbTag.textContent = '\u{1F9D7} ' + floors + (climbBells ? '  \u{1F514}' + climbBells : '');
     climbTag.hidden = false;
+  }
+
+  // and the biggest haul on its card
+  var haul = KidKit.storage.getNumber('treasure-boat-best', 0);
+  var boatIsles = KidKit.storage.getNumber('treasure-boat-isles', 0);
+  if (haul){
+    var boatTag = document.getElementById('bestBoat');
+    boatTag.textContent = '\u{1FA99} ' + haul + (boatIsles ? '  \u{1F3DD}️' + boatIsles : '');
+    boatTag.hidden = false;
   }
 
   var cards = [].slice.call(document.querySelectorAll('.card:not([disabled])'));

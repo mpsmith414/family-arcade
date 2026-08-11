@@ -12,18 +12,20 @@ games/oliver-run/index.html      game one — fast one-tap runner
 games/emsile-fishing/index.html  game two — slow one-tap fishing, 15 creatures to collect
 games/daddy-smash/index.html     game three — chase round the living room, no buttons at all
 games/tower-climb/index.html     game four — climb an endless tower, steer and tap
-test/harness.js, test/smoke.js   headless tests for all four  (node test/smoke.js)
+games/treasure-boat/index.html   game five — sail an endless ocean, land and dig
+test/harness.js, test/smoke.js   headless tests for all five  (node test/smoke.js)
 icons/                           app icons
 ```
 
-The four games are deliberately unlike each other. Oliver Run is fast and loud
+The five games are deliberately unlike each other. Oliver Run is fast and loud
 and scores distance; Emsile Fishing is still and quiet, runs at 84 bpm instead of
 132, and scores a picture book you fill in. Daddy Smash is the odd one out on
 purpose: no button at all, just steering round one room while Daddy chases both
 kids, and **getting caught is the reward** — he body-slams you onto the couch,
 you bounce, you run off again. Tower Climb is the only one you both steer *and*
 tap: a Donkey-Kong-shaped maze of floors that goes up for ever, scoring how many
-you climb. Nobody loses any of them.
+you climb. Treasure Boat is the only one with a *world* in it rather than a
+level. Nobody loses any of them.
 
 Tower Climb's trick is that **it cannot be failed by being bad at it**. Ladders
 are escalators — walk into one and you ride it up, no button and no timing.
@@ -34,6 +36,23 @@ down, or one leaning on a single direction with their back to a wall — a bunch
 of balloons comes and fetches them. Tapping to jump is the fast route, never the
 only one. Every eight floors the tower tops out at a bell, and ringing it flies
 you up into a new one.
+
+Treasure Boat is an **open sea** — the first game here with a world in it rather
+than a level. Point the boat wherever you like and it goes; tap to throw the net,
+which always comes up with something (a fish, a gem, or a boot worth a gold piece
+and a laugh). Bump into an island and you land on it, walk about on the sand and
+dig up the X. Whirlpools are fairground rides that fling the boat somewhere new,
+the sea monster gives you a lift, and the pirates are friendly. It goes on for
+ever in every direction, and the water changes colour as you get further out —
+eight bands of sea from Home Bay to the Golden Sea, and then round again.
+
+The ocean is built one square at a time out of a hash of that square's own
+coordinates and the run's seed, so squares can be thrown away once they are over
+the horizon and rebuilt identically on the way back. A fresh seed every run means
+a brand new world each time you press **Set sail**. Nobody is ever marooned
+either: if nothing has been found for eight seconds the dolphins tow the boat
+somewhere new, and a seagull ferries a stranded walker to the X and then back to
+the boat.
 
 ## Putting it online
 
@@ -117,11 +136,11 @@ Everything is wired through `KidKit.input`, so every game gets all of these free
 | Almost any key | jump |
 | Arrow keys | menu navigation |
 | Gamepad A/B/bumpers/triggers/d-pad, stick up | jump |
-| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing, swaps which kid you are in Daddy Smash and in Tower Climb) |
+| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing, swaps which kid you are in Daddy Smash, Tower Climb and Treasure Boat) |
 | Gamepad Start | confirm in menus |
 
-Daddy Smash and Tower Climb also need to *steer*, so they opt into the kit's
-steering layer and get these on top:
+Daddy Smash, Tower Climb and Treasure Boat also need to *steer*, so they opt into
+the kit's steering layer and get these on top:
 
 | Input | Action |
 |---|---|
@@ -135,6 +154,10 @@ read, never its height — a thumb parked at the bottom of a phone is how a smal
 child actually holds one, and reading that as "down" sent them back down every
 ladder. Climbing down is on the keys and the stick, where it has to be asked
 for on purpose.
+
+Treasure Boat reads **both** ways the finger points, because it is a map seen
+from above: south is a real place to sail to, so there is nothing to lose by
+going there. A finger held over the middle of the screen means "stop".
 
 Holding a finger down is the one to show a three-year-old: no virtual joystick to
 find, no button to hit, the kid just runs to your fingertip.

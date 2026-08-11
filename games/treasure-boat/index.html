@@ -1,0 +1,2467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Treasure Boat</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#0B3B5C">
+<script src="../../shared/kidkit.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100%;
+    overscroll-behavior:none;          /* no pull-to-refresh */
+    touch-action:none;                 /* no double-tap zoom / pan */
+    user-select:none;-webkit-user-select:none;
+    -webkit-touch-callout:none;
+  }
+  body{
+    background:#072A44;
+    font-family:"Trebuchet MS","Avenir Next","Segoe UI",system-ui,sans-serif;
+    display:flex;align-items:center;justify-content:center;padding:12px;
+    -webkit-tap-highlight-color:transparent;overflow:hidden;
+  }
+  #stage{
+    position:relative;width:100%;
+    /* 1.8 is this canvas's aspect (900x500). Same cascade as the other four:
+       an old TV browser keeps the plain px cap, a phone gets dvh so the
+       address bar sliding away can't shove the buttons off the bottom. */
+    max-width:980px;
+    max-width:min(100%, calc((100vh - 24px) * 1.8));
+    max-width:min(100%, calc((100dvh - 24px) * 1.8));
+    border-radius:18px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(120,210,255,.28);
+    touch-action:none;cursor:pointer;
+  }
+  canvas{display:block;width:100%;height:auto}
+  body.locked #stage{box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(255,210,61,.75)}
+
+  button:focus{outline:4px solid #FFD23D;outline-offset:4px}
+
+  /* The sea runs from bright turquoise to near-black, so the scrim is what
+     keeps the corners readable in every zone. */
+  .hud{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:13px 17px 34px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(4,20,36,.62) 0%,rgba(4,20,36,.3) 58%,rgba(4,20,36,0) 100%);
+    font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;
+    text-shadow:0 2px 8px rgba(0,0,0,.9);
+  }
+  .left{display:flex;flex-direction:column;gap:6px}
+  .where{font-size:clamp(9px,2.1vw,12px);letter-spacing:.16em;opacity:.94}
+  #hereTag{font-size:clamp(8px,1.9vw,11px);letter-spacing:.14em;opacity:.62}
+  .who{font-size:clamp(9px,2vw,12px);opacity:.7;letter-spacing:.14em}
+  #findTag{
+    font-size:clamp(10px,2.3vw,13px);color:#FFD23D;letter-spacing:.1em;
+    text-transform:none;animation:wobble .55s ease-in-out infinite alternate;
+  }
+  #findTag[hidden]{display:none}
+  @keyframes wobble{from{transform:rotate(-2deg)}to{transform:rotate(2deg)}}
+
+  .scores{text-align:right}
+  .now{font-size:clamp(24px,5.4vw,38px);line-height:1;color:#FFD23D}
+  .lbl{font-size:clamp(8px,1.9vw,11px);letter-spacing:.26em;opacity:.78}
+  #best{font-size:clamp(9px,2vw,12px);opacity:.72;margin-top:3px;min-height:12px}
+  #tally{font-size:clamp(9px,2vw,12px);opacity:.82;margin-top:3px}
+
+  /* The big shout, in the strip between the two HUD corners. The boat is
+     always in the middle of the screen, so this sits clear of it. */
+  #shout{
+    position:absolute;top:11%;left:50%;transform:translateX(-50%) rotate(-2deg);
+    width:min(66%,520px);text-align:center;pointer-events:none;
+    font-size:clamp(17px,4.1vw,32px);font-weight:800;line-height:1.05;
+    text-transform:uppercase;letter-spacing:-.01em;color:#fff;
+    text-shadow:0 3px 0 rgba(0,0,0,.4), 0 6px 26px rgba(0,0,0,.85);
+    opacity:0;transition:opacity .2s;
+  }
+  #shout.show{opacity:1}
+  #shout em{font-style:normal;color:#FFD23D}
+
+  #padTag{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.6);color:#8BE05A;border-radius:999px;
+    padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;pointer-events:none;
+  }
+  #padTag[hidden]{display:none}
+
+  /* KID side: bottom left. The action badge says what the one button does
+     right now — a net at sea, a spade on the sand. It is a picture, not a
+     word, because the audience is five. */
+  #actTag{
+    /* clear of the swap button, which is about 80px wide at its widest */
+    position:absolute;bottom:15px;left:108px;pointer-events:none;
+    display:flex;align-items:center;gap:6px;
+    background:rgba(0,0,0,.5);border-radius:999px;padding:7px 13px;
+    color:#fff;font-size:20px;line-height:1;
+  }
+  #actTag i{font-style:normal;font-size:11px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;opacity:.75}
+
+  #swapBtn{
+    position:absolute;bottom:14px;left:14px;pointer-events:auto;
+    display:flex;align-items:center;gap:7px;
+    background:rgba(0,0,0,.55);border:3px solid rgba(255,255,255,.5);
+    border-radius:999px;padding:8px 15px;cursor:pointer;
+    box-shadow:0 5px 16px rgba(0,0,0,.45);
+    transition:transform .18s;font:inherit;color:#fff;
+  }
+  #swapBtn:active{transform:scale(.92)}
+  #swapBtn:focus-visible{outline:3px solid #FFD23D;outline-offset:3px}
+  #swapBtn b{font-size:23px;line-height:1}
+  #swapBtn i{font-style:normal;font-size:15px;opacity:.8}
+
+  #toast{
+    position:absolute;bottom:66px;right:14px;pointer-events:none;
+    background:rgba(0,0,0,.72);color:#fff;border-radius:12px;
+    padding:9px 13px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.03em;max-width:66%;text-align:right;
+    opacity:0;transition:opacity .35s;
+  }
+  #toast.show{opacity:1}
+  #toast em{font-style:normal;color:#FFD23D}
+
+  #sndHint{
+    position:absolute;bottom:66px;left:14px;pointer-events:none;
+    background:rgba(0,0,0,.62);color:#FFD23D;border-radius:12px;
+    padding:8px 12px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.04em;max-width:56%;
+  }
+  #sndHint[hidden]{display:none}
+  #sndHint small{color:#fff;opacity:.75;font-size:10px;font-weight:400;letter-spacing:.02em}
+
+  /* ADULT side: bottom right */
+  .sndbar{position:absolute;bottom:12px;right:14px;display:flex;gap:8px;pointer-events:auto}
+  .sndbtn{
+    background:rgba(255,255,255,.14);border:none;color:#fff;
+    width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:opacity .2s,background .2s;
+  }
+  .sndbtn:hover{background:rgba(255,255,255,.26)}
+  .sndbtn.off{opacity:.34}
+  .sndbtn:focus-visible{outline:3px solid #FFD23D;outline-offset:2px}
+  #lockBtn{position:relative;font-size:17px}
+
+  .screen{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:10px;text-align:center;
+    background:radial-gradient(120% 90% at 50% 42%, rgba(22,96,144,.78), rgba(4,18,36,.96));
+    color:#fff;padding:22px;
+  }
+  .screen[hidden]{display:none}
+  .kicker{font-size:clamp(9px,2.2vw,12px);letter-spacing:.32em;color:#FFD23D;text-transform:uppercase}
+  .title{
+    font-size:clamp(34px,10vw,72px);line-height:.9;font-weight:800;
+    letter-spacing:-.02em;text-transform:uppercase;
+    background:linear-gradient(90deg,#FFD23D,#8FD8F5,#4FD16A,#FFD23D);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 24px rgba(120,220,255,.4));
+  }
+  @supports not ((-webkit-background-clip:text) or (background-clip:text)){
+    .title{color:#FFD23D;background:none}
+  }
+  .sub{font-size:clamp(13px,3.2vw,17px);max-width:32ch;opacity:.92;line-height:1.5}
+
+  .picker{display:flex;gap:14px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+  .pick{
+    background:rgba(255,255,255,.08);border:3px solid rgba(255,255,255,.22);
+    border-radius:20px;padding:10px 18px 12px;cursor:pointer;font:inherit;color:#fff;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    transition:transform .16s,border-color .16s,background .16s;
+  }
+  .pick b{font-size:clamp(30px,7vw,42px);line-height:1}
+  .pick span{font-size:clamp(10px,2.4vw,13px);font-weight:800;letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+  .pick[aria-pressed="true"]{background:rgba(255,210,61,.18);border-color:#FFD23D;transform:translateY(-3px)}
+  .pick[aria-pressed="true"] span{opacity:1;color:#FFD23D}
+
+  .cta{
+    margin-top:6px;background:#FFD23D;color:#123A52;border:none;
+    font:inherit;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
+    font-size:clamp(15px,3.6vw,19px);padding:15px 40px;border-radius:999px;cursor:pointer;
+    box-shadow:0 6px 0 #C79A3B;
+  }
+  .cta:active{transform:translateY(3px);box-shadow:0 3px 0 #C79A3B}
+  .cta:focus-visible{outline:3px solid #8FD8F5;outline-offset:4px}
+  .hint{font-size:clamp(10px,2.3vw,12px);letter-spacing:.08em;opacity:.62;text-transform:uppercase;line-height:1.7}
+  @media (prefers-reduced-motion:reduce){
+    #findTag{animation:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="game" width="900" height="500" role="img" aria-label="Sailing a little fishing boat around islands, looking for treasure"></canvas>
+
+  <div class="hud">
+    <div class="left">
+      <div class="where" id="zoneTag">🏠 Home Bay</div>
+      <div id="hereTag">📍 0, 0</div>
+      <div class="who" id="kidTag">Oliver</div>
+      <div id="findTag" hidden></div>
+    </div>
+    <div class="scores">
+      <div class="now" id="gold">0</div>
+      <div class="lbl">Gold</div>
+      <div id="tally">🧭 0 · 🏝️ 0 · 💰 0</div>
+      <div id="best"></div>
+    </div>
+  </div>
+
+  <div id="shout"></div>
+
+  <button id="swapBtn" aria-label="Play as somebody else">
+    <b id="swapFace">👧</b><i>🔁</i>
+  </button>
+  <div id="actTag"><b id="actIcon">🎣</b><i id="actWord">Net</i></div>
+
+  <div class="sndbar">
+    <button id="lockBtn" class="sndbtn" aria-label="Turn kid lock on">🔓</button>
+    <button id="music" class="sndbtn" aria-label="Turn music off">🎵</button>
+    <button id="mute" class="sndbtn" aria-label="Turn sound effects off">🔊</button>
+  </div>
+
+  <div id="padTag" hidden>🎮 Controller</div>
+  <div id="toast"></div>
+  <div id="sndHint" hidden>🔇 Sound is blocked — tap the screen<br><small>On iPhone, also flick the side switch off silent</small></div>
+
+  <div class="screen" id="startScreen">
+    <div class="kicker">Nobody ever sinks</div>
+    <h1 class="title">Treasure Boat</h1>
+    <p class="sub">Sail wherever you like. Tap to throw the net, bump into an island to land on it, and dig up the X.</p>
+    <div class="picker">
+      <button class="pick" id="pickOliver" aria-pressed="true" aria-label="Sail as Oliver"><b>🧒</b><span>Oliver</span></button>
+      <button class="pick" id="pickEmsile" aria-pressed="false" aria-label="Sail as Emsile"><b>👧</b><span>Emsile</span></button>
+    </div>
+    <button class="cta" id="startBtn">Set sail!</button>
+    <p class="hint">Hold your finger where you want to go. Tap to use the net or the spade.<br>Arrows, stick or d-pad work too. Tap 🔓 for kid lock.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 900, H = 500;
+
+  /* ================================================================== *
+   * TUNE — the feel of the voyage, all in one place.
+   *
+   * The rule underneath all of it: THE SEA NEVER TAKES ANYTHING BACK.
+   * There is no damage, no sinking, no running out of anything. Islands
+   * are landings rather than walls, whirlpools are fairground rides, the
+   * sea monster is friendly, and every single thing the net comes up with
+   * is worth some gold — including the boot.
+   *
+   * `cell` and `isleMax` are a pair. Islands are placed inside the middle
+   * half of their cell, so two neighbours are at least cell*0.5 apart; the
+   * biggest an island can wobble out to is isleMax*1.26. Raise isleMax past
+   * about 190 and two islands in neighbouring squares start growing into
+   * each other, which closes the channels a boat sails down.
+   * ================================================================== */
+  const TUNE = {
+    cell:      1000,    // one square of the world map
+    isleChance: 0.72,   // how many squares have an island in them
+    isleMin:   80, isleMax: 165,
+    zoneR:     3600,    // how far you sail before the sea changes colour
+
+    boatMax:   3.5,     // top speed, pixels a frame
+    boatAcc:   0.11,
+    boatDrag:  0.030,
+    turn:      0.075,   // radians a frame — a U-turn takes about 0.7s
+    walk:      2.5,     // on the sand
+
+    castLen:   54,      // frames for a cast, if you never tap again
+    castTap:   4,       // …and how much each extra tap hurries it along
+    digLen:    48,
+    digTap:    4,
+    netRange:  150,     // how near a shoal or a glint counts as "at it"
+    digRange:  46,      // how near the X you have to be standing
+
+    sight:     620,     // an island this close goes on the chart
+    /* Landing again is held off by WHICH island you just left, not by a
+       clock — see the comment in sail(). This is only the little grace after
+       being flung out of a whirlpool or pushing off a beach. */
+    dockCd:    100,
+    castOff:   20,
+    boardR:    40,      // how near the boat you have to walk to get aboard
+    stuckMax:  480,     // eight seconds with nothing found and help arrives
+    camEase:   0.11,
+  };
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const el = {
+    zone:    document.getElementById('zoneTag'),
+    here:    document.getElementById('hereTag'),
+    kidTag:  document.getElementById('kidTag'),
+    find:    document.getElementById('findTag'),
+    gold:    document.getElementById('gold'),
+    tally:   document.getElementById('tally'),
+    best:    document.getElementById('best'),
+    shout:   document.getElementById('shout'),
+    swap:    document.getElementById('swapBtn'),
+    swapFace:document.getElementById('swapFace'),
+    actIcon: document.getElementById('actIcon'),
+    actWord: document.getElementById('actWord'),
+    start:   document.getElementById('startScreen'),
+    music:   document.getElementById('music'),
+    mute:    document.getElementById('mute'),
+    padTag:  document.getElementById('padTag'),
+  };
+
+  function fit(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener('resize', fit);
+
+  const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+  const rnd  = (a,b) => a + Math.random()*(b-a);
+  const rint = (a,b) => Math.floor(a + Math.random()*(b-a+1));
+  const pick = arr => arr[(Math.random()*arr.length)|0];
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const ease = t => { const u = clamp(t,0,1); return u*u*(3-2*u); };
+  const TAU = Math.PI*2;
+
+  function roundRect(x,y,w,h,r){
+    const rr = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+  }
+  function ellipse(x,y,rx,ry,rot){
+    ctx.beginPath();
+    ctx.ellipse(x, y, Math.max(0.1,Math.abs(rx)), Math.max(0.1,Math.abs(ry)), rot||0, 0, TAU);
+  }
+  function star(x, y, r, points){
+    const n = points || 5;
+    ctx.beginPath();
+    for (let i = 0; i < n*2; i++){
+      const a = -Math.PI/2 + i*Math.PI/n;
+      const rr = i % 2 ? r*0.46 : r;
+      const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  }
+  function mix(a, b, t){
+    const u = clamp(t, 0, 1);
+    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    const r = Math.round(lerp((pa>>16)&255, (pb>>16)&255, u));
+    const g = Math.round(lerp((pa>>8)&255,  (pb>>8)&255,  u));
+    const bl= Math.round(lerp(pa&255,       pb&255,       u));
+    return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+
+  /* ---------- sound (primitives live in kidkit.js) ---------- */
+  let muted = false;
+  const tone  = (f,d,type,v,slide) => { if (!muted) KidKit.audio.tone(f,d,type,v,slide); };
+  const noise = (d,v) => { if (!muted) KidKit.audio.noise(d,v); };
+  const seq = (notes, gap, dur, type, v) => notes.forEach((n,i) =>
+    setTimeout(() => tone(n, dur, type, v), i*gap));
+
+  const sfx = {
+    cast:   ()=>{ noise(.10,.03); tone(700,.12,'triangle',.03,-380); },
+    haul:   ()=>tone(rnd(360,460),.05,'square',.022),
+    splash: ()=>{ noise(.16,.045); tone(340,.12,'sine',.035,-160); },
+    coin:   ()=>seq([1047,1319],55,.11,'triangle',.045),
+    fish:   ()=>seq([659,880],60,.13,'triangle',.045),
+    junk:   ()=>{ tone(190,.16,'square',.04,-70); noise(.08,.03); },
+    gem:    ()=>seq([784,1047,1319],60,.16,'triangle',.05),
+    dig:    ()=>{ noise(.07,.035); tone(rnd(150,210),.06,'sine',.03,-40); },
+    chest:  ()=>seq([523,659,784,1047,1319,1568],80,.26,'square',.055),
+    fanfare:()=>seq([523,659,784,1047,1319,1047,1319,1568],95,.28,'square',.055),
+    record: ()=>seq([880,1109,1319,1760],70,.24,'triangle',.055),
+    dock:   ()=>{ noise(.18,.035); tone(220,.20,'sine',.04,-80); },
+    board:  ()=>seq([392,523],75,.14,'triangle',.05),
+    whirl:  ()=>{ noise(.55,.05); tone(220,.75,'sawtooth',.04,760); },
+    gull:   ()=>{ tone(1100,.07,'sawtooth',.024,-320); setTimeout(()=>tone(980,.08,'sawtooth',.022,-280),110); },
+    dolphin:()=>seq([1568,1976,1568],55,.09,'sine',.035),
+    whale:  ()=>{ tone(120,.9,'sine',.05,60); noise(.3,.03); },
+    monster:()=>{ tone(90,.7,'sawtooth',.045,120); setTimeout(()=>noise(.3,.05),220); },
+    bell:   ()=>seq([1047,1319,1568,2093],90,.42,'triangle',.055),
+    swap:   ()=>seq([523,784],80,.14,'triangle',.05),
+    pop:    ()=>tone(700,.07,'square',.04,420),
+    horn:   ()=>{ tone(220,.5,'sawtooth',.05,-40); setTimeout(()=>tone(175,.6,'sawtooth',.045,-30),260); },
+  };
+  el.mute.addEventListener('click', e=>{
+    e.stopPropagation(); muted = !muted;
+    el.mute.textContent = muted ? '🔇' : '🔊';
+    el.mute.classList.toggle('off', muted);
+    el.mute.setAttribute('aria-label', muted ? 'Turn sound effects on' : 'Turn sound effects off');
+  });
+
+  /* ---------- music ----------
+     Oliver Run trots at 132, Daddy Smash chases at 126, Tower Climb goes up
+     at 108, Emsile Fishing drifts at 84. A boat rolls, so all of these are
+     built on a swung three-note lilt with the bass on the beat — a shanty
+     you could row to. 100 in home water, slower and deeper further out,
+     brisk and bright on the sand. */
+  const R = -1;
+  const TRACKS = {
+    shanty: { bpm:100, drums:'soft', wave:'square',
+      lead:[67,R,64,67, 71,R,67,64, 65,R,62,65, 69,R,65,62,
+            67,R,71,74, 72,R,69,67, 64,R,67,71, 67,R,R,R],
+      bass:[43,R,50,R, 41,R,48,R, 38,R,45,R, 40,R,47,R] },
+    deep:   { bpm:88, drums:'soft', wave:'triangle',
+      lead:[60,R,63,67, 70,R,67,63, 58,R,62,65, 68,R,65,62,
+            60,R,65,68, 72,R,68,65, 63,R,67,70, 67,R,R,R],
+      bass:[36,R,43,R, 34,R,41,R, 33,R,40,R, 31,R,38,R] },
+    bright: { bpm:118, drums:'light', wave:'square',
+      lead:[72,76,79,76, 81,79,76,72, 74,77,81,77, 84,81,77,74,
+            76,79,83,79, 86,83,79,76, 79,83,86,88, 84,R,R,R],
+      bass:[48,48,55,55, 50,50,57,57, 52,52,59,59, 53,53,60,60] },
+    island: { bpm:126, drums:'heavy', wave:'square',
+      lead:[72,74,76,79, 76,74,72,69, 71,72,74,76, 74,72,71,67,
+            72,76,79,84, 81,79,76,72, 74,79,83,86, 84,R,R,R],
+      bass:[48,R,48,55, 50,R,50,57, 45,R,45,52, 47,R,47,54] },
+  };
+  let musicOn = true;
+  const jukebox = KidKit.audio.music(TRACKS, {volume:.36});
+  el.music.addEventListener('click', e=>{
+    e.stopPropagation();
+    musicOn = !musicOn;
+    el.music.classList.toggle('off', !musicOn);
+    el.music.setAttribute('aria-label', musicOn ? 'Turn music off' : 'Turn music on');
+    jukebox.setEnabled(musicOn);
+  });
+
+  /* ================================================================== *
+   * the zones
+   *
+   * A ring of sea each, measured straight-line from where you started. Home
+   * Bay only happens once, right at the beginning; the other seven cycle for
+   * ever, so a very long voyage comes round to familiar water rather than
+   * running out of world.
+   * ================================================================== */
+  const ZONES = [
+    { name:'Home Bay',      icon:'🏠', deep:'#1E6FA8', shallow:'#7FD4E8', foam:'#EAFBFF',
+      sand:'#F3DFA8', sand2:'#D9BE78', tree:'#4FA85E', rock:'#B0A48C',
+      track:'shanty', kind:'palm' },
+    { name:'Sunny Sea',     icon:'☀️', deep:'#1B7FC0', shallow:'#8FE0EE', foam:'#F2FEFF',
+      sand:'#F7E3AC', sand2:'#DCC07A', tree:'#57B765', rock:'#BCAF94',
+      track:'shanty', kind:'palm' },
+    { name:'Coral Cove',    icon:'🐠', deep:'#12A0AE', shallow:'#9BF2E4', foam:'#F4FFFC',
+      sand:'#FFE7C4', sand2:'#F0C79B', tree:'#3FC79A', rock:'#F2A0B4',
+      track:'bright', kind:'coral' },
+    { name:'Misty Waters',  icon:'🌫️', deep:'#3C6B7A', shallow:'#9EC3C8', foam:'#E4F1F2',
+      sand:'#D6D2BC', sand2:'#B3AE96', tree:'#2E6B4E', rock:'#8D8C86',
+      track:'deep', kind:'pine' },
+    { name:'The Deep Blue', icon:'🐋', deep:'#0E3E77', shallow:'#5C9AD8', foam:'#D9EAFF',
+      sand:'#C9C3A6', sand2:'#A49E82', tree:'#2C7A5A', rock:'#7B8496',
+      track:'deep', kind:'rock' },
+    { name:'Frosty North',  icon:'❄️', deep:'#2A5F92', shallow:'#B9E7F7', foam:'#FFFFFF',
+      sand:'#E9F4FA', sand2:'#C2DCEA', tree:'#7FBFD8', rock:'#DDEEF7',
+      track:'deep', kind:'ice' },
+    { name:'Volcano Isles', icon:'🌋', deep:'#123449', shallow:'#4E8AA0', foam:'#DCEFF2',
+      sand:'#5E4B49', sand2:'#453634', tree:'#8C4432', rock:'#3A2C2A',
+      track:'bright', kind:'volcano' },
+    { name:'Golden Sea',    icon:'✨', deep:'#1D6E9E', shallow:'#F6D98C', foam:'#FFF6DC',
+      sand:'#FFE39B', sand2:'#E7BF6B', tree:'#C9A44A', rock:'#D8B871',
+      track:'bright', kind:'gold' },
+  ];
+  const ringOf = (x, y) => Math.floor(Math.hypot(x, y)/TUNE.zoneR);
+  function zoneAt(x, y){
+    const r = ringOf(x, y);
+    return r === 0 ? ZONES[0] : ZONES[1 + ((r - 1) % (ZONES.length - 1))];
+  }
+
+  /* ================================================================== *
+   * the cast — the same two kids as everywhere else
+   * ================================================================== */
+  const KIDS = [
+    { id:'oliver', name:'Oliver', face:'🧒',
+      skin:'#F6C99B', hair:'#7A4B2A', shirt:'#3DA9F5', shirt2:'#1E6FB0',
+      legs:'#2F4858', hat:'#F0453A' },
+    { id:'emsile', name:'Emsile', face:'👧',
+      skin:'#F8D2AE', hair:'#C97B3C', shirt:'#FF6FA8', shirt2:'#D2417A',
+      legs:'#8646CE', hat:'#FFD23D' },
+  ];
+
+  /* ================================================================== *
+   * what the sea and the sand give up
+   *
+   * Every entry pays SOMETHING. The boot is worth a gold piece and a laugh,
+   * exactly like the junk in Emsile's fishing game — a haul is never a dud,
+   * so a child who taps the net constantly is never punished for it.
+   * ================================================================== */
+  const JUNK = [
+    { icon:'🥾', name:'Old Boot',     gold:1 },
+    { icon:'🧦', name:'Soggy Sock',   gold:1 },
+    { icon:'🪵', name:'Driftwood',    gold:2 },
+    { icon:'🥫', name:'Rusty Tin',    gold:2 },
+    { icon:'🧽', name:'Old Sponge',   gold:1 },
+    { icon:'🕶️', name:'Lost Sunnies', gold:3 },
+  ];
+  const CATCH = [
+    { icon:'🐟', name:'Silver Fish',  gold:5 },
+    { icon:'🐠', name:'Stripy Fish',  gold:6 },
+    { icon:'🦀', name:'Snappy Crab',  gold:6 },
+    { icon:'🦑', name:'Wiggly Squid', gold:7 },
+    { icon:'🐡', name:'Puffer Fish',  gold:8 },
+    { icon:'🦐', name:'Tiny Prawn',   gold:4 },
+    { icon:'🐙', name:'Curly Octopus',gold:9 },
+    { icon:'🐢', name:'Sea Turtle',   gold:9 },
+    { icon:'⭐', name:'Starfish',     gold:5 },
+    { icon:'🐚', name:'Big Shell',    gold:4 },
+  ];
+  const TREASURE = [
+    { icon:'🪙', name:'Gold Coins',   gold:16 },
+    { icon:'💎', name:'Blue Gem',     gold:22 },
+    { icon:'🗝️', name:'Old Key',      gold:14 },
+    { icon:'🏺', name:'Clay Pot',     gold:18 },
+    { icon:'⚓', name:'Golden Anchor',gold:26 },
+    { icon:'💍', name:'Shiny Ring',   gold:24 },
+    { icon:'📿', name:'Pearl Beads',  gold:20 },
+    { icon:'🔱', name:'Sea Fork',     gold:28 },
+  ];
+  const CHESTS = [
+    { icon:'💰', name:'Chest of Gold',   gold:60 },
+    { icon:'👑', name:'Pirate Crown',    gold:70 },
+    { icon:'💎', name:'Giant Diamond',   gold:80 },
+    { icon:'🏆', name:'Golden Cup',      gold:65 },
+    { icon:'🧭', name:'Golden Compass',  gold:55 },
+    { icon:'🗿', name:'Little Statue',   gold:50 },
+    { icon:'🦜', name:'Wooden Parrot',   gold:45 },
+    { icon:'⌛', name:'Sand Timer',      gold:48 },
+    { icon:'🔔', name:"Ship's Bell",     gold:52 },
+    { icon:'🪈', name:'Bone Whistle',    gold:44 },
+  ];
+  /* Digging anywhere that is not the X still turns something up. It is the
+     spade's version of the fishing game's junk: the joke, not the penalty. */
+  const SANDY = [
+    { icon:'🐚', name:'Little Shell',  gold:2 },
+    { icon:'🦀', name:'Sandy Crab',    gold:3 },
+    { icon:'🪨', name:'Funny Pebble',  gold:1 },
+    { icon:'🍾', name:'Old Bottle',    gold:3 },
+    { icon:'🪙', name:'One Coin',      gold:4 },
+    { icon:'🦴', name:'Fish Bone',     gold:2 },
+  ];
+
+  const ISLE_A = ['Sunny','Sandy','Turtle','Crab','Windy','Sleepy','Lucky','Rocky',
+                  'Palm','Coral','Shelly','Bumpy','Whale','Dolphin','Gull','Star',
+                  'Little','Round','Salty','Jolly','Misty','Golden','Snug','Wobbly'];
+  const ISLE_B = ['Island','Rock','Cove','Isle','Bay','Key','Point','Sands',
+                  'Reef','Spit','Hump','Shore'];
+
+  /* ================================================================== *
+   * state
+   * ================================================================== */
+  let state = 'menu';                 // 'menu' | 'play' — there is no third
+  let mode  = 'sail';                 // 'sail' | 'shore'
+  let kidIdx = Math.max(0, KIDS.findIndex(
+    k => k.id === KidKit.storage.get('treasure-boat-kid', 'oliver')));
+
+  let gold = 0, isles = 0, chests = 0, miles = 0;
+  let best = KidKit.storage.getNumber('treasure-boat-best', 0);
+  let bestIsles = KidKit.storage.getNumber('treasure-boat-isles', 0);
+  let recordBeaten = false;
+  let saveIv = null;
+
+  let t = 0, shake = 0, flash = 0;
+  let camX = 0, camY = 0;
+  let lastZone = ZONES[0];
+  let worldSeed = 1;
+
+  /* Generated world, thrown away and rebuilt from the seed as you sail. The
+     `dug` / `taken` sets are what must NOT be thrown away — they are the only
+     part of the world that a person changed. */
+  const cells = new Map();            // "cx,cy" -> { isle, pool, glints, shoals }
+  const chart = new Map();            // every island ever seen, for the map
+  const dug = new Set();              // "id#n" of every hole already dug
+  const taken = new Set();            // glints already netted
+
+  const boat = { x: 0, y: 0, dir: 0, sp: 0, spin: 0, dockCd: 0, bob: 0, leftIsle: null };
+  const kid  = { x: 0, y: 0, face: 1, walk: 0, isle: null };
+  const KIDOF = () => KIDS[kidIdx];
+
+  let castT = 0, casting = false, castX = 0, castY = 0;
+  let digT = 0, digging = false;
+  let tow = null;                     // { tx, ty, life } — a lift from a friend
+  let sparks = [], confetti = [], pops = [], puffs = [], wake = [];
+  let critters = [];                  // dolphins, gulls, whale, monster, bottle, ship
+  let stuck = 0, rescueCd = 0, evIn = 380;
+  let marked = null;                  // the island a bottle put an X on
+  let ferry = null;                   // a seagull carrying the walker somewhere
+  let boardCd = 0, landRescues = 0, leaveIn = 0;
+
+  /* ================================================================== *
+   * the world
+   *
+   * Every square of sea is built from a hash of its coordinates and the
+   * run's seed, NEVER from Math.random(). That is the whole trick behind an
+   * ocean you can sail away from and come back to: squares are thrown away
+   * once they are well over the horizon, and rebuilding one gives back
+   * exactly the island that was there before. Roll the world off
+   * Math.random() and the sea quietly rearranges itself behind the boat.
+   * ================================================================== */
+  function cellRnd(cx, cy, salt){
+    let a = (Math.imul(cx|0, 0x9E3779B1) ^ Math.imul(cy|0, 0x85EBCA77) ^
+             Math.imul((salt|0) + worldSeed, 0xC2B2AE3D)) >>> 0;
+    return function(){
+      a = (a + 0x6D2B79F5) | 0;
+      let x = Math.imul(a ^ (a >>> 15), 1 | a);
+      x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const cellKey = (cx, cy) => cx + ',' + cy;
+  const cellOf = v => Math.floor(v/TUNE.cell);
+
+  function makeCell(cx, cy){
+    const r = cellRnd(cx, cy, 17);
+    const c = { cx, cy, isle: null, pool: null, glints: [], shoals: [] };
+    const home = cx === 1 && cy === 0;
+
+    if (home || (!(cx === 0 && cy === 0) && r() < TUNE.isleChance)){
+      const x = cx*TUNE.cell + (0.28 + r()*0.44)*TUNE.cell;
+      const y = cy*TUNE.cell + (0.28 + r()*0.44)*TUNE.cell;
+      const z = zoneAt(x, y);
+      const rad = home ? 150 : TUNE.isleMin + r()*(TUNE.isleMax - TUNE.isleMin);
+      const isle = {
+        id: cellKey(cx, cy), cx, cy, x, y, r: rad,
+        w0: r()*TAU, w1: r()*TAU, w2: r()*TAU,
+        kind: home ? 'home' : z.kind, zone: z,
+        name: home ? 'Home Island'
+                   : ISLE_A[(r()*ISLE_A.length)|0] + ' ' + ISLE_B[(r()*ISLE_B.length)|0],
+        digs: [], trees: [], rocks: [],
+      };
+      /* One to three X marks, tucked well inside the sand so the spade is
+         never asked for at a spot the walker cannot stand on. */
+      const nd = home ? 1 : 1 + ((r()*2.4)|0);
+      for (let i = 0; i < nd; i++){
+        const a = r()*TAU, d = (0.20 + r()*0.48)*rad;
+        isle.digs.push({ x: x + Math.cos(a)*d, y: y + Math.sin(a)*d, ph: r()*TAU });
+      }
+      const nt = 2 + ((r()*5)|0);
+      for (let i = 0; i < nt; i++){
+        const a = r()*TAU, d = (0.15 + r()*0.55)*rad;
+        isle.trees.push({ x: x + Math.cos(a)*d, y: y + Math.sin(a)*d,
+                          s: 0.7 + r()*0.7, ph: r()*TAU });
+      }
+      const nr = (r()*4)|0;
+      for (let i = 0; i < nr; i++){
+        const a = r()*TAU, d = (0.25 + r()*0.55)*rad;
+        isle.rocks.push({ x: x + Math.cos(a)*d, y: y + Math.sin(a)*d, s: 5 + r()*11 });
+      }
+      c.isle = isle;
+    } else {
+      // no island: room for a whirlpool instead
+      if (r() < 0.26){
+        c.pool = { x: cx*TUNE.cell + (0.25 + r()*0.5)*TUNE.cell,
+                   y: cy*TUNE.cell + (0.25 + r()*0.5)*TUNE.cell,
+                   r: 88 + r()*46, ph: r()*TAU };
+      }
+    }
+
+    const ng = (r()*2.6)|0;
+    for (let i = 0; i < ng; i++){
+      const g = { id: cellKey(cx,cy) + 'g' + i, ph: r()*TAU,
+                  x: cx*TUNE.cell + r()*TUNE.cell, y: cy*TUNE.cell + r()*TUNE.cell };
+      if (!c.isle || !insideIsland(c.isle, g.x, g.y)) c.glints.push(g);
+    }
+    const ns = (r()*2.4)|0;
+    for (let i = 0; i < ns; i++){
+      c.shoals.push({ x: cx*TUNE.cell + r()*TUNE.cell, y: cy*TUNE.cell + r()*TUNE.cell,
+                      ph: r()*TAU, n: 5 + ((r()*7)|0), sp: 0.3 + r()*0.5, dir: r()*TAU });
+    }
+    cells.set(cellKey(cx, cy), c);
+    return c;
+  }
+  const cellAt = (cx, cy) => cells.get(cellKey(cx, cy)) || makeCell(cx, cy);
+
+  function landRadius(is, ang){
+    return is.r*(1 + 0.13*Math.sin(3*ang + is.w0)
+                   + 0.08*Math.sin(5*ang + is.w1)
+                   + 0.05*Math.sin(7*ang + is.w2));
+  }
+  function insideIsland(is, x, y){
+    const dx = x - is.x, dy = y - is.y;
+    const d = Math.hypot(dx, dy);
+    if (d > is.r*1.3) return false;
+    if (d < is.r*0.7) return true;
+    return d < landRadius(is, Math.atan2(dy, dx));
+  }
+
+  /* Keep three squares of world in every direction; that is a good screen and
+     a half past the edge of the canvas, so nothing is ever seen popping in. */
+  function growWorld(){
+    const cx = cellOf(boat.x), cy = cellOf(boat.y);
+    for (let a = cx - 3; a <= cx + 3; a++){
+      for (let b = cy - 3; b <= cy + 3; b++) cellAt(a, b);
+    }
+    for (const [k, c] of cells){
+      if (Math.abs(c.cx - cx) > 5 || Math.abs(c.cy - cy) > 5){
+        // never throw away the island somebody is standing on
+        if (kid.isle && c.isle && c.isle.id === kid.isle.id) continue;
+        cells.delete(k);
+      }
+    }
+  }
+
+  function nearIslands(x, y, range){
+    const out = [];
+    const c0 = cellOf(x), r0 = cellOf(y);
+    const span = Math.ceil(range/TUNE.cell) + 1;
+    for (let a = c0 - span; a <= c0 + span; a++){
+      for (let b = r0 - span; b <= r0 + span; b++){
+        const c = cells.get(cellKey(a, b));
+        /* r*1.3, not r: a blob's coastline bulges up to 26% past its nominal
+           radius, so filtering on r alone quietly dropped big islands the
+           boat was already sitting inside — it sailed straight through the
+           headlands of the largest ones. */
+        if (c && c.isle && Math.hypot(c.isle.x - x, c.isle.y - y) < range + c.isle.r*1.3) out.push(c.isle);
+      }
+    }
+    return out;
+  }
+  function cellsNear(range){
+    const out = [];
+    const c0 = cellOf(boat.x), r0 = cellOf(boat.y);
+    const span = Math.ceil(range/TUNE.cell) + 1;
+    for (let a = c0 - span; a <= c0 + span; a++){
+      for (let b = r0 - span; b <= r0 + span; b++){
+        const c = cells.get(cellKey(a, b));
+        if (c) out.push(c);
+      }
+    }
+    return out;
+  }
+  const digsLeft = is => is ? is.digs.filter((d,i) => !dug.has(is.id + '#' + i)).length : 0;
+
+  /* Everything within sight goes on the chart, and the chart is what the
+     little map in the corner draws. It is also the score: an island seen is
+     an island found. */
+  function chartNearby(){
+    for (const is of nearIslands(boat.x, boat.y, TUNE.sight)){
+      let e = chart.get(is.id);
+      if (!e){
+        e = { id: is.id, x: is.x, y: is.y, r: is.r, name: is.name, visited: false, dugAll: false };
+        chart.set(is.id, e);
+        isles++;
+        stuck = 0;
+        shout('<em>' + is.name + '!</em>', 1400, 1);
+        sfx.bell();
+        updateHud();
+      }
+    }
+    /* The chart is the only thing in the game that grows for ever. Six
+       hundred islands is a very long voyage; past that the furthest ones go,
+       and sailing back to them simply finds them again. */
+    if (chart.size > 600){
+      const list = [...chart.values()]
+        .sort((a,b) => Math.hypot(b.x-boat.x, b.y-boat.y) - Math.hypot(a.x-boat.x, a.y-boat.y));
+      for (let i = 0; i < list.length - 600; i++) chart.delete(list[i].id);
+    }
+  }
+
+  /* ================================================================== *
+   * particles and shouts
+   * ================================================================== */
+  function sparkAt(x, y, n, colour){
+    for (let i = 0; i < n; i++){
+      sparks.push({ x, y, vx: rnd(-1.8,1.8), vy: rnd(-1.8,1.8), life: rnd(14,30), max:30,
+                    s: rnd(2.5,6), c: colour || '#FFF3C9' });
+    }
+  }
+  function puffAt(x, y, n, colour){
+    for (let i = 0; i < n; i++){
+      puffs.push({ x, y, vx: rnd(-1.1,1.1), vy: rnd(-1.1,1.1), life: rnd(16,32), max:32,
+                   s: rnd(4,11), c: colour || 'rgba(255,255,255,' });
+    }
+  }
+  function confettiAt(x, y, n){
+    for (let i = 0; i < n; i++){
+      confetti.push({ x, y, vx: rnd(-3,3), vy: rnd(-4.4,-1), r: rnd(0,6.3), spin: rnd(-.3,.3),
+                      life: rnd(60,130), max:130,
+                      c: pick(['#FFD23D','#FF6FA8','#4FD16A','#3DA9F5','#FF8A3D','#FFFFFF']) });
+    }
+  }
+  function pop(x, y, text, colour, size){
+    pops.push({ x, y, text, c: colour || '#FFD23D', size: size || 26, life: 46, max: 46 });
+  }
+
+  /* One shout at a time, and when two want the screen the louder one gets it.
+     Dropping the quieter card rather than the older one is Oliver Run's
+     lesson: a kid who just dug up a crown is owed that news more than the
+     screen is owed a tidy queue. */
+  let shoutPri = -1, shoutIv = null;
+  function shout(text, ms, pri){
+    const level = pri == null ? 1 : pri;
+    if (el.shout.classList.contains('show') && level < shoutPri) return;
+    shoutPri = level;
+    el.shout.innerHTML = text;
+    el.shout.classList.add('show');
+    clearTimeout(shoutIv);
+    shoutIv = setTimeout(()=>{ el.shout.classList.remove('show'); shoutPri = -1; }, ms || 1700);
+  }
+
+  /* ================================================================== *
+   * HUD
+   * ================================================================== */
+  function updateHud(){
+    const z = mode === 'shore' && kid.isle ? null : zoneAt(boat.x, boat.y);
+    el.zone.textContent = z ? z.icon + ' ' + z.name
+                            : '🏝️ ' + (kid.isle ? kid.isle.name : 'Ashore');
+    el.here.textContent = '📍 ' + cellOf(boat.x) + ', ' + cellOf(boat.y);
+    el.gold.textContent = gold;
+    // 300 pixels to the mile, so the number climbs at about one every second
+    // and a half of sailing — fast enough for a five-year-old to watch.
+    el.tally.textContent = '🧭 ' + Math.floor(miles/300) + ' · 🏝️ ' + isles + ' · 💰 ' + chests;
+    el.best.textContent = best ? 'Best ' + best + (bestIsles ? '  🏝️' + bestIsles : '') : '';
+    el.kidTag.textContent = KIDOF().name;
+    const other = KIDS[(kidIdx + 1) % KIDS.length];
+    el.swapFace.textContent = other.face;
+    el.swap.setAttribute('aria-label', 'Sail as ' + other.name + ' instead');
+    const ashore = mode === 'shore';
+    // ⛏️ rather than the spade 🪏: the spade is a very new emoji and renders
+    // as an empty box on most of the devices in this house
+    el.actIcon.textContent = ashore ? '⛏️' : '🎣';
+    el.actWord.textContent = ashore ? 'Dig' : 'Net';
+  }
+
+  function showFind(item, extra){
+    el.find.hidden = false;
+    el.find.textContent = item.icon + ' ' + item.name + (extra ? ' ' + extra : '');
+  }
+
+  function saveBest(){
+    let dirty = false;
+    if (gold > best){ best = gold; dirty = true; }
+    if (isles > bestIsles){ bestIsles = isles; dirty = true; }
+    if (!dirty || saveIv) return;
+    /* Throttled, NOT debounced — the same trap Tower Climb fell into. Gold
+       changes every few frames when the net is being mashed, so a debounce
+       that re-arms on every change would be pushed back for ever and the
+       write would never land at all. If a timer is already pending, leave it
+       alone: the first change always reaches storage within 1200ms and a
+       burst of them still costs the one write. */
+    saveIv = setTimeout(()=>{
+      saveIv = null;
+      KidKit.storage.set('treasure-boat-best', best);
+      KidKit.storage.set('treasure-boat-isles', bestIsles);
+    }, 1200);
+  }
+
+  /* `quiet` means "this pays, but it is not progress". Only one thing uses
+     it: digging a hole in ordinary sand. Sand always turns something up, so
+     without this a child who taps away happily in one spot would reset the
+     stuck timer for ever and the seagull would never come and show them
+     where the X is. Everything else — a haul, a chest, a new island — is
+     real progress and resets it. */
+  function addGold(n, x, y, colour, quiet){
+    gold += n;
+    if (!quiet) stuck = 0;
+    pop(x, y, '+' + n, colour || '#FFD23D', 24);
+    saveBest();
+    if (!recordBeaten && best > 0 && gold > best){
+      recordBeaten = true;
+      shout('<em>NEW RECORD!</em>', 1900, 3);
+      sfx.record();
+      confettiAt(x, y, 26);
+    }
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * input
+   * ================================================================== */
+  const pads = KidKit.input.create({
+    element: document.getElementById('stage'),
+    steer: true,
+    onPress: () => press(),
+    onAction: () => swapKid(),
+    onNav: dir => { if (state === 'menu') KidKit.input.moveFocus(dir); },
+    onGamepad: on => { el.padTag.hidden = !on; },
+  });
+
+  function press(){
+    if (state === 'menu'){ startGame(); return; }
+    if (mode === 'shore') digPress();
+    else castPress();
+  }
+
+  /* Hold a finger where you want to go and the boat steers to it. Unlike
+     Tower Climb, BOTH axes are read here: this is a map seen from above, so
+     a finger held low means south, which is a real place to go rather than
+     the wasted "down" of a ladder. There is a dead spot in the middle so a
+     thumb parked over the boat means "stop", not "spin". */
+  function steering(){
+    const a = pads.axis();
+    let x = a.x, y = a.y;
+    const pt = pads.pointer();
+    if (pt.active){
+      const dx = pt.nx*W - W/2, dy = pt.ny*H - H/2;
+      const d = Math.hypot(dx, dy);
+      if (d > 34){ x = dx/d; y = dy/d; }
+      else if (Math.abs(a.x) + Math.abs(a.y) < 0.06){ x = 0; y = 0; }
+    }
+    const m = Math.hypot(x, y);
+    return { x, y, mag: m > 1 ? 1 : m };
+  }
+
+  function swapKid(){
+    if (state !== 'play') return;
+    kidIdx = (kidIdx + 1) % KIDS.length;
+    KidKit.storage.set('treasure-boat-kid', KIDOF().id);
+    sfx.swap();
+    sparkAt(mode === 'shore' ? kid.x : boat.x, mode === 'shore' ? kid.y : boat.y, 8, '#FFF0C4');
+    updateHud();
+  }
+  el.swap.addEventListener('click', e => { e.stopPropagation(); swapKid(); });
+
+  document.getElementById('pickOliver').addEventListener('click', e => { e.stopPropagation(); pickKid(0); });
+  document.getElementById('pickEmsile').addEventListener('click', e => { e.stopPropagation(); pickKid(1); });
+  function pickKid(i){
+    kidIdx = i;
+    KidKit.storage.set('treasure-boat-kid', KIDOF().id);
+    document.getElementById('pickOliver').setAttribute('aria-pressed', String(i === 0));
+    document.getElementById('pickEmsile').setAttribute('aria-pressed', String(i === 1));
+    sfx.swap();
+    updateHud();
+  }
+  pickKid(kidIdx);
+
+  document.getElementById('startBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (state === 'menu') startGame();
+  });
+
+  function startGame(){
+    state = 'play';
+    mode = 'sail';
+    el.start.hidden = true;
+    /* A brand new ocean every time. Everything in the world hangs off this
+       number, so two runs never look the same — and within one run the same
+       number rebuilds the same islands for as long as the voyage lasts. */
+    worldSeed = (Math.random()*0x7FFFFFFF)|0;
+    cells.clear(); chart.clear(); dug.clear(); taken.clear();
+    gold = 0; isles = 0; chests = 0; miles = 0; recordBeaten = false;
+    sparks = []; confetti = []; pops = []; puffs = []; wake = []; critters = [];
+    casting = false; castT = 0; digging = false; digT = 0;
+    tow = null; marked = null; stuck = 0; rescueCd = 0; evIn = 380;
+    ferry = null; boardCd = 0; landRescues = 0;
+    boat.x = 500; boat.y = 500; boat.dir = 0; boat.sp = 0; boat.spin = 0; boat.dockCd = 0;
+    kid.isle = null;
+    camX = boat.x - W/2; camY = boat.y - H/2;
+    el.find.hidden = true;
+    growWorld();
+    chartNearby();
+    jukebox.play(zoneAt(boat.x, boat.y).track);
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * sailing
+   * ================================================================== */
+  function sail(dt, steer){
+    boat.bob += dt;
+
+    if (boat.dockCd > 0) boat.dockCd -= dt;
+    if (boat.spin > 0){
+      /* Out of a whirlpool: spinning is scenery, not a loss of control. The
+         boat keeps whatever heading it had and simply looks giddy. */
+      boat.spin -= dt;
+    }
+
+    if (tow){
+      /* A friend has the boat. Same shape as Tower Climb's balloons: the tow
+         OWNS the movement rather than adding a shove to it, because a shove
+         and a held direction find an equilibrium and park you nowhere. */
+      tow.life -= dt;
+      const dx = tow.tx - boat.x, dy = tow.ty - boat.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 6){
+        boat.dir = turnToward(boat.dir, Math.atan2(dy, dx), TUNE.turn*2.2*dt);
+        boat.sp = Math.min(TUNE.boatMax*2.1, boat.sp + 0.3*dt);
+      }
+      if (tow.life <= 0 || d < 60) tow = null;
+    } else if (steer.mag > 0.14){
+      boat.dir = turnToward(boat.dir, Math.atan2(steer.y, steer.x), TUNE.turn*dt);
+      boat.sp += TUNE.boatAcc*steer.mag*dt*speedBonus();
+      if (boat.sp > TUNE.boatMax*speedBonus()) boat.sp = TUNE.boatMax*speedBonus();
+    } else {
+      boat.sp = Math.max(0, boat.sp - TUNE.boatDrag*1.6*dt);
+    }
+    boat.sp = Math.max(0, boat.sp - TUNE.boatDrag*dt);
+
+    const nx = boat.x + Math.cos(boat.dir)*boat.sp*dt;
+    const ny = boat.y + Math.sin(boat.dir)*boat.sp*dt;
+
+    /* Land is a LANDING, not a wall — bumping an island is how you get onto
+       it. The one exception is the island you have just cast off from, and
+       it has to be that island rather than a stopwatch: a plain "no landing
+       for two seconds" left a child holding one direction pinned against the
+       coast they had just left, landing again the moment the clock ran out,
+       for ever. The voyage ended at the first island in the sea.
+       Against that one island the hull FOLLOWS THE COAST instead — the
+       heading is turned onto the tangent, so the boat rounds the headland at
+       full speed and carries on the way it was pointed. Damping the speed
+       instead (the obvious fix) stalled it dead against the sand. */
+    let landed = null;
+    let px = nx, py = ny;
+    for (const is of nearIslands(nx, ny, 40)){
+      const dx = px - is.x, dy = py - is.y;
+      const d = Math.max(0.01, Math.hypot(dx, dy));
+      const nrm = Math.atan2(dy, dx);
+      const rr = landRadius(is, nrm);
+      if (d < rr + 16){
+        if (is.id !== boat.leftIsle && boat.dockCd <= 0){ landed = is; break; }
+        px = is.x + dx/d*(rr + 17);
+        py = is.y + dy/d*(rr + 17);
+        let rel = boat.dir - nrm;
+        while (rel > Math.PI) rel -= TAU;
+        while (rel < -Math.PI) rel += TAU;
+        // heading into the sand: swing onto whichever way round is nearer
+        if (Math.abs(rel) > Math.PI/2) boat.dir = nrm + (rel >= 0 ? Math.PI/2 : -Math.PI/2);
+      }
+    }
+    if (landed){ dock(landed, nx, ny); return; }
+    if (boat.leftIsle){
+      const c = cells.get(boat.leftIsle);
+      const li = c && c.isle;
+      if (!li || Math.hypot(px - li.x, py - li.y) > li.r*1.9) boat.leftIsle = null;
+    }
+    miles += Math.hypot(px - boat.x, py - boat.y);
+    boat.x = px; boat.y = py;
+
+    if (boat.sp > 0.6 && Math.random() < 0.5*dt){
+      wake.push({ x: boat.x - Math.cos(boat.dir)*16, y: boat.y - Math.sin(boat.dir)*16,
+                  r: 4, life: 42, max: 42 });
+    }
+    checkWhirlpool(dt);
+  }
+
+  function speedBonus(){
+    // dolphins alongside pull the boat along. A gift, so it only ever adds.
+    return critters.some(c => c.kind === 'dolphin' && c.escort) ? 1.42 : 1;
+  }
+
+  function turnToward(a, want, rate){
+    let d = want - a;
+    while (d > Math.PI) d -= TAU;
+    while (d < -Math.PI) d += TAU;
+    if (Math.abs(d) <= rate) return want;
+    return a + Math.sign(d)*rate;
+  }
+
+  function checkWhirlpool(dt){
+    for (const c of cellsNear(1400)){
+      if (!c.pool) continue;
+      const d = Math.hypot(c.pool.x - boat.x, c.pool.y - boat.y);
+      /* A gentle pull from well outside the swirl. Two reasons: it is what a
+         whirlpool obviously ought to do, and without it these were almost
+         impossible to actually land in — a straight run across a whole zone
+         found one about every other voyage, which is no use for the best
+         ride in the game. It stays weak enough that a boat under power
+         drives straight out again, because the sea never takes control away
+         from the child holding the tablet. */
+      if (d < c.pool.r*3.4 && d > 1){
+        const pull = 0.1*(1 - d/(c.pool.r*3.4))*dt;
+        boat.x += (c.pool.x - boat.x)/d*pull*c.pool.r*0.5;
+        boat.y += (c.pool.y - boat.y)/d*pull*c.pool.r*0.5;
+      }
+      // the whole painted swirl is the ride, not a bullseye in the middle of
+      // it: aiming at a 38-pixel dot is not a thing a five-year-old can do
+      if (d < c.pool.r){
+        /* A fairground ride, not a hazard: the boat is flung a long way
+           somewhere new, which is the fastest way to find fresh islands in
+           the whole game. Kids aim for these on purpose. */
+        const a = Math.random()*TAU;
+        const dist = 1700 + Math.random()*1300;
+        let tx = boat.x + Math.cos(a)*dist, ty = boat.y + Math.sin(a)*dist;
+        for (let i = 0; i < 12; i++){
+          if (!nearIslands(tx, ty, 30).some(is => insideIsland(is, tx, ty))) break;
+          tx += Math.cos(a)*140; ty += Math.sin(a)*140;
+        }
+        boat.x = tx; boat.y = ty;
+        boat.spin = 60; boat.sp = TUNE.boatMax*0.6;
+        boat.dockCd = TUNE.dockCd;
+        shake = 10;
+        sfx.whirl();
+        shout('<em>WHEEEEE!</em>', 1600, 2);
+        puffAt(boat.x, boat.y, 12);
+        addGold(6, boat.x, boat.y - 40, '#8FD8F5');
+        growWorld();
+        chartNearby();
+        return;
+      }
+    }
+  }
+
+  /* ================================================================== *
+   * landing and walking about
+   * ================================================================== */
+  function dock(is, atX, atY){
+    const dx = atX - is.x, dy = atY - is.y;
+    const d = Math.max(0.01, Math.hypot(dx, dy));
+    const ux = dx/d, uy = dy/d;
+    const rr = landRadius(is, Math.atan2(dy, dx));
+    boat.x = is.x + ux*(rr + 18);
+    boat.y = is.y + uy*(rr + 18);
+    boat.sp = 0;
+    boat.dir = Math.atan2(uy, ux);                // nose pointing back out to sea
+    mode = 'shore';
+    kid.isle = is;
+    /* Well up the beach, not at the water's edge: standing where they landed
+       put the walker inside the boat's own boarding circle, and they hopped
+       straight back aboard on the next frame without ever touching the sand. */
+    kid.x = is.x + ux*Math.max(6, rr - 46);
+    kid.y = is.y + uy*Math.max(6, rr - 46);
+    kid.face = ux < 0 ? -1 : 1;
+    boardCd = 30;
+    landRescues = 0;
+    casting = false; castT = 0;
+    /* The tow ends at the beach. It is only ever wound down inside sail(),
+       which does not run while somebody is ashore — so a boat that landed
+       mid-tow kept `tow` set for the rest of the game, and `tow` is one of
+       the things that holds the rescue off. A child who did nothing at all
+       was quietly marooned on the first island the dolphins took them to. */
+    tow = null;
+    stuck = 0;
+    sfx.dock();
+    puffAt(boat.x, boat.y, 8);
+
+    const e = chart.get(is.id);
+    if (e && !e.visited){
+      e.visited = true;
+      const n = digsLeft(is);
+      shout('<em>' + is.name + '</em><br>' + (n ? 'Find the ' + (n > 1 ? n + ' X marks' : 'X') + '!' : 'Have a dig!'), 2000, 2);
+    } else {
+      shout('Back on <em>' + is.name + '</em>', 1400, 1);
+    }
+    if (marked && marked === is.id) marked = null;
+    jukebox.play('island');
+    updateHud();
+  }
+
+  function board(){
+    mode = 'sail';
+    boat.dockCd = TUNE.castOff;
+    boat.leftIsle = kid.isle ? kid.isle.id : null;
+    boat.sp = 1.4;
+    kid.isle = null;
+    leaveIn = 0;
+    digging = false; digT = 0;
+    ferry = null; boardCd = 0; landRescues = 0;
+    stuck = 0;
+    sfx.board();
+    puffAt(boat.x, boat.y, 6);
+    jukebox.play(zoneAt(boat.x, boat.y).track);
+    updateHud();
+  }
+
+  function ashore(dt, steer){
+    const is = kid.isle;
+    if (!is){ mode = 'sail'; return; }
+    if (boardCd > 0) boardCd -= dt;
+    if (ferry) return;                 // a seagull has them; steering waits
+
+    if (!digging && steer.mag > 0.12){
+      kid.x += steer.x*TUNE.walk*dt;
+      kid.y += steer.y*TUNE.walk*dt;
+      kid.walk += Math.abs(steer.x) + Math.abs(steer.y);
+      if (Math.abs(steer.x) > 0.2) kid.face = steer.x > 0 ? 1 : -1;
+    }
+
+    // walk into the boat and you are aboard again
+    if (boardCd <= 0 && Math.hypot(kid.x - boat.x, kid.y - boat.y) < TUNE.boardR){ board(); return; }
+
+    // the sand is a soft wall, not a cliff: step off it and you are put back
+    const dx = kid.x - is.x, dy = kid.y - is.y;
+    const d = Math.max(0.01, Math.hypot(dx, dy));
+    const rr = landRadius(is, Math.atan2(dy, dx)) - 8;
+    if (d > rr){
+      kid.x = is.x + dx/d*rr;
+      kid.y = is.y + dy/d*rr;
+    }
+
+    if (digging){
+      digT += dt;
+      if (Math.random() < 0.3*dt) puffAt(kid.x + rnd(-8,8), kid.y + 8, 1, 'rgba(240,220,160,');
+      if (Math.floor(digT/8) !== Math.floor((digT - dt)/8)) sfx.dig();
+      if (digT >= TUNE.digLen) finishDig();
+    }
+  }
+
+  function digPress(){
+    if (digging){
+      /* Every extra tap is progress towards the hole, so a masher digs
+         faster than a tapper — full stop. This adds to the DELTA and never
+         clamps the total, which is the whole lesson of the fishing game's
+         two soft-locks: a clamp on the total pushes the value the wrong way
+         once it is already past the bound. */
+      digT += TUNE.digTap;
+      sfx.dig();
+      puffAt(kid.x + rnd(-8,8), kid.y + 8, 2, 'rgba(240,220,160,');
+      return;
+    }
+    digging = true;
+    digT = 0;
+    sfx.dig();
+  }
+
+  function finishDig(){
+    digging = false; digT = 0;
+    const is = kid.isle;
+    if (!is) return;
+    let hitIdx = -1, hitD = Infinity;
+    is.digs.forEach((g, i) => {
+      if (dug.has(is.id + '#' + i)) return;
+      const d = Math.hypot(g.x - kid.x, g.y - kid.y);
+      if (d < TUNE.digRange && d < hitD){ hitD = d; hitIdx = i; }
+    });
+
+    if (hitIdx >= 0){
+      dug.add(is.id + '#' + hitIdx);
+      const item = pick(CHESTS);
+      chests++;
+      showFind(item, '💰');
+      sfx.chest();
+      setTimeout(()=> sfx.fanfare(), 320);
+      confettiAt(kid.x, kid.y - 10, 44);
+      sparkAt(kid.x, kid.y, 18, '#FFE9A8');
+      shake = 8; flash = 0.7;
+      shout('<em>' + item.name.toUpperCase() + '!</em>', 2200, 4);
+      addGold(item.gold, kid.x, kid.y - 46, '#FFD23D');
+      const left = digsLeft(is);
+      if (left === 0){
+        const e = chart.get(is.id);
+        if (e) e.dugAll = true;
+        /* Nothing left to find here, so the seagull takes them back to the
+           boat without being asked. An island with all its treasure out of
+           the ground is the one place in the game where staying put has
+           nothing in it, and a five-year-old should not have to work out
+           that it is time to leave. */
+        leaveIn = 150;
+        setTimeout(()=> shout('All dug up! <em>Back to the boat</em> 🚤', 2000, 2), 900);
+      }
+    } else {
+      const item = pick(SANDY);
+      showFind(item);
+      sfx.coin();
+      sparkAt(kid.x, kid.y, 6, '#FFF0C4');
+      addGold(item.gold, kid.x, kid.y - 34, '#FFF0C4', true);
+    }
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * the net
+   * ================================================================== */
+  function castPress(){
+    if (casting){
+      // hauling in: every tap pulls it in quicker, exactly like the spade
+      castT += TUNE.castTap;
+      sfx.haul();
+      return;
+    }
+    casting = true;
+    castT = 0;
+    const ahead = 54;
+    castX = boat.x + Math.cos(boat.dir)*ahead;
+    castY = boat.y + Math.sin(boat.dir)*ahead;
+    sfx.cast();
+    puffAt(castX, castY, 4);
+  }
+
+  function updateCast(dt){
+    if (!casting) return;
+    castT += dt;
+    if (castT >= TUNE.castLen) finishCast();
+  }
+
+  function finishCast(){
+    casting = false;
+    castT = 0;
+    sfx.splash();
+    puffAt(castX, castY, 5);
+
+    /* What the net comes up with, best thing first. A glint on the water is
+       a promise, so it is always kept; a shoal always gives a fish. Only the
+       open, empty sea rolls the ordinary table — and even that pays. */
+    let item = null, kind = 'junk';
+    let glint = null, gd = Infinity;
+    for (const c of cellsNear(1200)){
+      for (const g of c.glints){
+        if (taken.has(g.id)) continue;
+        const d = Math.hypot(g.x - castX, g.y - castY);
+        if (d < TUNE.netRange && d < gd){ gd = d; glint = g; }
+      }
+    }
+    let shoal = null;
+    for (const c of cellsNear(1200)){
+      for (const s of c.shoals){
+        if (Math.hypot(s.x - castX, s.y - castY) < TUNE.netRange + 40){ shoal = s; break; }
+      }
+      if (shoal) break;
+    }
+    const floater = critters.find(c => (c.kind === 'crate' || c.kind === 'bottle') &&
+                                       Math.hypot(c.x - castX, c.y - castY) < TUNE.netRange);
+
+    if (floater){
+      floater.life = 0;
+      if (floater.kind === 'bottle'){ openBottle(); return; }
+      item = pick(TREASURE); kind = 'treasure';
+    } else if (glint){
+      taken.add(glint.id);
+      item = pick(TREASURE); kind = 'treasure';
+      sparkAt(glint.x, glint.y, 14, '#FFE9A8');
+    } else if (shoal){
+      item = pick(CATCH); kind = 'catch';
+    } else {
+      const roll = Math.random();
+      const rich = zoneAt(boat.x, boat.y) === ZONES[7] ? 0.12 : 0;
+      if (roll < 0.10 + rich){ item = pick(TREASURE); kind = 'treasure'; }
+      else if (roll < 0.58 + rich){ item = pick(CATCH); kind = 'catch'; }
+      else { item = pick(JUNK); kind = 'junk'; }
+    }
+
+    showFind(item);
+    if (kind === 'treasure'){
+      sfx.gem();
+      confettiAt(castX, castY, 14);
+      shout('<em>' + item.name + '!</em>', 1500, 2);
+    } else if (kind === 'catch'){
+      sfx.fish();
+      sparkAt(castX, castY, 6, '#CFF7FF');
+    } else {
+      sfx.junk();
+      pop(castX, castY - 30, item.icon, '#FFFFFF', 30);
+    }
+    addGold(item.gold, castX, castY - 40, kind === 'treasure' ? '#FFD23D' : '#CFF7FF');
+  }
+
+  function openBottle(){
+    sfx.pop();
+    confettiAt(castX, castY, 16);
+    // the note inside points at the nearest island nobody has dug out yet
+    let target = null, td = Infinity;
+    for (const e of chart.values()){
+      if (e.dugAll) continue;
+      const d = Math.hypot(e.x - boat.x, e.y - boat.y);
+      if (d > 200 && d < td){ td = d; target = e; }
+    }
+    if (!target){
+      for (const is of nearIslands(boat.x, boat.y, 2600)){
+        const e = chart.get(is.id);
+        if (!e) continue;                 // only somewhere the chart can mark
+        const d = Math.hypot(is.x - boat.x, is.y - boat.y);
+        if (d > 200 && d < td){ td = d; target = e; }
+      }
+    }
+    if (target){
+      marked = target.id;
+      shout('<em>A TREASURE MAP!</em><br>X marks ' + target.name, 2600, 3);
+    } else {
+      shout('<em>A TREASURE MAP!</em>', 2000, 3);
+    }
+    showFind({ icon:'📜', name:'Treasure Map' });
+    addGold(12, castX, castY - 40, '#FFD23D');
+  }
+
+  /* ================================================================== *
+   * things that happen while you sail
+   *
+   * Same rule as the living room and the tower: every one of these is a
+   * gift. Not one of them may slow the boat down, take gold away, or make a
+   * find rarer. Where something could get in the way it is a friend instead
+   * — the whale lifts you, the monster tows you, the pirates hand over a
+   * chest and sail on.
+   * ================================================================== */
+  const EV_GAP_MIN = 520, EV_GAP_MAX = 980;
+
+  function fireEvent(){
+    evIn = rnd(EV_GAP_MIN, EV_GAP_MAX);
+    if (mode === 'shore') return;             // the sea waits until you sail
+    const pool = [];
+    const add = (id, n) => { for (let i = 0; i < n; i++) pool.push(id); };
+    add('dolphins', 5); add('gulls', 4); add('whale', 3);
+    add('bottle', 4); add('crate', 4); add('monster', 3); add('pirates', 3);
+    const id = pool[(Math.random()*pool.length)|0];
+
+    if (id === 'dolphins') sendDolphins(null);
+    else if (id === 'gulls'){
+      for (let i = 0; i < rint(2,4); i++){
+        critters.push({ kind:'gull', x: boat.x + rnd(-260,260), y: boat.y + rnd(-200,200),
+                        ph: rnd(0,6.3), life: rnd(600,900), drop: 240 + i*90, sp: rnd(.5,1) });
+      }
+      shout('Seagulls!', 1500, 1);
+      sfx.gull();
+    } else if (id === 'whale'){
+      critters.push({ kind:'whale', x: boat.x + rnd(-320,320), y: boat.y + rnd(-240,240),
+                      ph: 0, life: 760, dir: rnd(0,6.3), spout: 0, given: false });
+      shout('A whale!', 1600, 1);
+      sfx.whale();
+    } else if (id === 'bottle'){
+      critters.push({ kind:'bottle', x: boat.x + rnd(-300,300), y: boat.y + rnd(-220,220),
+                      ph: rnd(0,6.3), life: 1100 });
+      shout('A bottle! <em>Net it!</em>', 1700, 1);
+      sfx.pop();
+    } else if (id === 'crate'){
+      for (let i = 0; i < rint(1,3); i++){
+        critters.push({ kind:'crate', x: boat.x + rnd(-320,320), y: boat.y + rnd(-240,240),
+                        ph: rnd(0,6.3), life: 1100 });
+      }
+      shout('Crates in the water!', 1600, 1);
+      sfx.pop();
+    } else if (id === 'monster'){
+      critters.push({ kind:'monster', x: boat.x + rnd(-360,360), y: boat.y + rnd(-260,260),
+                      ph: 0, life: 900, dir: rnd(0,6.3), given: false });
+      shout('<em>SEA MONSTER!</em><br>He is friendly', 2000, 2);
+      sfx.monster();
+    } else {
+      critters.push({ kind:'ship', x: boat.x + rnd(-420,420), y: boat.y + rnd(-300,300),
+                      ph: 0, life: 900, dir: rnd(0,6.3), given: false });
+      shout('Friendly pirates!', 1700, 1);
+      sfx.horn();
+    }
+  }
+
+  function sendDolphins(target){
+    const n = rint(2,4);
+    for (let i = 0; i < n; i++){
+      critters.push({ kind:'dolphin', x: boat.x + rnd(-180,180), y: boat.y + rnd(-140,140),
+                      ph: rnd(0,6.3), life: 720, escort: true, off: i*24 - 36 });
+    }
+    if (target){
+      tow = { tx: target.x, ty: target.y, life: 260 };
+      shout('Dolphins! <em>Follow them!</em>', 2000, 2);
+    } else {
+      shout('Dolphins!', 1500, 1);
+    }
+    sfx.dolphin();
+  }
+
+  /* The backstop, and the reason nobody ever needs fetching by an adult. Eight
+     seconds with nothing found — no gold, no island, no landing — and help
+     arrives whether the event clock wanted it or not. `stuck` counts frames
+     since the last thing that happened, not frames since an input: the common
+     case is a child steering happily round empty water, and asking "are they
+     pressing anything?" misses that completely. */
+  function rescue(){
+    rescueCd = 900;
+    if (mode === 'shore'){
+      const is = kid.isle;
+      if (!is || ferry) return;
+      let goX = boat.x, goY = boat.y, word = 'Back to the boat!';
+      const left = is.digs.map((d,i) => ({ d, i })).filter(o => !dug.has(is.id + '#' + o.i));
+      /* The first time, straight to the X — that is where the fun is. Every
+         time after that, back to the boat instead: a child who is not
+         digging is a child who has finished with this island, and being
+         ferried to the same X for ever would be a cage with a view. */
+      if (left.length && landRescues === 0){
+        const o = left[0];
+        goX = o.d.x; goY = o.d.y; word = 'This way to the X!';
+      }
+      landRescues++;
+      ferry = { fromX: kid.x, fromY: kid.y, toX: goX, toY: goY, t: 0, dur: 70 };
+      critters.push({ kind:'gull', x: kid.x, y: kid.y - 34, ph: 0, life: 130, sp: 1, follow: true });
+      digging = false; digT = 0;
+      shout('<em>' + word + '</em>', 1800, 2);
+      sfx.gull();
+      return;
+    }
+    /* At sea the dolphins come and tow the boat somewhere worth being — and
+       somewhere NEW by preference. Towing to the nearest island with treasure
+       left in it sounds right and is not: for a child who never presses
+       anything it means being carried back to the island they were just
+       carried off, for ever, and the whole ocean stays unseen. */
+    let target = null, td = Infinity, rank = 9;
+    for (const e of chart.values()){
+      if (e.id === boat.leftIsle) continue;
+      const r = e.visited ? (e.dugAll ? 2 : 1) : 0;
+      const d = Math.hypot(e.x - boat.x, e.y - boat.y);
+      if (r < rank || (r === rank && d < td)){ rank = r; td = d; target = e; }
+    }
+    if (!target){
+      const near = nearIslands(boat.x, boat.y, 2200).filter(is => is.id !== boat.leftIsle);
+      if (near.length) target = near[0];
+    }
+    sendDolphins(target);
+  }
+
+  function updateCritters(dt){
+    for (const c of critters){
+      c.life -= dt;
+      c.ph += 0.08*dt;
+
+      if (c.kind === 'dolphin'){
+        // they swim to the boat and then keep station beside it, leaping
+        const dx = boat.x - c.x, dy = boat.y - c.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        const want = d > 90 ? 2.6 : 1.2;
+        c.x += dx/d*want*dt + Math.cos(c.ph)*0.5*dt;
+        c.y += dy/d*want*dt + Math.sin(c.ph)*0.5*dt;
+        if (Math.random() < 0.02*dt) sparkAt(c.x, c.y, 2, '#DFF6FF');
+      } else if (c.kind === 'gull'){
+        if (c.follow){
+          c.x = kid.x; c.y = kid.y - 34;
+          if (!ferry) c.life = Math.min(c.life, 30);
+        } else {
+          c.x += Math.cos(c.ph*0.6)*c.sp*1.6*dt;
+          c.y += Math.sin(c.ph*0.4)*c.sp*1.1*dt;
+          if (c.drop != null){
+            c.drop -= dt;
+            if (c.drop <= 0){
+              c.drop = null;
+              addGold(4, c.x, c.y, '#FFF0C4');
+              sparkAt(c.x, c.y, 8, '#FFE9A8');
+              sfx.coin();
+            }
+          }
+        }
+      } else if (c.kind === 'whale'){
+        c.x += Math.cos(c.dir)*0.5*dt;
+        c.y += Math.sin(c.dir)*0.5*dt;
+        c.spout = Math.max(0, c.spout - dt);
+        if (Math.random() < 0.012*dt){ c.spout = 40; sfx.whale(); }
+        if (!c.given && mode === 'sail' && Math.hypot(c.x - boat.x, c.y - boat.y) < 90){
+          c.given = true;
+          c.spout = 46;
+          shake = 7;
+          shout('<em>WHOOSH!</em>', 1500, 2);
+          confettiAt(boat.x, boat.y, 20);
+          addGold(18, boat.x, boat.y - 46, '#8FD8F5');
+          boat.sp = Math.max(boat.sp, TUNE.boatMax*1.3);
+        }
+      } else if (c.kind === 'monster'){
+        const dx = boat.x - c.x, dy = boat.y - c.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        c.x += dx/d*0.7*dt; c.y += dy/d*0.7*dt;
+        if (!c.given && mode === 'sail' && d < 96){
+          c.given = true;
+          shake = 10;
+          sfx.monster();
+          shout('<em>HE GAVE YOU A LIFT!</em>', 2000, 3);
+          confettiAt(boat.x, boat.y, 26);
+          const item = pick(TREASURE);
+          showFind(item);
+          addGold(item.gold + 10, boat.x, boat.y - 50, '#4FD16A');
+          tow = { tx: boat.x + Math.cos(boat.dir)*900, ty: boat.y + Math.sin(boat.dir)*900, life: 130 };
+        }
+      } else if (c.kind === 'ship'){
+        c.x += Math.cos(c.dir)*0.9*dt;
+        c.y += Math.sin(c.dir)*0.9*dt;
+        if (!c.given && mode === 'sail' && Math.hypot(c.x - boat.x, c.y - boat.y) < 150){
+          c.given = true;
+          sfx.horn();
+          shout('<em>A PRESENT!</em>', 1800, 2);
+          critters.push({ kind:'crate', x: c.x + rnd(-40,40), y: c.y + rnd(-40,40),
+                          ph: 0, life: 900 });
+          sparkAt(c.x, c.y, 10, '#FFE9A8');
+        }
+      } else if (c.kind === 'crate' || c.kind === 'bottle'){
+        c.x += Math.cos(c.ph*0.5)*0.25*dt;
+        c.y += Math.sin(c.ph*0.4)*0.25*dt;
+      }
+    }
+    critters = critters.filter(c => c.life > 0 &&
+      Math.hypot(c.x - boat.x, c.y - boat.y) < 2600);
+  }
+
+  /* ================================================================== *
+   * update
+   * ================================================================== */
+  function update(dt){
+    t += dt;
+    if (shake > 0) shake = Math.max(0, shake - dt);
+    if (flash > 0) flash = Math.max(0, flash - 0.05*dt);
+
+    if (state === 'play'){
+      if (leaveIn > 0 && mode === 'shore'){
+        leaveIn -= dt;
+        if (leaveIn <= 0 && !ferry){
+          ferry = { fromX: kid.x, fromY: kid.y, toX: boat.x, toY: boat.y, t: 0, dur: 60 };
+          critters.push({ kind:'gull', x: kid.x, y: kid.y - 34, ph: 0, life: 120, sp: 1, follow: true });
+          digging = false; digT = 0;
+          sfx.gull();
+        }
+      }
+
+      if (ferry){
+        ferry.t += dt;
+        const u = ease(ferry.t/ferry.dur);
+        kid.x = lerp(ferry.fromX, ferry.toX, u);
+        kid.y = lerp(ferry.fromY, ferry.toY, u);
+        if (ferry.t >= ferry.dur){ ferry = null; boardCd = 0; }
+      }
+
+      const steer = steering();
+      if (mode === 'sail'){ sail(dt, steer); updateCast(dt); }
+      else ashore(dt, steer);
+
+      growWorld();
+      chartNearby();
+      updateCritters(dt);
+
+      if (evIn > 0) evIn -= dt; else fireEvent();
+      if (rescueCd > 0) rescueCd -= dt;
+      stuck += dt;
+      if (stuck > TUNE.stuckMax && rescueCd <= 0 && !tow) rescue();
+
+      const z = zoneAt(boat.x, boat.y);
+      if (z !== lastZone){
+        lastZone = z;
+        if (mode === 'sail'){
+          jukebox.play(z.track);
+          shout(z.icon + ' <em>' + z.name + '</em>', 2000, 3);
+          sfx.bell();
+        }
+        updateHud();
+      }
+    }
+
+    updateBits(dt);
+
+    const fx = mode === 'shore' ? (kid.x + boat.x)/2 : boat.x;
+    const fy = mode === 'shore' ? (kid.y + boat.y)/2 : boat.y;
+    camX += ((fx - W/2) - camX)*TUNE.camEase*dt;
+    camY += ((fy - H/2) - camY)*TUNE.camEase*dt;
+
+    if (Math.floor(t) % 8 === 0) updateHud();
+  }
+
+  function updateBits(dt){
+    for (const s of sparks){ s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 0.04*dt; s.life -= dt; }
+    sparks = sparks.filter(s => s.life > 0);
+    for (const q of puffs){ q.x += q.vx*dt; q.y += q.vy*dt; q.s += 0.22*dt; q.life -= dt; }
+    puffs = puffs.filter(q => q.life > 0);
+    for (const c of confetti){
+      c.x += c.vx*dt; c.y += c.vy*dt; c.vy += 0.13*dt; c.r += c.spin*dt; c.life -= dt;
+    }
+    confetti = confetti.filter(c => c.life > 0);
+    for (const q of pops){ q.y -= 0.7*dt; q.life -= dt; }
+    pops = pops.filter(q => q.life > 0);
+    for (const w of wake){ w.r += 0.45*dt; w.life -= dt; }
+    wake = wake.filter(w => w.life > 0);
+    if (confetti.length > 260) confetti.splice(0, confetti.length - 260);
+    if (wake.length > 120) wake.splice(0, wake.length - 120);
+  }
+
+  /* ================================================================== *
+   * art — the sea
+   * ================================================================== */
+  const sx = wx => wx - camX;
+  const sy = wy => wy - camY;
+
+  function drawSea(){
+    const z = zoneAt(boat.x, boat.y);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, z.deep);
+    g.addColorStop(1, mix(z.deep, z.shallow, 0.35));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    /* Wave dashes on a world-space grid, so they slide past the boat rather
+       than swimming with it. Sixty-odd strokes a frame — cheap, and it is
+       the single thing that makes the sea read as moving at all. */
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.lineCap = 'round';
+    const step = 74;
+    const x0 = Math.floor(camX/step)*step, y0 = Math.floor(camY/step)*step;
+    for (let wy = y0 - step; wy < camY + H + step; wy += step){
+      for (let wx = x0 - step; wx < camX + W + step; wx += step){
+        const ph = (wx*0.013 + wy*0.021 + t*0.035);
+        const a = 0.09 + 0.17*Math.sin(ph);
+        if (a <= 0.02) continue;
+        const px = sx(wx + Math.sin(ph*0.7)*16), py = sy(wy + Math.cos(ph*0.5)*10);
+        const w = 12 + 6*Math.sin(ph*1.3);
+        ctx.globalAlpha = a;
+        ctx.lineWidth = 2 + a*3;
+        ctx.beginPath();
+        ctx.moveTo(px - w, py);
+        ctx.quadraticCurveTo(px, py - 6, px + w, py);
+        ctx.stroke();
+      }
+    }
+    // and a slower, fatter swell underneath, so the sea has two speeds in it
+    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    ctx.lineWidth = 9;
+    const big = 210;
+    const bx = Math.floor(camX/big)*big, by = Math.floor(camY/big)*big;
+    for (let wy = by - big; wy < camY + H + big; wy += big){
+      for (let wx = bx - big; wx < camX + W + big; wx += big){
+        const ph = (wx*0.004 + wy*0.006 + t*0.012);
+        const a = 0.04 + 0.05*Math.sin(ph);
+        if (a <= 0.01) continue;
+        ctx.globalAlpha = a;
+        ctx.beginPath();
+        const px = sx(wx + Math.sin(ph)*40), py = sy(wy);
+        ctx.moveTo(px - 46, py);
+        ctx.quadraticCurveTo(px, py - 14, px + 46, py);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawShallows(){
+    // a paler ring of water around every island, so land reads from far off
+    for (const c of cellsNear(1400)){
+      if (!c.isle) continue;
+      const is = c.isle;
+      const px = sx(is.x), py = sy(is.y);
+      const rr = is.r*1.26 + 70;
+      if (px < -rr - 200 || px > W + rr + 200 || py < -rr - 200 || py > H + rr + 200) continue;
+      const g = ctx.createRadialGradient(px, py, Math.max(1, is.r*0.6), px, py, rr);
+      g.addColorStop(0, is.zone.shallow);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(px, py, rr, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function islandPath(is, grow){
+    const px = sx(is.x), py = sy(is.y);
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++){
+      const a = i/40*TAU;
+      const rr = landRadius(is, a) + (grow || 0);
+      const x = px + Math.cos(a)*rr, y = py + Math.sin(a)*rr;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  function drawIsland(is){
+    const px = sx(is.x), py = sy(is.y);
+    const rr = is.r*1.3;
+    if (px < -rr - 60 || px > W + rr + 60 || py < -rr - 60 || py > H + rr + 60) return;
+    const z = is.zone;
+
+    // surf
+    ctx.fillStyle = z.foam;
+    ctx.globalAlpha = 0.55 + 0.18*Math.sin(t*0.06 + is.w0);
+    islandPath(is, 9 + 3*Math.sin(t*0.05 + is.w1)); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // sand
+    ctx.fillStyle = z.sand;
+    islandPath(is, 0); ctx.fill();
+    ctx.fillStyle = z.sand2;
+    ctx.globalAlpha = 0.5;
+    islandPath(is, -is.r*0.30); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // the greenery in the middle, whatever this zone grows
+    if (is.kind !== 'ice' && is.kind !== 'volcano'){
+      ctx.fillStyle = z.tree;
+      ctx.globalAlpha = 0.55;
+      islandPath(is, -is.r*0.52); ctx.fill();
+      ctx.globalAlpha = 1;
+    } else if (is.kind === 'volcano'){
+      ctx.fillStyle = '#2A1E1D';
+      islandPath(is, -is.r*0.52); ctx.fill();
+    }
+
+    for (const rk of is.rocks){
+      ctx.fillStyle = z.rock;
+      ellipse(sx(rk.x), sy(rk.y), rk.s, rk.s*0.72); ctx.fill();
+    }
+    for (const tr of is.trees) drawTree(is, tr);
+
+    if (is.kind === 'home') drawHut(is);
+
+    // the X marks — a dashed cross that shimmers, and a filled hole once dug
+    is.digs.forEach((d, i) => {
+      const dx = sx(d.x), dy = sy(d.y);
+      if (dug.has(is.id + '#' + i)){
+        ctx.fillStyle = 'rgba(90,66,34,.55)';
+        ellipse(dx, dy, 16, 10); ctx.fill();
+        ctx.fillStyle = z.sand2;
+        ellipse(dx + 15, dy + 5, 9, 5); ctx.fill();
+        return;
+      }
+      const pulse = 0.6 + 0.4*Math.sin(t*0.08 + d.ph);
+      ctx.strokeStyle = 'rgba(190,40,30,' + (0.55 + pulse*0.4) + ')';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(dx - 13, dy - 9); ctx.lineTo(dx + 13, dy + 9);
+      ctx.moveTo(dx + 13, dy - 9); ctx.lineTo(dx - 13, dy + 9);
+      ctx.stroke();
+      if (pulse > 0.9) sparkTiny(dx, dy);
+    });
+
+    // a flag once every X on it has been dug up
+    const e = chart.get(is.id);
+    if (e && e.dugAll) drawFlag(px, py - is.r*0.55);
+  }
+
+  function sparkTiny(x, y){
+    ctx.fillStyle = 'rgba(255,240,190,.9)';
+    star(x + Math.sin(t*0.2)*10, y - 14, 4, 4); ctx.fill();
+  }
+
+  function drawTree(is, tr){
+    const x = sx(tr.x), y = sy(tr.y), s = tr.s;
+    const sway = Math.sin(t*0.04 + tr.ph)*3;
+    const z = is.zone;
+    if (is.kind === 'ice'){
+      ctx.fillStyle = '#F2FBFF';
+      ctx.beginPath();
+      ctx.moveTo(x, y - 26*s); ctx.lineTo(x + 13*s, y + 4*s); ctx.lineTo(x - 13*s, y + 4*s);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#BFE6F6';
+      ctx.beginPath();
+      ctx.moveTo(x, y - 26*s); ctx.lineTo(x + 5*s, y + 4*s); ctx.lineTo(x - 3*s, y + 4*s);
+      ctx.closePath(); ctx.fill();
+      return;
+    }
+    if (is.kind === 'volcano'){
+      ctx.fillStyle = '#3A2A28';
+      ctx.beginPath();
+      ctx.moveTo(x, y - 30*s); ctx.lineTo(x + 17*s, y + 6*s); ctx.lineTo(x - 17*s, y + 6*s);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#F0453A';
+      ellipse(x, y - 29*s, 6*s, 3*s); ctx.fill();
+      ctx.fillStyle = 'rgba(255,150,90,' + (0.2 + 0.16*Math.sin(t*0.05 + tr.ph)).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(x, y - 40*s, 9*s, 0, TAU); ctx.fill();
+      return;
+    }
+    if (is.kind === 'pine'){
+      ctx.fillStyle = '#6B4A2C';
+      ctx.fillRect(x - 2*s, y - 10*s, 4*s, 14*s);
+      ctx.fillStyle = z.tree;
+      for (let i = 0; i < 3; i++){
+        const yy = y - 10*s - i*9*s;
+        ctx.beginPath();
+        ctx.moveTo(x + sway*0.3, yy - 14*s);
+        ctx.lineTo(x + 12*s - i*2*s, yy + 2*s);
+        ctx.lineTo(x - 12*s + i*2*s, yy + 2*s);
+        ctx.closePath(); ctx.fill();
+      }
+      return;
+    }
+    // palm-ish: a leaning trunk with a crown of fronds
+    ctx.strokeStyle = '#8A5A32';
+    ctx.lineWidth = 4.5*s;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y + 4*s);
+    ctx.quadraticCurveTo(x + sway*0.6, y - 12*s, x + sway, y - 26*s);
+    ctx.stroke();
+    ctx.fillStyle = z.tree;
+    for (let i = 0; i < 5; i++){
+      const a = -Math.PI/2 + (i - 2)*0.62;
+      const ex = x + sway + Math.cos(a)*20*s, ey = y - 26*s + Math.sin(a)*13*s;
+      ctx.beginPath();
+      ctx.moveTo(x + sway, y - 26*s);
+      ctx.quadraticCurveTo((x + sway + ex)/2, (y - 26*s + ey)/2 - 8*s, ex, ey);
+      ctx.quadraticCurveTo((x + sway + ex)/2, (y - 26*s + ey)/2 + 2*s, x + sway, y - 26*s);
+      ctx.fill();
+    }
+    if (is.kind === 'coral' || is.kind === 'gold'){
+      ctx.fillStyle = is.kind === 'gold' ? '#FFD23D' : '#FF6FA8';
+      ctx.beginPath(); ctx.arc(x + sway + 6*s, y - 22*s, 3.4*s, 0, TAU); ctx.fill();
+    }
+  }
+
+  function drawHut(is){
+    const x = sx(is.x), y = sy(is.y) - 6;
+    ctx.fillStyle = '#B07B45';
+    roundRect(x - 20, y - 6, 40, 26, 4); ctx.fill();
+    ctx.fillStyle = '#7C4A2A';
+    ctx.beginPath();
+    ctx.moveTo(x - 27, y - 5); ctx.lineTo(x, y - 26); ctx.lineTo(x + 27, y - 5);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3A2718';
+    roundRect(x - 6, y + 6, 12, 14, 2); ctx.fill();
+    ctx.fillStyle = '#FFD23D';
+    ctx.beginPath(); ctx.arc(x + 12, y + 4, 3.4, 0, TAU); ctx.fill();
+  }
+
+  function drawFlag(x, y){
+    ctx.strokeStyle = '#F3EBD8';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 34); ctx.stroke();
+    ctx.fillStyle = '#F0453A';
+    const w = 22 + Math.sin(t*0.12)*3;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 34); ctx.lineTo(x + w, y - 28); ctx.lineTo(x, y - 21);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawWater(){
+    for (const c of cellsNear(1300)){
+      if (c.pool) drawWhirlpool(c.pool);
+      for (const g of c.glints){
+        if (taken.has(g.id)) continue;
+        const x = sx(g.x), y = sy(g.y);
+        if (x < -40 || x > W + 40 || y < -40 || y > H + 40) continue;
+        const a = 0.45 + 0.55*Math.abs(Math.sin(t*0.07 + g.ph));
+        ctx.fillStyle = 'rgba(255,236,160,' + a.toFixed(3) + ')';
+        star(x, y, 8 + 3*Math.sin(t*0.1 + g.ph), 4); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,' + (a*0.7).toFixed(3) + ')';
+        star(x, y, 3.6, 4); ctx.fill();
+      }
+      for (const s of c.shoals) drawShoal(s);
+    }
+  }
+
+  function drawWhirlpool(p){
+    const x = sx(p.x), y = sy(p.y);
+    if (x < -p.r - 60 || x > W + p.r + 60 || y < -p.r - 60 || y > H + p.r + 60) return;
+    const g = ctx.createRadialGradient(x, y, Math.max(1, p.r*0.12), x, y, p.r);
+    g.addColorStop(0, 'rgba(6,26,44,.92)');
+    g.addColorStop(0.6, 'rgba(30,90,140,.5)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, p.r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.6)';
+    ctx.lineWidth = 3;
+    for (let s = 0; s < 3; s++){
+      ctx.beginPath();
+      for (let i = 0; i <= 26; i++){
+        const u = i/26;
+        const a = p.ph + t*0.05 + s*2.1 + u*5.4;
+        const rr = p.r*(0.15 + u*0.82);
+        const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr*0.9;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.globalAlpha = 0.5;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawShoal(s){
+    const cx = sx(s.x + Math.cos(s.dir + Math.sin(t*0.01 + s.ph))*30);
+    const cy = sy(s.y + Math.sin(s.dir + Math.sin(t*0.01 + s.ph))*30);
+    if (cx < -80 || cx > W + 80 || cy < -80 || cy > H + 80) return;
+    ctx.fillStyle = 'rgba(20,50,80,.42)';
+    for (let i = 0; i < s.n; i++){
+      const a = s.ph + i*1.7 + t*0.02;
+      const x = cx + Math.cos(a)*(14 + i*3.2), y = cy + Math.sin(a*1.3)*(10 + i*2.1);
+      ctx.beginPath();
+      ctx.moveTo(x + 6, y);
+      ctx.lineTo(x - 4, y - 3.4);
+      ctx.lineTo(x - 4, y + 3.4);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  /* ================================================================== *
+   * art — the boat, the kids, the sea life
+   * ================================================================== */
+  function drawWake(){
+    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    for (const w of wake){
+      const a = w.life/w.max;
+      ctx.globalAlpha = a*0.55;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sx(w.x), sy(w.y), w.r, 0, TAU); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBoat(){
+    const x = sx(boat.x), y = sy(boat.y);
+    const bob = Math.sin(boat.bob*0.08)*2;
+    ctx.save();
+    ctx.translate(x, y + bob);
+    ctx.rotate(boat.dir + (boat.spin > 0 ? boat.spin*0.16 : 0));
+
+    // shadow on the water
+    ctx.fillStyle = 'rgba(0,30,50,.28)';
+    ellipse(0, 6, 30, 15); ctx.fill();
+
+    // hull, nose to the right
+    ctx.fillStyle = '#C8763C';
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.quadraticCurveTo(12, 15, -20, 13);
+    ctx.quadraticCurveTo(-27, 0, -20, -13);
+    ctx.quadraticCurveTo(12, -15, 30, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#8C4E24';
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.quadraticCurveTo(12, 8, -20, 7);
+    ctx.quadraticCurveTo(-24, 0, -20, -7);
+    ctx.quadraticCurveTo(12, -8, 30, 0);
+    ctx.closePath(); ctx.fill();
+
+    // little wheelhouse and a mast with the net hanging off it
+    ctx.fillStyle = '#F2E4C8';
+    roundRect(-14, -9, 15, 18, 4); ctx.fill();
+    ctx.fillStyle = '#3DA9F5';
+    roundRect(-11, -6, 9, 12, 3); ctx.fill();
+    ctx.strokeStyle = '#6B4A2C';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(4, -1); ctx.stroke();
+    ctx.restore();
+
+    // the two of them on deck, drawn upright so faces stay the right way up
+    const other = KIDS[(kidIdx + 1) % KIDS.length];
+    if (mode === 'sail'){
+      drawKid(x + 6, y + bob - 6, KIDOF(), 0.85, 1);
+      drawKid(x - 12, y + bob - 4, other, 0.7, -1);
+    } else {
+      drawKid(x - 2, y + bob - 5, other, 0.75, 1);
+    }
+  }
+
+  function drawKid(x, y, k, s, face){
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(face < 0 ? -s : s, s);
+    // legs
+    ctx.fillStyle = k.legs;
+    roundRect(-6, 4, 5, 11, 2); ctx.fill();
+    roundRect(1, 4, 5, 11, 2); ctx.fill();
+    // body
+    ctx.fillStyle = k.shirt;
+    roundRect(-8, -8, 16, 15, 5); ctx.fill();
+    ctx.fillStyle = k.shirt2;
+    roundRect(-8, 0, 16, 7, 3); ctx.fill();
+    // head
+    ctx.fillStyle = k.skin;
+    ctx.beginPath(); ctx.arc(0, -15, 9, 0, TAU); ctx.fill();
+    ctx.fillStyle = k.hair;
+    ctx.beginPath(); ctx.arc(0, -17, 9.4, Math.PI, 0); ctx.fill();
+    // sailor's hat
+    ctx.fillStyle = k.hat;
+    ctx.beginPath(); ctx.arc(0, -21, 8, Math.PI, 0); ctx.fill();
+    ctx.fillRect(-10, -22, 20, 3);
+    // face
+    ctx.fillStyle = '#22202C';
+    ctx.beginPath(); ctx.arc(3.2, -14.5, 1.5, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(-2.2, -14.5, 1.5, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#22202C';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(0.5, -11.5, 3.2, 0.25, Math.PI - 0.25); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawWalker(){
+    const bounce = Math.abs(Math.sin(kid.walk*0.22))*3;
+    const x = sx(kid.x), y = sy(kid.y) - bounce;
+    ctx.fillStyle = 'rgba(90,70,30,.25)';
+    ellipse(x, sy(kid.y) + 14, 12, 5); ctx.fill();
+    drawKid(x, y, KIDOF(), 1, kid.face);
+    if (digging){
+      // the spade, swinging
+      const swing = Math.sin(digT*0.4)*0.9;
+      ctx.save();
+      ctx.translate(x + kid.face*12, y + 2);
+      ctx.rotate(swing*kid.face);
+      ctx.strokeStyle = '#8A5A32';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, 8); ctx.stroke();
+      ctx.fillStyle = '#B9C2CC';
+      roundRect(-5, 7, 10, 9, 2); ctx.fill();
+      ctx.restore();
+      // how far along the hole is
+      const u = clamp(digT/TUNE.digLen, 0, 1);
+      ctx.fillStyle = 'rgba(0,0,0,.35)';
+      roundRect(x - 22, y - 40, 44, 7, 3); ctx.fill();
+      ctx.fillStyle = '#FFD23D';
+      roundRect(x - 20, y - 38.5, 40*u, 4, 2); ctx.fill();
+    }
+  }
+
+  function drawNet(){
+    if (!casting) return;
+    const u = clamp(castT/TUNE.castLen, 0, 1);
+    const bx = sx(boat.x), by = sy(boat.y);
+    const nx = lerp(bx, sx(castX), Math.min(1, u*2.4));
+    const ny = lerp(by, sy(castY), Math.min(1, u*2.4));
+    ctx.strokeStyle = 'rgba(255,255,255,.75)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(nx, ny); ctx.stroke();
+    const r = 10 + 22*Math.sin(u*Math.PI);
+    ctx.strokeStyle = 'rgba(240,255,255,.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(nx, ny, r, 0, TAU); ctx.stroke();
+    for (let i = 0; i < 6; i++){
+      const a = i/6*TAU;
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(nx + Math.cos(a)*r, ny + Math.sin(a)*r);
+      ctx.globalAlpha = 0.45;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // how far along the haul is, so mashing visibly helps
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    roundRect(bx - 24, by - 48, 48, 7, 3); ctx.fill();
+    ctx.fillStyle = '#8FD8F5';
+    roundRect(bx - 22, by - 46.5, 44*u, 4, 2); ctx.fill();
+  }
+
+  function drawCritters(){
+    for (const c of critters){
+      const x = sx(c.x), y = sy(c.y);
+      if (x < -160 || x > W + 160 || y < -160 || y > H + 160) continue;
+      if (c.kind === 'dolphin'){
+        const arc = Math.sin(c.ph*1.2);
+        ctx.fillStyle = 'rgba(0,30,50,.22)';
+        ellipse(x, y + 8, 18, 6); ctx.fill();
+        ctx.fillStyle = '#7FB6D8';
+        ctx.save();
+        ctx.translate(x, y - Math.max(0, arc)*12);
+        ctx.rotate(-arc*0.5);
+        ctx.beginPath();
+        ctx.moveTo(18, 0);
+        ctx.quadraticCurveTo(4, -9, -14, -3);
+        ctx.quadraticCurveTo(-20, 0, -14, 4);
+        ctx.quadraticCurveTo(4, 8, 18, 0);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#5C93B8';
+        ctx.beginPath();
+        ctx.moveTo(0, -6); ctx.lineTo(6, -14); ctx.lineTo(8, -5);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#22202C';
+        ctx.beginPath(); ctx.arc(11, -2, 1.5, 0, TAU); ctx.fill();
+        ctx.restore();
+      } else if (c.kind === 'gull'){
+        const flap = Math.sin(c.ph*2.4)*8;
+        ctx.fillStyle = 'rgba(0,30,50,.18)';
+        ellipse(x, y + 22, 10, 4); ctx.fill();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 3.4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x - 14, y + flap*0.4);
+        ctx.quadraticCurveTo(x - 6, y - 6, x, y);
+        ctx.quadraticCurveTo(x + 6, y - 6, x + 14, y + flap*0.4);
+        ctx.stroke();
+        ctx.fillStyle = '#FFD23D';
+        ctx.beginPath(); ctx.arc(x, y + 1, 2.6, 0, TAU); ctx.fill();
+      } else if (c.kind === 'whale'){
+        ctx.fillStyle = 'rgba(0,30,50,.24)';
+        ellipse(x, y + 14, 58, 18); ctx.fill();
+        ctx.fillStyle = '#3E6F9E';
+        ellipse(x, y, 52, 22); ctx.fill();
+        ctx.fillStyle = '#5C8FBE';
+        ellipse(x - 6, y + 8, 38, 11); ctx.fill();
+        ctx.fillStyle = '#3E6F9E';
+        ctx.beginPath();
+        ctx.moveTo(x + 46, y - 2); ctx.lineTo(x + 68, y - 16); ctx.lineTo(x + 66, y + 8);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#22202C';
+        ctx.beginPath(); ctx.arc(x - 34, y - 4, 3, 0, TAU); ctx.fill();
+        if (c.spout > 0){
+          ctx.strokeStyle = 'rgba(255,255,255,.8)';
+          ctx.lineWidth = 4;
+          const hh = 10 + c.spout;
+          ctx.beginPath();
+          ctx.moveTo(x - 18, y - 18); ctx.lineTo(x - 22, y - 18 - hh);
+          ctx.moveTo(x - 18, y - 18); ctx.lineTo(x - 12, y - 14 - hh);
+          ctx.stroke();
+        }
+      } else if (c.kind === 'monster'){
+        ctx.fillStyle = 'rgba(0,30,50,.24)';
+        ellipse(x, y + 18, 62, 16); ctx.fill();
+        ctx.fillStyle = '#4FA85E';
+        for (let i = 0; i < 3; i++){
+          const hx = x - 20 - i*30, hy = y + Math.sin(c.ph + i)*5;
+          ctx.beginPath(); ctx.arc(hx, hy, 15 - i*2, Math.PI, 0); ctx.fill();
+        }
+        ctx.fillStyle = '#57BB69';
+        ellipse(x + 12, y - 12, 24, 19); ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath(); ctx.arc(x + 20, y - 18, 7, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 4, y - 19, 6, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#22202C';
+        ctx.beginPath(); ctx.arc(x + 22, y - 18, 3.2, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 6, y - 19, 2.8, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#2C6B39';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath(); ctx.arc(x + 14, y - 4, 8, 0.2, Math.PI - 0.2); ctx.stroke();
+      } else if (c.kind === 'ship'){
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(c.dir);
+        ctx.fillStyle = 'rgba(0,30,50,.24)';
+        ellipse(0, 10, 44, 14); ctx.fill();
+        ctx.fillStyle = '#6B4A2C';
+        ctx.beginPath();
+        ctx.moveTo(42, 0);
+        ctx.quadraticCurveTo(16, 20, -30, 17);
+        ctx.quadraticCurveTo(-38, 0, -30, -17);
+        ctx.quadraticCurveTo(16, -20, 42, 0);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#F3EBD8';
+        ctx.beginPath();
+        ctx.moveTo(-2, -6); ctx.lineTo(-2, -40); ctx.lineTo(24, -18);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#22202C';
+        ctx.beginPath(); ctx.arc(6, -30, 5, 0, TAU); ctx.fill();
+        ctx.restore();
+      } else if (c.kind === 'crate'){
+        const bobY = Math.sin(c.ph)*3;
+        ctx.fillStyle = 'rgba(0,30,50,.24)';
+        ellipse(x, y + 12, 18, 6); ctx.fill();
+        ctx.fillStyle = '#B07B45';
+        roundRect(x - 15, y - 14 + bobY, 30, 26, 4); ctx.fill();
+        ctx.strokeStyle = '#7C4A2A';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - 15, y - 1 + bobY); ctx.lineTo(x + 15, y - 1 + bobY);
+        ctx.moveTo(x, y - 14 + bobY); ctx.lineTo(x, y + 12 + bobY);
+        ctx.stroke();
+      } else if (c.kind === 'bottle'){
+        const bobY = Math.sin(c.ph)*3;
+        ctx.fillStyle = 'rgba(0,30,50,.2)';
+        ellipse(x, y + 10, 13, 5); ctx.fill();
+        ctx.fillStyle = 'rgba(140,220,180,.9)';
+        roundRect(x - 16, y - 6 + bobY, 32, 12, 6); ctx.fill();
+        ctx.fillStyle = '#F3EBD8';
+        roundRect(x - 6, y - 4 + bobY, 12, 8, 2); ctx.fill();
+        ctx.fillStyle = '#C8763C';
+        roundRect(x + 13, y - 4 + bobY, 6, 8, 2); ctx.fill();
+      }
+    }
+  }
+
+  function drawBits(){
+    for (const q of puffs){
+      const a = q.life/q.max;
+      ctx.fillStyle = q.c + (a*0.55).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(sx(q.x), sy(q.y), q.s, 0, TAU); ctx.fill();
+    }
+    for (const s of sparks){
+      const a = s.life/s.max;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = s.c;
+      star(sx(s.x), sy(s.y), s.s, 4); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    for (const c of confetti){
+      ctx.save();
+      ctx.translate(sx(c.x), sy(c.y));
+      ctx.rotate(c.r);
+      ctx.globalAlpha = Math.min(1, c.life/40);
+      ctx.fillStyle = c.c;
+      ctx.fillRect(-4, -2.5, 8, 5);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    for (const q of pops){
+      const a = clamp(q.life/q.max*1.6, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.font = '800 ' + q.size + 'px "Trebuchet MS", sans-serif';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(6,24,40,.85)';
+      ctx.strokeText(q.text, sx(q.x), sy(q.y));
+      ctx.fillStyle = q.c;
+      ctx.fillText(q.text, sx(q.x), sy(q.y));
+      ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'left';
+  }
+
+  /* ================================================================== *
+   * the chart in the corner, and the arrow that points at the fun
+   * ================================================================== */
+  const MAP_X = 704, MAP_Y = 104, MAP_W = 180, MAP_H = 132;
+  const MAP_SPAN = 3000;              // how much sea fits in the little box
+
+  function drawChart(){
+    ctx.fillStyle = 'rgba(6,26,44,.55)';
+    roundRect(MAP_X, MAP_Y, MAP_W, MAP_H, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.32)';
+    ctx.lineWidth = 2;
+    roundRect(MAP_X, MAP_Y, MAP_W, MAP_H, 12); ctx.stroke();
+
+    ctx.save();
+    ctx.beginPath();
+    roundRect(MAP_X + 2, MAP_Y + 2, MAP_W - 4, MAP_H - 4, 10);
+    ctx.clip();
+
+    const cx = MAP_X + MAP_W/2, cy = MAP_Y + MAP_H/2;
+    const k = (MAP_W/2 - 6)/MAP_SPAN;
+
+    for (const e of chart.values()){
+      const px = cx + (e.x - boat.x)*k, py = cy + (e.y - boat.y)*k;
+      if (px < MAP_X - 10 || px > MAP_X + MAP_W + 10 || py < MAP_Y - 10 || py > MAP_Y + MAP_H + 10) continue;
+      const r = Math.max(2.5, e.r*k*1.6);
+      ctx.fillStyle = e.dugAll ? '#4FD16A' : e.visited ? '#F3DFA8' : 'rgba(243,223,168,.55)';
+      ctx.beginPath(); ctx.arc(px, py, r, 0, TAU); ctx.fill();
+      if (marked === e.id){
+        ctx.strokeStyle = '#F0453A';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(px - 5, py - 5); ctx.lineTo(px + 5, py + 5);
+        ctx.moveTo(px + 5, py - 5); ctx.lineTo(px - 5, py + 5);
+        ctx.stroke();
+      }
+    }
+
+    // the boat, always dead centre, nose showing which way it is pointing
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(boat.dir);
+    ctx.fillStyle = '#FFD23D';
+    ctx.beginPath();
+    ctx.moveTo(7, 0); ctx.lineTo(-5, 4.6); ctx.lineTo(-5, -4.6);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    ctx.font = '800 9px "Trebuchet MS", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOUR CHART', MAP_X + MAP_W/2, MAP_Y + MAP_H + 13);
+    ctx.textAlign = 'left';
+  }
+
+  /* An arrow round the edge of the screen pointing at whatever is worth
+     going to next: the X you are standing beside, the island the bottle
+     marked, or the nearest one nobody has dug out. A five-year-old should
+     never have to wonder where to go. */
+  function guideTarget(){
+    if (mode === 'shore' && kid.isle){
+      const is = kid.isle;
+      for (let i = 0; i < is.digs.length; i++){
+        if (!dug.has(is.id + '#' + i)) return { x: is.digs[i].x, y: is.digs[i].y, c:'#F0453A' };
+      }
+      return { x: boat.x, y: boat.y, c:'#FFD23D' };
+    }
+    if (marked && chart.has(marked)){
+      const e = chart.get(marked);
+      return { x: e.x, y: e.y, c:'#F0453A' };
+    }
+    let target = null, td = Infinity;
+    for (const e of chart.values()){
+      if (e.dugAll) continue;
+      const d = Math.hypot(e.x - boat.x, e.y - boat.y);
+      if (d < td){ td = d; target = e; }
+    }
+    return target ? { x: target.x, y: target.y, c:'#FFD23D' } : null;
+  }
+
+  function drawGuide(){
+    const g = guideTarget();
+    if (!g) return;
+    const fx = mode === 'shore' ? kid.x : boat.x;
+    const fy = mode === 'shore' ? kid.y : boat.y;
+    const px = sx(g.x), py = sy(g.y);
+    // already on screen and easy to see? then no arrow is needed
+    if (px > 60 && px < W - 60 && py > 60 && py < H - 60) return;
+    const a = Math.atan2(g.y - fy, g.x - fx);
+    const rx = W/2 - 54, ry = H/2 - 54;
+    const s = Math.min(rx/Math.max(0.001, Math.abs(Math.cos(a))),
+                       ry/Math.max(0.001, Math.abs(Math.sin(a))));
+    const ax = W/2 + Math.cos(a)*s, ay = H/2 + Math.sin(a)*s;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(a);
+    ctx.globalAlpha = 0.55 + 0.35*Math.abs(Math.sin(t*0.07));
+    ctx.fillStyle = g.c;
+    ctx.beginPath();
+    ctx.moveTo(17, 0); ctx.lineTo(-9, 11); ctx.lineTo(-4, 0); ctx.lineTo(-9, -11);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /* ================================================================== *
+   * render
+   * ================================================================== */
+  function render(){
+    ctx.save();
+    if (shake > 0) ctx.translate(rnd(-1,1)*shake*0.5, rnd(-1,1)*shake*0.5);
+
+    drawSea();
+    drawShallows();
+    drawWater();
+    drawWake();
+
+    const near = [];
+    for (const c of cellsNear(1400)) if (c.isle) near.push(c.isle);
+    for (const is of near) drawIsland(is);
+
+    drawCritters();
+    if (mode === 'sail'){ drawBoat(); drawNet(); }
+    else { drawBoat(); drawWalker(); }
+    drawBits();
+
+    // the finger being held, so a parent can see what a kid is doing
+    const pt = pads.pointer();
+    if (pt.active && state === 'play'){
+      const fx = pt.nx*W, fy = pt.ny*H;
+      ctx.strokeStyle = 'rgba(255,210,61,.75)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(fx, fy, 15 + Math.sin(t*0.3)*3, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(fx, fy, 4, 0, TAU); ctx.stroke();
+    }
+
+    drawGuide();
+    ctx.restore();
+
+    if (state === 'play') drawChart();
+
+    if (flash > 0){
+      ctx.fillStyle = 'rgba(255,250,220,' + (flash*0.4).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  /* ---------- kid lock (implementation lives in kidkit.js) ---------- */
+  const lockBtn = document.getElementById('lockBtn');
+  const toastEl = document.getElementById('toast');
+  let toastIv = null;
+  function toast(html, ms){
+    toastEl.innerHTML = html;
+    toastEl.classList.add('show');
+    clearTimeout(toastIv);
+    toastIv = setTimeout(()=> toastEl.classList.remove('show'), ms || 4200);
+  }
+  KidKit.kidLock(lockBtn, {
+    holdMs: 3000,
+    onHold: pct => {
+      lockBtn.style.background = pct
+        ? 'conic-gradient(#FFD23D '+pct+'%, rgba(255,255,255,.14) 0)' : '';
+    },
+    onChange: on => {
+      document.body.classList.toggle('locked', on);
+      lockBtn.textContent = on ? '\u{1F512}' : '\u{1F513}';
+      lockBtn.style.background = '';
+      lockBtn.setAttribute('aria-label', on
+        ? 'Kid lock is on — hold three seconds to turn off'
+        : 'Turn kid lock on');
+      toast(on ? '<em>Kid lock on.</em><br>Hold \u{1F512} for 3 seconds to exit.' : 'Kid lock off.',
+            on ? 4200 : 2200);
+    }
+  });
+
+  /* ---------- go ---------- */
+  boat.x = 500; boat.y = 500;
+  camX = boat.x - W/2; camY = boat.y - H/2;
+  growWorld();
+  updateHud();
+  document.getElementById('startBtn').focus();
+
+  let last = performance.now();
+  const hintEl = document.getElementById('sndHint');
+  let hintCheck = 0;
+  function frame(now){
+    let dt = (now - last)/(1000/60); last = now;
+    dt = Math.min(dt, 1.8);           // never integrate a long catch-up step
+    pads.poll();
+    update(dt); render();
+    if (state !== 'menu' && ++hintCheck % 30 === 0){
+      const blocked = !KidKit.audio.running;
+      hintEl.hidden = !(blocked && (musicOn || !muted));
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

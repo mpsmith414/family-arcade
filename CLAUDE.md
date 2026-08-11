@@ -4,8 +4,8 @@ Homemade browser games for my two young kids. Oliver (older) and Emsile (little
 sister) are the characters in both games. Built to be played on a phone, a
 tablet, and a TV with a controller.
 
-Four games, deliberately unlike each other. Keep it that way: a fifth should
-contrast with all four rather than land in between.
+Five games, deliberately unlike each other. Keep it that way: a sixth should
+contrast with all five rather than land in between.
 
 - `games/oliver-run` — endless runner, tap to jump, 14 worlds, 18 bosses, scores
   distance. Adventure deals the worlds from a shuffle bag, so a full set comes
@@ -118,6 +118,55 @@ contrast with all four rather than land in between.
   Falling is never a punishment: a drop of more than a floor turns into a slow
   float on a cloud. There are no ceilings anywhere — every platform is one-way,
   so you rise straight through them and only ever land on a top.
+- `games/treasure-boat` — a top-down open sea you steer a fishing boat around,
+  scored in gold. The only game with a **world** in it rather than a level, and
+  the contrast the other four leave room for: no scrolling lane, no single
+  room, no vertical shaft — a map that goes on for ever in all four directions
+  with a chart in the corner filling in as you go.
+  **The ocean is built one square at a time from a hash of that square's own
+  coordinates and the run's seed** (`cellRnd`), never from `Math.random()`.
+  That is the whole trick: squares are thrown away once they are five squares
+  over the horizon and rebuilt identically on the way back, so an island you
+  sailed away from is the same island when you return. Roll the world off
+  `Math.random()` and the sea quietly rearranges itself behind the boat — and
+  because an island's identity is its square, nothing in the score or the chart
+  would ever notice. `boat: the sea is built from its own dice` guards it at the
+  source, which is the honest place: a behavioural test was written, the world
+  was deliberately randomised to check it, and every black-box assertion still
+  passed. A fresh `worldSeed` each run is what makes every voyage a new world.
+  Two modes, one control scheme. At sea you steer and the button throws the
+  net; ashore you steer a walker and the button digs. Landing is automatic —
+  **bumping an island is how you get onto it**, land is a landing and never a
+  wall. The one exception is the island you just cast off from (`leftIsle`),
+  where the hull instead swings onto the tangent and follows the coast round.
+  That has to key off the island rather than a stopwatch: a plain "no landing
+  for two seconds" pinned a child holding one direction against the beach they
+  had just left, re-landing the moment the clock ran out, and the voyage ended
+  at the first island in the sea.
+  **Both axes of a held finger are read**, unlike Tower Climb — this is a map
+  seen from above, so a low thumb means south, which is a real place to go.
+  A finger over the middle means stop.
+  Everything the net or the spade turns up pays: the boot is worth a gold piece
+  and a laugh, same as the fishing game's junk. Tapping adds to the *delta* of
+  the haul or the hole and never clamps a total, so mashing can only ever land
+  more — `boat: mashing the net catches more, at every possible tapping speed`
+  sweeps the whole range, binned across four seeds because one passing whale is
+  worth more gold than the gap between two neighbouring cadences.
+  **Things happen at sea too** (`fireEvent`): dolphins escort and tow, gulls
+  drop coins, a whale lifts the boat, a bottle holds a treasure map, crates
+  float by, the sea monster gives you a lift and the pirates hand over a chest.
+  Whirlpools are a fairground ride that flings the boat a couple of thousand
+  pixels somewhere new — the fastest way to find fresh islands in the game, and
+  they pull gently from three radii out so a five-year-old can actually land in
+  one. Every one of these is a gift; `boat: nothing added to the sea makes a
+  voyage poorer` is the guard.
+  **Nobody is ever marooned.** Eight seconds with nothing found and help
+  arrives: dolphins tow the boat to an island it has not seen before (an
+  unvisited one by preference — towing to the *nearest* island carried a
+  passive child back to the one they had just been carried off, for ever), and
+  ashore a seagull ferries the walker to the X, then to the boat the next time.
+  Digging plain sand pays but is marked `quiet` so it does not reset that
+  timer, or a child happily digging one spot would never be shown the X.
 
 ## Hard constraints — do not break these
 
@@ -150,11 +199,12 @@ way that eyeballing missed (a `ReferenceError` firing every frame a power-up
 was active, and a hitbox that stretched to the ground while jumping).
 
 ```bash
-node test/smoke.js            # all four games, several minutes, no dependencies
+node test/smoke.js            # all five games, several minutes, no dependencies
 node test/smoke.js powers     # only tests matching "powers"
 node test/smoke.js fishing    # only the Emsile Fishing block
 node test/smoke.js daddy      # only the Daddy Smash block
 node test/smoke.js climb      # only the Tower Climb block
+node test/smoke.js boat       # only the Treasure Boat block
 node test/smoke.js levels     # only the fourteen-worlds block
 ```
 
@@ -252,8 +302,8 @@ of those in a game, move it into the kit instead.
 Steering lives there too, behind `KidKit.input.create({steer:true})`, which adds
 `.axis()` (held arrows/WASD + left stick + d-pad, clamped to a unit circle so a
 diagonal isn't faster) and `.pointer()` (where a finger is being held, 0..1
-across the element). Daddy Smash is the only caller today; the second movement
-game must not grow its own copy.
+across the element). Daddy Smash, Tower Climb and Treasure Boat all call it and
+none of them has its own copy; keep it that way.
 
 ### Playing on a TV — the cursor rules
 
@@ -331,8 +381,20 @@ saved 120, and closing the tab mid-climb lost the lot.
 
 Throttle instead of debouncing when the thing being saved can change faster
 than the delay: if a timer is already pending, leave it alone. The first change
-then always lands within the delay, and a burst still costs one write. Worth
-checking the other three if their pacing ever changes.
+then always lands within the delay, and a burst still costs one write. Treasure
+Boat throttles for the same reason — gold moves every few frames when the net
+is being mashed. Worth checking the other three if their pacing ever changes.
+
+## A flag that is only ever cleared in one mode
+
+Treasure Boat has two modes, sailing and ashore, and `tow` — the dolphins
+pulling the boat along — was wound down inside `sail()`, which does not run
+while somebody is standing on an island. A boat that landed *during* a tow kept
+`tow` set for the rest of the game, and `tow` is one of the things that holds
+the rescue off. A child who pressed nothing at all was quietly marooned on the
+first island the dolphins ever took them to, and every test still passed because
+nothing throws and no score goes backwards. When a game gains a second mode,
+every timer and flag wants asking: who clears this in the *other* mode?
 
 ## Careful with
 
