@@ -2131,6 +2131,435 @@ test('daddy: the dog only ever licks, never catches', note => {
   return h;
 });
 
+/* ================================================================ *
+ * games/tower-climb
+ *
+ * This one is steered AND tapped, so its tests are a blend of the other
+ * two shapes: hold a direction for hundreds of frames like Daddy Smash,
+ * and tap like Oliver Run. The score in `#floors` is the readout for
+ * everything — it is how high the climber has got, so "did that help?"
+ * is always answerable through the DOM.
+ *
+ * The promise this game makes, and what most of these tests are really
+ * guarding, is that NOBODY EVER GETS STUCK. Ladders are escalators, springs
+ * fire on contact, the bell only needs touching, and if none of that has
+ * happened for seven seconds the balloons come and fetch you. A child who
+ * can only push one direction has to be able to climb for ever, and so does
+ * one who does nothing at all.
+ * ================================================================ */
+
+/* Lap the tower: hold one way, turn round every `turn` frames, tap every
+   `tap` frames. A busy player, not a clever one — it cannot see where the
+   ladders are, so use it to keep the machinery hot and to compare one run
+   against another, never as a measure of how well a person would do. */
+function climbRun(seed, frames, opts) {
+  const o = opts || {};
+  const h = createHarness('tower-climb', { seed });
+  if (o.pick) h.click(o.pick);
+  h.click('startBtn');
+  pump(h, 5);
+  const turn = o.turn == null ? 170 : o.turn;
+  const seen = { zones: new Set(), shouts: new Set(), powers: new Set() };
+  let dir = 1;
+  for (let i = 0; i < frames; i++) {
+    if (turn && i % turn === 0) {
+      h.keyUp(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+      dir = -dir;
+      h.keyDown(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+    }
+    if (o.tap && i % o.tap === 0) h.key('z');
+    pump(h, 1);
+    if (o.watch) {
+      seen.zones.add(h.text('zoneTag'));
+      if (h.hasClass('shout', 'show')) seen.shouts.add(h.el('shout').innerHTML);
+      const pw = h.text('powerTag');
+      if (pw && !h.hidden('powerTag')) seen.powers.add(pw);
+    }
+  }
+  seen.floors = h.num('floors');
+  seen.h = h;
+  return seen;
+}
+
+test('climb: boots to the menu at the bottom of the tower', note => {
+  const h = createHarness('tower-climb');
+  note(`loaded ${h.loaded.join(', ')}`);
+  assert(!h.hidden('startScreen'), 'start screen should be visible before play');
+  assert(h.num('floors') === 0, 'should start on floor zero');
+  assert(h.text('best') === '', `fresh install should show no best, got "${h.text('best')}"`);
+  assert(h.text('kidTag') === 'Oliver', `expected to default to Oliver, got "${h.text('kidTag')}"`);
+  assert(h.hidden('powerTag'), 'no power on the menu');
+  assert(h.text('zoneTag').includes('Garden'), `should start in the Garden, got "${h.text('zoneTag')}"`);
+  pump(h, 120);
+  assert(h.num('floors') === 0, 'nothing should climb while still on the menu');
+  return h;
+});
+
+for (const [label, start] of Object.entries(STARTERS)) {
+  test(`climb: starts from ${label}`, note => {
+    const h = createHarness('tower-climb', { seed: 42 });
+    assert(!h.hidden('startScreen'), 'precondition: menu visible');
+    start(h);
+    pump(h, 5);
+    assert(h.hidden('startScreen'), `${label} did not start the climb`);
+    h.keyDown('ArrowRight');
+    pump(h, 1500);
+    assert(h.num('floors') > 0, `${label} started but the climb went nowhere`);
+    note(`floor ${h.num('floors')} after 1500 frames`);
+    return h;
+  });
+}
+
+/* Every way in to the same movement. All five are things that will actually
+   happen in this house, and the sixth is a telly's cursor parked in the dead
+   space beside the game, which is where it spends most of its life. */
+const CLIMB_STEERERS = [
+  ['held arrow keys', h => h.keyDown('ArrowRight')],
+  ['WASD', h => h.keyDown('d')],
+  ['the analogue stick', h => h.stick(1, 0)],
+  ['the d-pad', h => h.padHold('right', true)],
+  ['a finger held on the glass', h => h.pointerHold(0.95, 0.85)],
+  ['a finger beside the game', h => h.pageHold(1.6, 0.85)],
+];
+
+for (const [label, go] of CLIMB_STEERERS) {
+  test(`climb: steering with ${label}`, note => {
+    const h = createHarness('tower-climb', { seed: 12 });
+    h.click('startBtn');
+    pump(h, 5);
+    go(h);
+    pump(h, 4000);
+    assert(h.num('floors') >= 4,
+      `${label} only got to floor ${h.num('floors')} in 4000 frames`);
+    note(`floor ${h.num('floors')}, ${h.text('zoneTag')}`);
+    return h;
+  });
+}
+
+/* A finger held LOW must still climb. The pointer's height is deliberately
+   ignored, because a thumb resting at the bottom of a phone is the ordinary
+   way a child holds one — and while that height was being read as "down",
+   the commonest grip in the house rode every ladder straight back down. */
+test('climb: a finger held low still goes up, not down', note => {
+  const low = createHarness('tower-climb', { seed: 12 });
+  low.click('startBtn'); pump(low, 5);
+  low.pointerHold(0.95, 0.95);
+  pump(low, 4000);
+  const lowFloors = low.num('floors');
+  low.dispose();
+
+  const high = createHarness('tower-climb', { seed: 12 });
+  high.click('startBtn'); pump(high, 5);
+  high.pointerHold(0.95, 0.1);
+  pump(high, 4000);
+  note(`finger low → floor ${lowFloors}, finger high → floor ${high.num('floors')}`);
+  assert(lowFloors >= 4, `a low-held finger only reached floor ${lowFloors} — it is reading as "down"`);
+  return high;
+});
+
+/* THE PROMISE. A child who cannot yet time a jump still has to get up every
+   floor in the tower, for ever. Ladders are ridden by walking into them,
+   springs fire on contact and the bell only needs touching, so the button is
+   never once required. */
+test('climb: a climber who never jumps still gets up the tower', note => {
+  const runs = [];
+  for (const seed of [11, 3, 64]) {
+    const r = climbRun(seed, 6000, { tap: 0 });
+    runs.push(r.floors);
+    r.h.dispose();
+  }
+  note(`floors with the button never pressed: ${runs.join(', ')}`);
+  for (const f of runs) assert(f >= 8, `only reached floor ${f} without ever jumping`);
+});
+
+/* …and one who cannot even do that. Leaning on a single direction wedges you
+   into a corner with no ladder in it, which is why the rescue keys off "has
+   this climber gained any height lately" and not "are they pressing
+   anything" — the second question misses this case completely. */
+test('climb: nobody ever gets stuck, even holding one direction for ever', note => {
+  const runs = [];
+  for (const seed of [7, 21, 5, 99, 42]) {
+    const h = createHarness('tower-climb', { seed });
+    h.click('startBtn');
+    pump(h, 5);
+    h.keyDown('ArrowRight');
+    pump(h, 6000);
+    runs.push(h.num('floors'));
+    h.dispose();
+  }
+  note(`floors holding right and nothing else: ${runs.join(', ')}`);
+  for (const f of runs) assert(f >= 6, `wedged on floor ${f} holding one direction`);
+});
+
+/* And one who never touches anything at all. The tower has to keep going by
+   itself, and above all it must never end. */
+test('climb: 20000 idle frames never throw and never end the climb', note => {
+  const h = createHarness('tower-climb', { seed: 4 });
+  h.click('startBtn');
+  pump(h, 20000);
+  assert(h.hidden('startScreen'), 'the climb ended on its own — there is no game over here');
+  assert(h.num('floors') > 0, 'a climber who does nothing should still be fetched upwards');
+  assert(h.timerCount < 60, `timer leak: ${h.timerCount} still pending`);
+  note(`floor ${h.num('floors')} without a single input, ${h.text('zoneTag')}`);
+  return h;
+});
+
+test('climb: 20000 frames of hard climbing never throw either', note => {
+  const r = climbRun(8, 20000, { tap: 3, turn: 150 });
+  note(`floor ${r.floors}, ${r.h.text('zoneTag')}`);
+  assert(r.floors > 20, `only floor ${r.floors} after 20000 busy frames`);
+  return r.h;
+});
+
+/* THE GUARD, and the one this game is most likely to break by accident.
+   Tapping harder must never be a penalty. It was one twice while this was
+   being written: a tap on a ladder let GO of it, so a child who mashed spent
+   the whole game bouncing off the foot of every ladder in the tower; and the
+   rocket pack added to its own thrust, so holding the button flew forty-two
+   thousand floors in eighty seconds. Both were invisible at one convenient
+   tapping speed, so this sweeps the whole range like the fishing one. */
+test('climb: mashing is never worse than not tapping, at every speed', note => {
+  const CADENCES = [0, 1, 2, 3, 5, 8, 13, 21, 34];
+  const SEEDS = [11, 7, 3, 52];
+  const totals = {};
+  for (const tap of CADENCES) {
+    let sum = 0;
+    for (const seed of SEEDS) {
+      const r = climbRun(seed, 4000, { tap, turn: 210 });
+      sum += r.floors;
+      r.h.dispose();
+    }
+    totals[tap] = sum;
+  }
+  const never = totals[0];
+  note(CADENCES.map(c => (c ? 'every ' + c : 'never') + ': ' + totals[c]).join('  '));
+  for (const tap of CADENCES) {
+    if (!tap) continue;
+    assert(totals[tap] >= never,
+      `tapping every ${tap} frames climbed ${totals[tap]} floors against ${never} for never tapping — mashing is being punished`);
+  }
+});
+
+/* The top of a section is the whole point of the game: the bell is the only
+   way off that floor, and ringing it flies the climber up into the next
+   zone. Reaching several of them proves the sections chain. */
+test('climb: the bell at the top flies you up to the next tower', note => {
+  const r = climbRun(11, 12000, { tap: 14, watch: true });
+  const tops = [...r.shouts].filter(s => /TOP OF THE TOWER/.test(s));
+  note(`${tops.length} bells rung, floor ${r.floors}`);
+  assert(tops.length >= 3, `only ${tops.length} bells in 12000 frames — the sections are not chaining`);
+  assert(/Treetops/.test(tops.join(' ')), `the first bell should hand over to the Treetops: ${tops.join(' / ')}`);
+  return r.h;
+});
+
+test('climb: the zones change as you get higher', note => {
+  const r = climbRun(11, 16000, { tap: 14, watch: true });
+  const zones = [...r.zones];
+  note(`${zones.length} zones seen: ${zones.join(' / ')}`);
+  assert(zones.length >= 5, `only saw ${zones.length} zones climbing to floor ${r.floors}`);
+  assert(zones.some(z => /Garden/.test(z)), 'the climb should start in the Garden');
+  assert(zones.some(z => /Cloud Deck|Sky Castle|Stars|Outer Space/.test(z)),
+    `never got above the rooftops: ${zones.join(' / ')}`);
+  return r.h;
+});
+
+/* Six powers, and the house rule from Oliver Run: one lasts until you pick up
+   another, so there is never anything to lose. */
+test('climb: all six powers turn up, and each one swaps the last', note => {
+  const r = climbRun(11, 24000, { tap: 14, watch: true });
+  const powers = [...r.powers];
+  note(`${powers.length} powers seen: ${powers.join(' / ')}`);
+  assert(powers.length === 6, `only ${powers.length} of 6 powers appeared: ${powers.join(' / ')}`);
+  const swaps = [...r.shouts].filter(s => /swapped/.test(s));
+  assert(swaps.length > 0, 'a second orb should say it swapped the power, and none did');
+  return r.h;
+});
+
+/* REGRESSION GUARD, and the rule this game cannot bend. Every power is a leg
+   up and not one of them may be a hobble — which three of them were, all at
+   once, and none of it was visible by playing: Bouncy Ball could not reach
+   the next floor and being permanently airborne locked it out of ladders,
+   Sticky Grip flattened any jump made near a wall, and the star boost was a
+   shove that threw the climber off whatever ladder they were on. Powers are
+   read off the HUD tag, so this stays black box — it asks how far the climb
+   got while each one was being carried. */
+test('climb: no power-up is ever a hobble', note => {
+  const gained = {};
+  for (const seed of [11, 3]) {
+    const h = createHarness('tower-climb', { seed });
+    h.click('startBtn');
+    pump(h, 5);
+    let dir = 1, last = h.num('floors');
+    for (let i = 0; i < 24000; i++) {
+      if (i % 170 === 0) {
+        h.keyUp(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+        dir = -dir;
+        h.keyDown(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+      }
+      if (i % 14 === 0) h.key('z');
+      pump(h, 1);
+      const tag = h.hidden('powerTag') ? '' : h.text('powerTag');
+      const now = h.num('floors');
+      if (tag) {
+        if (!gained[tag]) gained[tag] = { floors: 0, frames: 0 };
+        gained[tag].floors += Math.max(0, now - last);
+        gained[tag].frames++;
+      }
+      last = now;
+    }
+    h.dispose();
+  }
+  const rows = Object.entries(gained)
+    .map(([tag, g]) => ({ tag, rate: g.floors / g.frames * 1000, frames: g.frames }))
+    .sort((a, b) => a.rate - b.rate);
+  note(rows.map(r => `${r.tag} ${r.rate.toFixed(1)}/1k`).join('  '));
+  assert(rows.length === 6, `only ${rows.length} powers were carried long enough to measure`);
+  for (const r of rows) {
+    assert(r.rate > 0.8,
+      `${r.tag} climbed ${r.rate.toFixed(2)} floors per 1000 frames — that power is a hobble, not a gift`);
+  }
+});
+
+/* A long fall is caught and turned into a slow float. Nothing in this game
+   takes anything away, and a drop down the middle of the tower is the one
+   thing that could — so it is the one thing most worth proving. */
+test('climb: a long fall is always caught', note => {
+  const h = createHarness('tower-climb', { seed: 30 });
+  h.click('startBtn');
+  pump(h, 5);
+  let softs = 0, showing = false, worstDrop = 0, peak = 0;
+  let dir = 1;
+  for (let i = 0; i < 14000; i++) {
+    if (i % 90 === 0) {
+      h.keyUp(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+      dir = -dir;
+      h.keyDown(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+    }
+    if (i % 11 === 0) h.key('z');
+    h.clearPainted();
+    pump(h, 1);
+    const up = h.paintedSome(/SOFT!/);
+    if (up && !showing) softs++;
+    showing = up;
+    // the gauge paints the live floor beside the marker every frame
+    const now = h.num('floors');
+    if (now > peak) peak = now;
+    worstDrop = Math.max(worstDrop, peak - now);
+  }
+  note(`${softs} soft landings, highest floor ${peak}`);
+  assert(softs > 0, 'nobody ever fell far enough to be caught — the catcher is not firing at all');
+  return h;
+});
+
+/* The critters are scenery with a bounce in them: land on one and it is a
+   free jump, walk into one and it is a boop and a giggle. Neither may cost
+   a floor, and a boop always shoves you towards the middle of whatever you
+   are standing on rather than off the edge of it. */
+test('climb: critters bounce you, they never stop you', note => {
+  const h = createHarness('tower-climb', { seed: 19 });
+  h.click('startBtn');
+  pump(h, 5);
+  let boings = 0, boops = 0, bShow = false, pShow = false;
+  let dir = 1;
+  for (let i = 0; i < 16000; i++) {
+    if (i % 150 === 0) {
+      h.keyUp(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+      dir = -dir;
+      h.keyDown(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+    }
+    if (i % 13 === 0) h.key('z');
+    h.clearPainted();
+    pump(h, 1);
+    const b = h.paintedSome(/BOING!/), p = h.paintedSome(/BOOP!/);
+    if (b && !bShow) boings++;
+    if (p && !pShow) boops++;
+    bShow = b; pShow = p;
+  }
+  note(`${boings} bounces, ${boops} boops, floor ${h.num('floors')}`);
+  assert(boings > 0, 'nothing was ever bounced off');
+  assert(h.num('floors') > 10, `the climb stalled at floor ${h.num('floors')} in a tower full of critters`);
+  return h;
+});
+
+test('climb: the tower does things while you climb', note => {
+  const r = climbRun(11, 20000, { tap: 14, watch: true });
+  const wanted = ['Balloons', 'Birds', 'Star shower', 'dog came up', 'Fireworks'];
+  const seen = wanted.filter(w => [...r.shouts].some(s => s.toLowerCase().includes(w.toLowerCase())));
+  note(`seen: ${seen.join(', ')}`);
+  assert(seen.length >= 3, `only ${seen.length} of ${wanted.length} events happened: ${seen.join(', ')}`);
+  return r.h;
+});
+
+/* The mirror of Daddy Smash's guard. Everything added to the tower is a
+   gift, so none of it may slow the climb down: the birds are platforms, the
+   balloons carry you, the dog is a trampoline, and the fireworks are only
+   weather. */
+test('climb: nothing added to the tower makes the climb slower', note => {
+  const rates = [];
+  for (const seed of [11, 7, 3]) {
+    const r = climbRun(seed, 12000, { tap: 14, turn: 170 });
+    rates.push(r.floors);
+    r.h.dispose();
+  }
+  note(`floors per 12000 frames across three seeds: ${rates.join(', ')}`);
+  // measured at 90-160 while all five events were being written
+  for (const f of rates) assert(f >= 40, `only floor ${f} in 12000 frames — the climb got slower`);
+});
+
+test('climb: the best floor survives a reload', note => {
+  let h = createHarness('tower-climb', { seed: 11 });
+  h.click('startBtn');
+  pump(h, 5);
+  h.keyDown('ArrowRight');
+  for (let i = 0; i < 6000; i++) { if (i % 14 === 0) h.key('z'); pump(h, 1); }
+  h.keyUp('ArrowRight');
+  pump(h, 300);                     // stop climbing, then let the save land
+  const reached = h.num('floors');
+  assert(reached > 3, `precondition: expected a decent climb, got floor ${reached}`);
+  assert(/Best/.test(h.text('best')), `the best should show during play, got "${h.text('best')}"`);
+  pump(h, 120);
+
+  h = h.reload();
+  const kept = parseInt(String(h.text('best')).replace(/[^\d]/g, ''), 10);
+  note(`floor ${reached} before the reload, "${h.text('best')}" after`);
+  /* >= rather than ===: the save is throttled, so a floor gained in the last
+     moments of the run can legitimately be ahead of the last number read off
+     the HUD. What must never happen is the record going BACKWARDS, which is
+     exactly what a starved debounce did. */
+  assert(kept >= reached,
+    `best did not survive: expected at least ${reached}, kept "${h.text('best')}"`);
+  assert(h.num('floors') === 0, 'a fresh run should start back at floor zero');
+  return h;
+});
+
+test('climb: choosing Emsile sticks across a reload', note => {
+  let h = createHarness('tower-climb', { seed: 2 });
+  h.click('pickEmsile');
+  assert(h.el('pickEmsile').getAttribute('aria-pressed') === 'true', 'Emsile should be selected');
+  h.click('startBtn');
+  pump(h, 200);
+  assert(h.text('kidTag') === 'Emsile', `expected to be playing Emsile, got "${h.text('kidTag')}"`);
+  h = h.reload();
+  note(`after reload the menu offers ${h.text('kidTag')}`);
+  assert(h.text('kidTag') === 'Emsile', `the choice did not stick: got "${h.text('kidTag')}"`);
+  return h;
+});
+
+test('climb: swapping who you are mid-climb', note => {
+  const h = createHarness('tower-climb', { seed: 2 });
+  h.click('startBtn');
+  pump(h, 60);
+  assert(h.text('kidTag') === 'Oliver', 'precondition: starts as Oliver');
+  h.click('swapBtn');
+  pump(h, 10);
+  assert(h.text('kidTag') === 'Emsile', `swap button did nothing: still "${h.text('kidTag')}"`);
+  h.padPress('x');                 // the pad's secondary button does it too
+  pump(h, 10);
+  assert(h.text('kidTag') === 'Oliver', `X on the pad did not swap back: "${h.text('kidTag')}"`);
+  note('swapped by button and by pad');
+  return h;
+});
+
 /* ---------------------------------------------------------------- *
  * report
  * ---------------------------------------------------------------- */

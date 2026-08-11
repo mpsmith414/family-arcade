@@ -54,6 +54,7 @@
   .art.run{background:linear-gradient(160deg,#3B2263,#8B4A6B 60%,#F2A65A)}
   .art.fish{background:linear-gradient(160deg,#8FD8F5,#2A8FC4 45%,#04203A)}
   .art.smash{background:linear-gradient(160deg,#F6E4C6,#E0603E 55%,#2E1B12)}
+  .art.climb{background:linear-gradient(160deg,#BFEBFF,#5B8FD6 48%,#1B2A4A)}
   .art.soon{background:linear-gradient(160deg,#1F2340,#2E3357)}
   .meta{padding:13px 15px 15px}
   .meta strong{display:block;font-size:17px;letter-spacing:.02em}
@@ -106,6 +107,15 @@
       <span>Run round the living room. Get caught and he smashes you on the couch. Getting caught is the good bit.</span>
     </span>
   </button>
+
+  <button class="card" data-go="games/tower-climb/index.html">
+    <span class="best" id="bestClimb" hidden></span>
+    <span class="art climb">🧗</span>
+    <span class="meta">
+      <strong>Tower Climb</strong>
+      <span>Climb a tower that never ends. Ladders carry you up by themselves. Every eight floors it flies up and starts again.</span>
+    </span>
+  </button>
 </div>
 
 <div id="pad" hidden>🎮 Controller ready — press any button</div>
@@ -142,6 +152,15 @@
     var smashTag = document.getElementById('bestSmash');
     smashTag.textContent = '🤼 ' + smashes;
     smashTag.hidden = false;
+  }
+
+  // and how high the tower got on its card
+  var floors = KidKit.storage.getNumber('tower-climb-best', 0);
+  var climbBells = KidKit.storage.getNumber('tower-climb-bells', 0);
+  if (floors){
+    var climbTag = document.getElementById('bestClimb');
+    climbTag.textContent = '\u{1F9D7} ' + floors + (climbBells ? '  \u{1F514}' + climbBells : '');
+    climbTag.hidden = false;
   }
 
   var cards = [].slice.call(document.querySelectorAll('.card:not([disabled])'));

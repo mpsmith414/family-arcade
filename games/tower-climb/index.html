@@ -1,0 +1,2544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tower Climb</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#1B2A4A">
+<script src="../../shared/kidkit.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100%;
+    overscroll-behavior:none;          /* no pull-to-refresh */
+    touch-action:none;                 /* no double-tap zoom / pan */
+    user-select:none;-webkit-user-select:none;
+    -webkit-touch-callout:none;
+  }
+  body{
+    background:#12203A;
+    font-family:"Trebuchet MS","Avenir Next","Segoe UI",system-ui,sans-serif;
+    display:flex;align-items:center;justify-content:center;padding:12px;
+    -webkit-tap-highlight-color:transparent;overflow:hidden;
+  }
+  #stage{
+    position:relative;width:100%;
+    /* 1.8 is this canvas's aspect (900x500) — near enough 16:9 that a telly
+       has almost no dead border for its cursor to get lost in. The cascade is
+       deliberate, same as the other three: an old TV browser keeps the plain
+       px cap, a phone gets dvh so the address bar sliding away can't shove the
+       on-screen buttons off the bottom. */
+    max-width:980px;
+    max-width:min(100%, calc((100vh - 24px) * 1.8));
+    max-width:min(100%, calc((100dvh - 24px) * 1.8));
+    border-radius:18px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(140,190,255,.28);
+    touch-action:none;cursor:pointer;
+  }
+  canvas{display:block;width:100%;height:auto}
+  body.locked #stage{box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 3px rgba(255,210,61,.75)}
+
+  button:focus{outline:4px solid #FFD23D;outline-offset:4px}
+
+  /* The sky behind the HUD runs from near-white (the Garden) to near-black
+     (Outer Space), so the scrim is what keeps the corners readable in both. */
+  .hud{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:13px 17px 34px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(10,16,32,.62) 0%,rgba(10,16,32,.3) 58%,rgba(10,16,32,0) 100%);
+    font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;
+    text-shadow:0 2px 8px rgba(0,0,0,.9);
+  }
+  .left{display:flex;flex-direction:column;gap:7px}
+  .where{font-size:clamp(9px,2.1vw,12px);letter-spacing:.16em;opacity:.94}
+  .meter{
+    width:clamp(84px,20vw,140px);height:11px;border-radius:99px;
+    background:rgba(0,0,0,.4);overflow:hidden;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.5);
+  }
+  .meter i{display:block;height:100%;width:0%;border-radius:99px;
+    background:linear-gradient(90deg,#4FD16A,#FFD23D,#FF8A3D);
+    background-size:200% 100%;transition:width .25s}
+  .meter.full i{animation:slide .7s linear infinite}
+  @keyframes slide{to{background-position:-200% 0}}
+  #powerTag{
+    font-size:clamp(10px,2.3vw,13px);color:#FFD23D;letter-spacing:.12em;
+    animation:wobble .55s ease-in-out infinite alternate;
+  }
+  #powerTag[hidden]{display:none}
+  @keyframes wobble{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
+  .who{font-size:clamp(9px,2vw,12px);opacity:.7;letter-spacing:.14em}
+
+  .scores{text-align:right}
+  .now{font-size:clamp(24px,5.4vw,38px);line-height:1;color:#FFD23D}
+  .lbl{font-size:clamp(8px,1.9vw,11px);letter-spacing:.26em;opacity:.78}
+  #best{font-size:clamp(9px,2vw,12px);opacity:.72;margin-top:3px;min-height:12px}
+
+  /* The big shout. Sits in the strip between the two HUD corners, well clear
+     of the climber, who is always in the lower half of the screen. */
+  #shout{
+    position:absolute;top:10.5%;left:50%;transform:translateX(-50%) rotate(-2deg);
+    width:min(66%,500px);text-align:center;pointer-events:none;
+    font-size:clamp(17px,4.1vw,32px);font-weight:800;line-height:1.05;
+    text-transform:uppercase;letter-spacing:-.01em;color:#fff;
+    text-shadow:0 3px 0 rgba(0,0,0,.4), 0 6px 26px rgba(0,0,0,.85);
+    opacity:0;transition:opacity .2s;
+  }
+  #shout.show{opacity:1}
+  #shout em{font-style:normal;color:#FFD23D}
+
+  #padTag{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.6);color:#8BE05A;border-radius:999px;
+    padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;pointer-events:none;
+  }
+  #padTag[hidden]{display:none}
+
+  /* KID side: bottom left. */
+  #swapBtn{
+    position:absolute;bottom:14px;left:14px;pointer-events:auto;
+    display:flex;align-items:center;gap:7px;
+    background:rgba(0,0,0,.55);border:3px solid rgba(255,255,255,.5);
+    border-radius:999px;padding:8px 15px;cursor:pointer;
+    box-shadow:0 5px 16px rgba(0,0,0,.45);
+    transition:transform .18s;font:inherit;color:#fff;
+  }
+  #swapBtn:active{transform:scale(.92)}
+  #swapBtn:focus-visible{outline:3px solid #FFD23D;outline-offset:3px}
+  #swapBtn b{font-size:23px;line-height:1}
+  #swapBtn i{font-style:normal;font-size:15px;opacity:.8}
+
+  #toast{
+    position:absolute;bottom:66px;right:14px;pointer-events:none;
+    background:rgba(0,0,0,.72);color:#fff;border-radius:12px;
+    padding:9px 13px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.03em;max-width:66%;text-align:right;
+    opacity:0;transition:opacity .35s;
+  }
+  #toast.show{opacity:1}
+  #toast em{font-style:normal;color:#FFD23D}
+
+  #sndHint{
+    position:absolute;bottom:66px;left:14px;pointer-events:none;
+    background:rgba(0,0,0,.62);color:#FFD23D;border-radius:12px;
+    padding:8px 12px;font-size:12px;font-weight:700;line-height:1.4;
+    letter-spacing:.04em;max-width:56%;
+  }
+  #sndHint[hidden]{display:none}
+  #sndHint small{color:#fff;opacity:.75;font-size:10px;font-weight:400;letter-spacing:.02em}
+
+  /* ADULT side: bottom right */
+  .sndbar{position:absolute;bottom:12px;right:14px;display:flex;gap:8px;pointer-events:auto}
+  .sndbtn{
+    background:rgba(255,255,255,.14);border:none;color:#fff;
+    width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:opacity .2s,background .2s;
+  }
+  .sndbtn:hover{background:rgba(255,255,255,.26)}
+  .sndbtn.off{opacity:.34}
+  .sndbtn:focus-visible{outline:3px solid #FFD23D;outline-offset:2px}
+  #lockBtn{position:relative;font-size:17px}
+
+  .screen{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:10px;text-align:center;
+    background:radial-gradient(120% 90% at 50% 42%, rgba(46,74,132,.76), rgba(10,16,34,.96));
+    color:#fff;padding:22px;
+  }
+  .screen[hidden]{display:none}
+  .kicker{font-size:clamp(9px,2.2vw,12px);letter-spacing:.32em;color:#FFD23D;text-transform:uppercase}
+  .title{
+    font-size:clamp(34px,10vw,72px);line-height:.9;font-weight:800;
+    letter-spacing:-.02em;text-transform:uppercase;
+    background:linear-gradient(90deg,#4FD16A,#8FD8F5,#FFD23D,#4FD16A);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 24px rgba(120,200,255,.4));
+  }
+  @supports not ((-webkit-background-clip:text) or (background-clip:text)){
+    .title{color:#FFD23D;background:none}
+  }
+  .sub{font-size:clamp(13px,3.2vw,17px);max-width:31ch;opacity:.92;line-height:1.5}
+
+  .picker{display:flex;gap:14px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+  .pick{
+    background:rgba(255,255,255,.08);border:3px solid rgba(255,255,255,.22);
+    border-radius:20px;padding:10px 18px 12px;cursor:pointer;font:inherit;color:#fff;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    transition:transform .16s,border-color .16s,background .16s;
+  }
+  .pick b{font-size:clamp(30px,7vw,42px);line-height:1}
+  .pick span{font-size:clamp(10px,2.4vw,13px);font-weight:800;letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+  .pick[aria-pressed="true"]{background:rgba(255,210,61,.18);border-color:#FFD23D;transform:translateY(-3px)}
+  .pick[aria-pressed="true"] span{opacity:1;color:#FFD23D}
+
+  .cta{
+    margin-top:6px;background:#FFD23D;color:#20304F;border:none;
+    font:inherit;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
+    font-size:clamp(15px,3.6vw,19px);padding:15px 40px;border-radius:999px;cursor:pointer;
+    box-shadow:0 6px 0 #C79A3B;
+  }
+  .cta:active{transform:translateY(3px);box-shadow:0 3px 0 #C79A3B}
+  .cta:focus-visible{outline:3px solid #8FD8F5;outline-offset:4px}
+  .hint{font-size:clamp(10px,2.3vw,12px);letter-spacing:.08em;opacity:.62;text-transform:uppercase;line-height:1.7}
+  @media (prefers-reduced-motion:reduce){
+    .meter i,.meter.full i,#powerTag{transition:none;animation:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="game" width="900" height="500" role="img" aria-label="Climbing up a tall tower, floor after floor"></canvas>
+
+  <div class="hud">
+    <div class="left">
+      <div class="where" id="zoneTag">🌻 The Garden</div>
+      <div class="meter" id="starMeter"><i id="starFill"></i></div>
+      <div class="who" id="kidTag">Oliver</div>
+      <div id="powerTag" hidden></div>
+    </div>
+    <div class="scores">
+      <div class="now" id="floors">0</div>
+      <div class="lbl">Floors</div>
+      <div id="best"></div>
+    </div>
+  </div>
+
+  <div id="shout"></div>
+
+  <button id="swapBtn" aria-label="Play as somebody else">
+    <b id="swapFace">👧</b><i>🔁</i>
+  </button>
+
+  <div class="sndbar">
+    <button id="lockBtn" class="sndbtn" aria-label="Turn kid lock on">🔓</button>
+    <button id="music" class="sndbtn" aria-label="Turn music off">🎵</button>
+    <button id="mute" class="sndbtn" aria-label="Turn sound effects off">🔊</button>
+  </div>
+
+  <div id="padTag" hidden>🎮 Controller</div>
+  <div id="toast"></div>
+  <div id="sndHint" hidden>🔇 Sound is blocked — tap the screen<br><small>On iPhone, also flick the side switch off silent</small></div>
+
+  <div class="screen" id="startScreen">
+    <div class="kicker">Nobody ever falls</div>
+    <h1 class="title">Tower Climb</h1>
+    <p class="sub">Climb as high as you can. Ladders carry you up all by themselves — every eight floors the whole tower flies up and a new one begins.</p>
+    <div class="picker">
+      <button class="pick" id="pickOliver" aria-pressed="true" aria-label="Climb as Oliver"><b>🧒</b><span>Oliver</span></button>
+      <button class="pick" id="pickEmsile" aria-pressed="false" aria-label="Climb as Emsile"><b>👧</b><span>Emsile</span></button>
+    </div>
+    <button class="cta" id="startBtn">Climb!</button>
+    <p class="hint">Hold your finger where you want to go. Tap to jump.<br>Arrows, stick or d-pad work too. Tap 🔓 for kid lock.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 900, H = 500;
+
+  /* ================================================================== *
+   * TUNE — the feel of the climb, all in one place.
+   *
+   * `jump` and `floorH` are a pair, the same way Oliver Run's grav/jump are:
+   * a plain jump apexes at jump²/(2*grav) = 78px, and every step platform in
+   * the tower is placed inside that. Raise floorH without raising jump and
+   * the shortcuts stop working; the ladders still would, which is worse — the
+   * game would quietly get slower rather than visibly break.
+   *
+   * The rule underneath all of it: EVERY floor has at least one way up that
+   * needs no jumping at all. Ladders are escalators (walk into one and you
+   * ride it), springs fire on contact, and the bell at the top of a section
+   * only has to be touched. A child who cannot yet time a jump still climbs
+   * for ever; jumping is the fast route, never the only one.
+   * ================================================================== */
+  const TUNE = {
+    floorH:   116,     // altitude between one floor's surface and the next
+    grav:     0.42,
+    jump:     8.1,     // apex 78px — over half a floor
+    spring:   13.0,    // apex 201px — clears a whole floor and a bit
+    squash:   9.7,     // the bounce off a critter's head
+    run:      4.3,
+    airCtrl:  0.86,    // how much steering you keep in mid-air
+    climb:    2.55,    // ladder speed, up or down
+    coyote:   10,      // frames after walking off a ledge you can still jump
+    buffer:   10,      // frames before landing that a jump press still counts
+    ledgeGrab:14,      // how far past an edge a rising climber still gets pulled up
+    camEase:  0.10,
+    camLow:   0.36,    // the climber sits this far up from the bottom edge
+    stepA:    [42, 84],// the two heights a step-platform shortcut uses
+    gapMin:   72, gapMax: 132,
+    section:  8,       // floors per section — the bell sits on the last one
+    starGoal: 14,      // stars for a free boost
+  };
+
+  /* The shaft. Everything is drawn between the walls; the height gauge lives
+     in the strip to the right of them. */
+  /* The shaft is deliberately narrower than the canvas. It filled almost the
+     whole frame at first, and a game about how high you are needs sky down
+     both sides for the scenery to fall away into — without it the climb read
+     as a corridor rather than a tower. */
+  const WALL_L = 94, WALL_R = 752;
+  const IN_L = WALL_L + 14, IN_R = WALL_R - 14;
+  const GAUGE_X = 800, GAUGE_W = 56;
+  const BASE_Y = 46;                   // floor 0 sits this far off the bottom
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const el = {
+    zone:    document.getElementById('zoneTag'),
+    meter:   document.getElementById('starMeter'),
+    fill:    document.getElementById('starFill'),
+    kidTag:  document.getElementById('kidTag'),
+    power:   document.getElementById('powerTag'),
+    floors:  document.getElementById('floors'),
+    best:    document.getElementById('best'),
+    shout:   document.getElementById('shout'),
+    swap:    document.getElementById('swapBtn'),
+    swapFace:document.getElementById('swapFace'),
+    start:   document.getElementById('startScreen'),
+    music:   document.getElementById('music'),
+    mute:    document.getElementById('mute'),
+    padTag:  document.getElementById('padTag'),
+  };
+
+  function fit(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  fit(); window.addEventListener('resize', fit);
+
+  const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+  const rnd  = (a,b) => a + Math.random()*(b-a);
+  const rint = (a,b) => Math.floor(a + Math.random()*(b-a+1));
+  const pick = arr => arr[(Math.random()*arr.length)|0];
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const ease = t => { const u = clamp(t,0,1); return u*u*(3-2*u); };
+
+  function roundRect(x,y,w,h,r){
+    const rr = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+  }
+  function ellipse(x,y,rx,ry){
+    ctx.beginPath(); ctx.ellipse(x, y, Math.abs(rx), Math.abs(ry), 0, 0, 7);
+  }
+  function star(x, y, r, points){
+    const n = points || 5;
+    ctx.beginPath();
+    for (let i = 0; i < n*2; i++){
+      const a = -Math.PI/2 + i*Math.PI/n;
+      const rr = i % 2 ? r*0.46 : r;
+      const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  }
+
+  /* Blend two #rrggbb strings. The sky crossfades from one zone's palette to
+     the next as you climb through a section, so the change of scenery arrives
+     before the banner announcing it does. */
+  function mix(a, b, t){
+    const u = clamp(t, 0, 1);
+    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    const r = Math.round(lerp((pa>>16)&255, (pb>>16)&255, u));
+    const g = Math.round(lerp((pa>>8)&255,  (pb>>8)&255,  u));
+    const bl= Math.round(lerp(pa&255,       pb&255,       u));
+    return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+
+  /* ---------- sound (primitives live in kidkit.js) ---------- */
+  let muted = false;
+  const tone  = (f,d,type,v,slide) => { if (!muted) KidKit.audio.tone(f,d,type,v,slide); };
+  const noise = (d,v) => { if (!muted) KidKit.audio.noise(d,v); };
+  const seq = (notes, gap, dur, type, v) => notes.forEach((n,i) =>
+    setTimeout(() => tone(n, dur, type, v), i*gap));
+
+  const sfx = {
+    hop:    ()=>tone(430,.10,'square',.04,300),
+    land:   ()=>{ noise(.06,.03); tone(150,.07,'sine',.04,-50); },
+    step:   ()=>tone(rnd(320,420),.03,'triangle',.016),
+    rung:   ()=>tone(rnd(520,660),.04,'square',.02),
+    spring: ()=>{ tone(260,.22,'triangle',.055,760); noise(.06,.03); },
+    boing:  ()=>tone(340,.18,'triangle',.05,620),
+    star:   ()=>seq([784,1047],45,.10,'triangle',.04),
+    boop:   ()=>{ tone(200,.10,'square',.045,-70); noise(.05,.025); },
+    power:  ()=>seq([523,659,784,1047],55,.16,'square',.05),
+    soft:   ()=>{ noise(.30,.035); tone(500,.30,'sine',.03,-260); },
+    bell:   ()=>seq([1047,1319,1568,2093],90,.42,'triangle',.055),
+    liftoff:()=>{ noise(.5,.05); tone(180,.85,'sawtooth',.045,900); },
+    fanfare:()=>seq([523,659,784,1047,1319,1047,1319,1568],95,.28,'square',.055),
+    record: ()=>seq([880,1109,1319,1760],70,.24,'triangle',.055),
+    whoosh: ()=>{ noise(.20,.045); tone(900,.16,'triangle',.03,-600); },
+    pop:    ()=>tone(700,.07,'square',.04,420),
+    swap:   ()=>seq([523,784],80,.14,'triangle',.05),
+    caw:    ()=>{ tone(700,.08,'sawtooth',.03,-200); setTimeout(()=>tone(620,.09,'sawtooth',.028,-180),100); },
+    woof:   ()=>{ tone(300,.10,'square',.055,-120); setTimeout(()=>tone(380,.12,'square',.05,-180),110); },
+  };
+  el.mute.addEventListener('click', e=>{
+    e.stopPropagation(); muted = !muted;
+    el.mute.textContent = muted ? '🔇' : '🔊';
+    el.mute.classList.toggle('off', muted);
+    el.mute.setAttribute('aria-label', muted ? 'Turn sound effects on' : 'Turn sound effects off');
+  });
+
+  /* ---------- music ----------
+     Oliver Run trots at 132, Daddy Smash chases at 126, Emsile Fishing drifts
+     at 84. A climb wants to feel like going *up*, so all three loops are built
+     out of rising arpeggios and the bass walks up rather than round. 108 for
+     the low floors, 120 once you are above the clouds. */
+  const R = -1;
+  const TRACKS = {
+    climb: { bpm:108, drums:'soft', wave:'square',
+      lead:[60,64,67,72, 71,67,64,67, 62,65,69,74, 72,69,65,69,
+            64,67,71,76, 74,71,67,71, 65,69,72,77, 76,72,69,72],
+      bass:[36,R,43,R, 38,R,45,R, 40,R,47,R, 41,R,48,R] },
+    sky:   { bpm:120, drums:'light', wave:'square',
+      lead:[72,76,79,84, 83,79,76,79, 74,77,81,86, 84,81,77,81,
+            76,79,83,88, 86,83,79,83, 77,81,84,89, 88,84,81,84],
+      bass:[48,R,55,R, 50,R,57,R, 52,R,59,R, 53,R,60,R] },
+    space: { bpm:112, drums:'light', wave:'triangle',
+      lead:[69,72,76,81, 79,76,72,76, 68,71,75,80, 78,75,71,75,
+            67,71,74,79, 77,74,71,74, 69,73,76,81, 83,R,R,R],
+      bass:[33,R,40,R, 32,R,39,R, 31,R,38,R, 33,R,40,R] },
+    top:   { bpm:150, drums:'heavy', wave:'square',
+      lead:[72,76,79,84, 88,84,79,84, 74,77,81,86, 89,86,81,86,
+            76,79,84,88, 91,88,84,88, 84,88,91,96, 96,R,R,R],
+      bass:[48,48,55,55, 50,50,57,57, 52,52,59,59, 53,53,60,60] },
+  };
+  let musicOn = true;
+  const jukebox = KidKit.audio.music(TRACKS, {volume:.38});
+  el.music.addEventListener('click', e=>{
+    e.stopPropagation();
+    musicOn = !musicOn;
+    el.music.classList.toggle('off', !musicOn);
+    el.music.setAttribute('aria-label', musicOn ? 'Turn music off' : 'Turn music on');
+    jukebox.setEnabled(musicOn);
+  });
+
+  /* ================================================================== *
+   * the zones
+   *
+   * One per section of eight floors. The Garden only ever happens once, at
+   * the very bottom; above it the other seven cycle for ever, so a very good
+   * climb goes round again rather than running out of tower.
+   * ================================================================== */
+  const ZONES = [
+    { name:'The Garden',   icon:'🌻', sky:['#BFEBFF','#EBFBFF'], far:'#79C45E', haze:'#DFF6D8',
+      back:'#F3E3C4', wall:'#C08A50', wall2:'#9A6B3A', slab:'#A6763F', top:'#D0A165',
+      trim:'#4FD16A', deco:'garden', track:'climb',
+      foe:{ shape:'bug', c:'#F0453A', c2:'#B62F27', name:'beetle' } },
+    { name:'The Treetops', icon:'🌳', sky:['#A6E3F5','#E4F7E8'], far:'#3E8E4F', haze:'#CFEDC8',
+      back:'#DDF0CE', wall:'#7F5535', slab:'#6E4C2C', top:'#96703F',
+      trim:'#8BE05A', deco:'trees', track:'climb',
+      foe:{ shape:'bee', c:'#FFD23D', c2:'#5A4210', name:'bumblebee' } },
+    { name:'The Rooftops', icon:'🏠', sky:['#FFC48A','#FFEBD2'], far:'#7A5C86', haze:'#FFD9B0',
+      back:'#F0D9BE', wall:'#9A5A4A', slab:'#8A4E40', top:'#BE7259',
+      trim:'#FF8A3D', deco:'houses', track:'climb',
+      foe:{ shape:'cat', c:'#4A4258', c2:'#2C2836', name:'roof cat' } },
+    { name:'The Cloud Deck',icon:'☁️', sky:['#8FD0FF','#F4FBFF'], far:'#FFFFFF', haze:'#FFFFFF',
+      // pale-on-pale nearly lost the floors against the wall up here
+      back:'#E6F3FF', wall:'#9FBBD8', slab:'#7FA3C6', top:'#B4D0E9',
+      trim:'#3DA9F5', deco:'clouds', track:'sky',
+      foe:{ shape:'blob', c:'#7FD8F0', c2:'#3E9EC0', name:'puffling' } },
+    { name:'The Balloon Fair',icon:'🎈', sky:['#FF9FC4','#FFE9F3'], far:'#FF6FA8', haze:'#FFD3E5',
+      back:'#FFE4EF', wall:'#C86A96', slab:'#B0577F', top:'#E08CB2',
+      trim:'#FF6FA8', deco:'balloons', track:'sky',
+      foe:{ shape:'balloonbug', c:'#B274EB', c2:'#7B45AE', name:'floaty' } },
+    { name:'The Sky Castle',icon:'🏰', sky:['#7E9BE8','#D2DEFF'], far:'#4E5FA8', haze:'#C3D0FF',
+      back:'#DCE4FF', wall:'#8C93C8', slab:'#6F76AE', top:'#AFB6E4',
+      trim:'#A86BF0', deco:'castle', track:'sky',
+      foe:{ shape:'ghost', c:'#F2F0FF', c2:'#9C96D8', name:'sleepy ghost' } },
+    { name:'The Stars',    icon:'⭐', sky:['#2A2160','#5E43A2'], far:'#1B1540', haze:'#3A2E7A',
+      back:'#332A6B', wall:'#4A3E8C', slab:'#3A2F73', top:'#6F60B8',
+      trim:'#FFD23D', deco:'stars', track:'space',
+      foe:{ shape:'star', c:'#FFD23D', c2:'#C79A2B', name:'twinkler' } },
+    { name:'Outer Space',  icon:'🚀', sky:['#0B0620','#28125E'], far:'#080316', haze:'#1B1145',
+      back:'#1A1038', wall:'#3A2E6E', slab:'#2A2054', top:'#5B4CA2',
+      trim:'#4FD16A', deco:'space', track:'space',
+      foe:{ shape:'alien', c:'#4FD16A', c2:'#2C8C4E', name:'space blob' } },
+  ];
+  const sectionOf = k => Math.floor(k / TUNE.section);
+  function zoneOf(k){
+    const s = sectionOf(k);
+    return s === 0 ? ZONES[0] : ZONES[1 + ((s - 1) % (ZONES.length - 1))];
+  }
+  /* The last floor of a section: nothing but the bell, and the bell is the
+     only way off it. That is what makes "the top" a real place. */
+  const isTopFloor = k => (k % TUNE.section) === TUNE.section - 1;
+
+  /* ================================================================== *
+   * the cast — the same two kids as everywhere else
+   * ================================================================== */
+  const KIDS = [
+    { id:'oliver', name:'Oliver', face:'🧒',
+      skin:'#F6C99B', hair:'#7A4B2A', shirt:'#3DA9F5', shirt2:'#1E6FB0',
+      legs:'#2F4858', shoe:'#F0453A', style:'boy' },
+    { id:'emsile', name:'Emsile', face:'👧',
+      skin:'#F8D2AE', hair:'#C97B3C', shirt:'#FF6FA8', shirt2:'#D2417A',
+      legs:'#8646CE', shoe:'#FFD23D', style:'girl' },
+  ];
+
+  /* ================================================================== *
+   * the powers
+   *
+   * Same rule as Oliver Run: a power lasts until you pick up another one.
+   * No timers, nothing to lose, and every one of them either works by itself
+   * or maps onto the one button.
+   * ================================================================== */
+  const POWERS = [
+    { id:'boots',   name:'SUPER BOOTS',   tag:'🥾 Super boots',   c:'#FF8A3D' },
+    { id:'feather', name:'FLOATY FEATHER',tag:'🪶 Floaty feather',c:'#8FD8F5' },
+    { id:'magnet',  name:'STAR MAGNET',   tag:'🧲 Star magnet',   c:'#F0453A' },
+    { id:'rocket',  name:'ROCKET PACK',   tag:'🚀 Rocket pack',   c:'#FFD23D' },
+    { id:'grip',    name:'STICKY GRIP',   tag:'🧤 Sticky grip',   c:'#4FD16A' },
+    { id:'bounce',  name:'BOUNCY BALL',   tag:'🏀 Bouncy ball',   c:'#B274EB' },
+  ];
+  const powerById = id => POWERS.find(p => p.id === id) || null;
+
+  /* ================================================================== *
+   * state
+   * ================================================================== */
+  let state = 'menu';               // 'menu' | 'play' — there is no third
+  let kidIdx = Math.max(0, KIDS.findIndex(
+    k => k.id === KidKit.storage.get('tower-climb-kid', 'oliver')));
+  let floorsClimbed = 0;            // the score: highest floor this run
+  let best = KidKit.storage.getNumber('tower-climb-best', 0);
+  let bells = 0;                    // sections finished this run
+  let bestBells = KidKit.storage.getNumber('tower-climb-bells', 0);
+  let stars = 0, starTotal = 0;
+  let power = null;
+  let t = 0, shake = 0, flash = 0;
+  let cam = -BASE_Y, camTarget = -BASE_Y;
+  let saveIv = null;
+  let recordBeaten = false;
+  let lastZone = ZONES[0];
+
+  const floors = new Map();         // k -> floor object
+  let baseFloor = 0;                // the lowest floor still in the map
+
+  let sparks = [], confetti = [], pops = [], puffs = [], fireworks = [];
+  let orbs = [], gems = [], foes = [], temps = [];   // temps: birds, lifts, balloons
+  let lift = null;                  // the fly-up set piece, when one is running
+
+  const p = {
+    x: 120, a: 0, vx: 0, va: 0,
+    w: 26, h: 38, face: 1, run: 0,
+    onGround: true, ground: null, coyote: 0, buffer: 0,
+    ladder: null, climbing: 0, wall: 0, ladCd: 0, carried: null,
+    fellFrom: 0, chute: 0, hurt: 0, jumps: 0, stuck: 0, high: 0,
+  };
+  const kid = () => KIDS[kidIdx];
+
+  const scrY = a => H - (a - cam);
+  const floorOf = a => Math.floor((a + 6) / TUNE.floorH);
+
+  /* ================================================================== *
+   * building the tower
+   *
+   * Floors are made one at a time, on demand, and thrown away once they are
+   * well below the climber. linkUp(k) can only run once floor k+1 exists,
+   * because every route up has to land on something solid — that check is the
+   * whole reason generation is two passes rather than one.
+   * ================================================================== */
+  function segsFor(k){
+    if (k === 0 || isTopFloor(k)) return [{ x0: IN_L, x1: IN_R }];
+    const zone = sectionOf(k);
+    const gaps = [];
+    const want = Math.random() < (zone === 0 ? 0.55 : 0.8) ? (Math.random() < 0.35 ? 2 : 1) : 0;
+    for (let i = 0; i < want; i++){
+      const wdt = rnd(TUNE.gapMin, TUNE.gapMax);
+      const x0 = rnd(IN_L + 70, IN_R - 70 - wdt);
+      // keep gaps apart so a floor never becomes two islands and a sliver
+      if (gaps.some(g => x0 < g.x1 + 90 && x0 + wdt > g.x0 - 90)) continue;
+      gaps.push({ x0, x1: x0 + wdt });
+    }
+    gaps.sort((a,b) => a.x0 - b.x0);
+    const segs = [];
+    let cursor = IN_L;
+    for (const g of gaps){
+      if (g.x0 - cursor > 40) segs.push({ x0: cursor, x1: g.x0 });
+      cursor = g.x1;
+    }
+    if (IN_R - cursor > 40) segs.push({ x0: cursor, x1: IN_R });
+    return segs.length ? segs : [{ x0: IN_L, x1: IN_R }];
+  }
+
+  const solidAt = (f, x) => !!f && f.segs.some(s => x >= s.x0 + 12 && x <= s.x1 - 12);
+
+  function makeFloor(k){
+    const f = {
+      k, a: k*TUNE.floorH, segs: segsFor(k),
+      up: [], steps: [], linked: false,
+      bell: isTopFloor(k) ? { x: rnd(IN_L + 130, IN_R - 130), rung: false, ph: Math.random()*6 } : null,
+    };
+    floors.set(k, f);
+    return f;
+  }
+  const floorAt = k => floors.get(k) || (k >= baseFloor ? makeFloor(k) : null);
+
+  /* Somewhere solid on both floors, so no route ever ends in mid-air. */
+  function sharedX(a, b){
+    for (let i = 0; i < 24; i++){
+      const seg = pick(a.segs);
+      const x = rnd(seg.x0 + 26, seg.x1 - 26);
+      if (solidAt(b, x)) return x;
+    }
+    // fall back to the middle of the widest run of floor that works on both
+    for (let x = IN_L + 26; x <= IN_R - 26; x += 14) if (solidAt(a, x) && solidAt(b, x)) return x;
+    return (IN_L + IN_R)/2;
+  }
+
+  function linkUp(k){
+    const f = floorAt(k), above = floorAt(k+1);
+    if (!f || !above || f.linked) return;
+    f.linked = true;
+    /* The bell is the only way off a top floor — until it has been rung.
+       After that the floor needs ordinary routes like any other, because a
+       climber can drop back down through a gap in the floor above and would
+       otherwise be standing on the one floor in the tower with no way up. */
+    if (f.bell && !f.bell.rung) return;
+
+    /* One guaranteed no-jump route, always. A ladder you walk into and ride,
+       or a spring that fires the moment you stand on it. */
+    const easy = Math.random() < 0.7 ? 'ladder' : 'spring';
+    addRoute(f, above, easy);
+
+    // then nought to two shortcuts for whoever fancies jumping
+    const extras = Math.random() < 0.45 ? 2 : Math.random() < 0.75 ? 1 : 0;
+    for (let i = 0; i < extras; i++){
+      addRoute(f, above, pick(['steps','ladder','spring','steps']));
+    }
+  }
+
+  function addRoute(f, above, kind){
+    const x = sharedX(f, above);
+    if (f.up.some(u => Math.abs(u.x - x) < 96)) return;   // no stacking two on one spot
+    if (kind === 'ladder'){
+      f.up.push({ kind:'ladder', x, a0: f.a, a1: above.a, ph: Math.random()*6 });
+    } else if (kind === 'spring'){
+      f.up.push({ kind:'spring', x, a: f.a, squish: 0 });
+    } else {
+      /* Two little platforms staggered either side, a hop apart. Both centres
+         are clamped well inside the shaft: built straight off `x` the upper
+         one hung out through the brickwork, and a child could stand on the
+         half of it that was outside the tower. */
+      const side = x > (IN_L + IN_R)/2 ? -1 : 1;      // stagger towards the middle
+      const c1 = clamp(x, IN_L + 48, IN_R - 48);
+      const c2 = clamp(x + side*74, IN_L + 46, IN_R - 46);
+      f.up.push({ kind:'steps', x: c1 });
+      f.steps.push({ x0: c1 - 46, x1: c1 + 46, a: f.a + TUNE.stepA[0], kind:'step' });
+      f.steps.push({ x0: c2 - 44, x1: c2 + 44, a: f.a + TUNE.stepA[1], kind:'step' });
+    }
+  }
+
+  /* Stars, orbs and critters, sprinkled on a floor when it is first built. */
+  function dressFloor(k){
+    const f = floorAt(k);
+    if (!f || f.dressed) return;
+    f.dressed = true;
+    if (f.bell) return;                        // the top floor stays clear
+
+    const zi = ZONES.indexOf(zoneOf(k));
+    for (const seg of f.segs){
+      const wdt = seg.x1 - seg.x0;
+      const n = Math.max(1, Math.round(wdt/210));
+      for (let i = 0; i < n; i++){
+        const x = rnd(seg.x0 + 24, seg.x1 - 24);
+        const high = Math.random() < 0.42;
+        gems.push({ x, a: f.a + (high ? rnd(48, 74) : 22), ph: Math.random()*6, got: false, k });
+      }
+    }
+    if (k > 0 && k % 3 === 1){
+      const seg = pick(f.segs);
+      orbs.push({ x: rnd(seg.x0 + 30, seg.x1 - 30), a: f.a + 40, ph: Math.random()*6, k });
+    }
+    const foeCount = k < 2 ? 0 : Math.random() < 0.42 + Math.min(0.3, zi*0.05) ? 1 : 0;
+    for (let i = 0; i < foeCount; i++){
+      const seg = pick(f.segs);
+      if (seg.x1 - seg.x0 < 130) continue;
+      const kind = Math.random() < 0.3 ? 'fly' : Math.random() < 0.5 ? 'hop' : 'walk';
+      foes.push({
+        kind, k, x: rnd(seg.x0 + 40, seg.x1 - 40),
+        x0: seg.x0 + 24, x1: seg.x1 - 24,
+        a: f.a + (kind === 'fly' ? 58 : 0), base: f.a,
+        dir: Math.random() < 0.5 ? -1 : 1, ph: Math.random()*6,
+        squash: 0, dizzy: 0, cd: 0, spec: zoneOf(k).foe,
+      });
+    }
+  }
+
+  /* Keep six floors of tower above the climber and three below. */
+  function growTower(){
+    const here = floorOf(p.a);
+    for (let k = Math.max(0, here - 3); k <= here + 7; k++) floorAt(k);
+    for (let k = Math.max(0, here - 3); k <= here + 6; k++) linkUp(k);
+    for (let k = Math.max(0, here - 3); k <= here + 6; k++) dressFloor(k);
+
+    const cut = Math.max(0, here - 4);
+    if (cut > baseFloor){
+      for (let k = baseFloor; k < cut; k++) floors.delete(k);
+      baseFloor = cut;
+      gems = gems.filter(g => g.k >= cut);
+      orbs = orbs.filter(o => o.k >= cut);
+      foes = foes.filter(f => f.k >= cut);
+    }
+  }
+
+  /* Every platform the climber could land on this frame. Only the floors
+     within reach are considered, which keeps this cheap enough to rebuild
+     every frame rather than invalidate by hand. */
+  function activePlats(){
+    const here = floorOf(p.a);
+    const out = [];
+    for (let k = here - 2; k <= here + 3; k++){
+      const f = floors.get(k);
+      if (!f) continue;
+      for (const s of f.segs) out.push({ x0: s.x0, x1: s.x1, a: f.a, floor: f, kind:'floor' });
+      for (const s of f.steps) out.push({ x0: s.x0, x1: s.x1, a: s.a, floor: f, kind:'step' });
+    }
+    for (const tp of temps){
+      if (tp.solid) out.push({ x0: tp.x - tp.w/2, x1: tp.x + tp.w/2, a: tp.a, kind: tp.kind, ref: tp });
+    }
+    return out;
+  }
+
+  function springNear(x, a){
+    const f = floors.get(floorOf(a));
+    if (!f) return null;
+    for (const u of f.up){
+      if (u.kind === 'spring' && Math.abs(u.x - x) < 34 && Math.abs(u.a - a) < 6) return u;
+    }
+    return null;
+  }
+  function ladderNear(x, a){
+    for (let k = floorOf(a) - 1; k <= floorOf(a) + 1; k++){
+      const f = floors.get(k);
+      if (!f) continue;
+      for (const u of f.up){
+        if (u.kind !== 'ladder') continue;
+        if (Math.abs(u.x - x) < 19 && a >= u.a0 - 8 && a <= u.a1 - 4) return u;
+      }
+    }
+    return null;
+  }
+
+  /* ================================================================== *
+   * particles and shouts
+   * ================================================================== */
+  function sparkAt(x, a, n, colour){
+    for (let i = 0; i < n; i++){
+      sparks.push({ x, a, vx: rnd(-1.6,1.6), va: rnd(-.6,2.4), life: rnd(14,30), max:30,
+                    s: rnd(2.5,6), c: colour || '#FFF3C9' });
+    }
+  }
+  function puffAt(x, a, n){
+    for (let i = 0; i < n; i++){
+      puffs.push({ x, a, vx: rnd(-1.1,1.1), va: rnd(.1,1.1), life: rnd(16,30), max:30,
+                   s: rnd(4,10) });
+    }
+  }
+  function confettiAt(x, a, n){
+    for (let i = 0; i < n; i++){
+      confetti.push({ x, a, vx: rnd(-2.6,2.6), va: rnd(1.2,5.4), r: rnd(0,6.3), spin: rnd(-.3,.3),
+                      life: rnd(60,130), max:130,
+                      c: pick(['#FFD23D','#FF6FA8','#4FD16A','#3DA9F5','#FF8A3D','#FFFFFF']) });
+    }
+  }
+  function fireworkAt(x, a){
+    fireworks.push({ x, a, r: 0, life: 46, max: 46, c: pick(['#FFD23D','#FF6FA8','#8FD8F5','#4FD16A','#FF8A3D']) });
+    if (!muted) setTimeout(()=>{ noise(.22,.05); tone(rnd(500,900),.2,'triangle',.03,-300); }, 20);
+  }
+  function pop(x, a, text, colour, size){
+    pops.push({ x, a, text, c: colour || '#FFD23D', size: size || 26, life: 42, max: 42 });
+  }
+
+  /* One shout at a time, and when two want the screen the louder one gets it.
+     Dropping the *quieter* card rather than the older one is Oliver Run's
+     lesson: a kid who just found a power is owed that news more than the
+     screen is owed a tidy queue. */
+  let shoutPri = -1, shoutIv = null;
+  function shout(text, ms, pri){
+    const level = pri == null ? 1 : pri;
+    if (el.shout.classList.contains('show') && level < shoutPri) return;
+    shoutPri = level;
+    el.shout.innerHTML = text;
+    el.shout.classList.add('show');
+    clearTimeout(shoutIv);
+    shoutIv = setTimeout(()=>{ el.shout.classList.remove('show'); shoutPri = -1; }, ms || 1700);
+  }
+
+  /* ================================================================== *
+   * HUD
+   * ================================================================== */
+  function updateHud(){
+    const z = zoneOf(floorOf(p.a));
+    el.zone.textContent = z.icon + ' ' + z.name;
+    el.floors.textContent = floorsClimbed;
+    el.best.textContent = best ? 'Best ' + best + (bestBells ? '  🔔' + bestBells : '') : '';
+    el.fill.style.width = Math.round(clamp(stars/TUNE.starGoal*100, 0, 100)) + '%';
+    el.meter.classList.toggle('full', stars >= TUNE.starGoal);
+    el.kidTag.textContent = kid().name;
+    const other = KIDS[(kidIdx + 1) % KIDS.length];
+    el.swapFace.textContent = other.face;
+    el.swap.setAttribute('aria-label', 'Climb as ' + other.name + ' instead');
+    el.power.hidden = !power;
+    if (power) el.power.textContent = power.tag;
+  }
+
+  function saveBest(){
+    let dirty = false;
+    if (floorsClimbed > best){ best = floorsClimbed; dirty = true; }
+    if (bells > bestBells){ bestBells = bells; dirty = true; }
+    if (!dirty || saveIv) return;
+    /* Throttled, NOT debounced. A debounce re-arms on every change, and a
+       floor is gained roughly every forty frames on a good climb — so the
+       write was pushed back for ever and the run's best only ever reached
+       storage if the child stopped climbing for a second and a quarter
+       before the tab was closed. A test that climbed to 138 saved 120.
+       This way the first change always lands within 1200ms, and a burst of
+       them still costs only the one write. */
+    saveIv = setTimeout(()=>{
+      saveIv = null;
+      KidKit.storage.set('tower-climb-best', best);
+      KidKit.storage.set('tower-climb-bells', bestBells);
+    }, 1200);
+  }
+
+  /* ================================================================== *
+   * things that happen while you climb
+   *
+   * Same rule as the living room: every one of these is a gift. Not one of
+   * them may make the climb slower or take a floor back. Where something
+   * could get in the way (a bird crossing the shaft), it is a platform you
+   * can stand on rather than a thing that shoves you.
+   * ================================================================== */
+  const EV_GAP_MIN = 620, EV_GAP_MAX = 1150;
+  let evIn = 420;
+  let night = 0, nightLeft = 0, rescueCd = 0;
+  let dog = null;
+
+  function fireEvent(){
+    evIn = rnd(EV_GAP_MIN, EV_GAP_MAX);
+    const pool = [];
+    const add = (id, n) => { for (let i = 0; i < n; i++) pool.push(id); };
+    add('balloon', 4); add('birds', 4); add('shower', 4); add('dog', 3);
+    if (!nightLeft && sectionOf(floorOf(p.a)) > 0) add('fireworks', 3);
+    const id = pool[(Math.random()*pool.length)|0];
+
+    if (id === 'balloon'){
+      sendBalloon();
+    } else if (id === 'birds'){
+      const n = rint(2,3);
+      for (let i = 0; i < n; i++){
+        temps.push({ kind:'bird', x: rnd(IN_L+60, IN_R-60), a: p.a + 70 + i*96,
+                     w: 76, solid: true, life: rnd(700, 1000),
+                     dir: Math.random() < .5 ? -1 : 1, sp: rnd(.7,1.3), ph: rnd(0,6.3) });
+      }
+      shout('Birds! Ride them up!', 1700, 1);
+      sfx.caw();
+    } else if (id === 'shower'){
+      for (let i = 0; i < 18; i++){
+        gems.push({ x: rnd(IN_L+20, IN_R-20), a: p.a + rnd(120, 460), ph: rnd(0,6.3),
+                    got:false, k: floorOf(p.a), fall: rnd(.5,1.3) });
+      }
+      shout('Star shower!', 1700, 1);
+      sfx.star();
+    } else if (id === 'dog'){
+      const f = floors.get(floorOf(p.a) + 1) || floors.get(floorOf(p.a));
+      if (f){
+        const seg = pick(f.segs);
+        dog = { x: rnd(seg.x0 + 40, seg.x1 - 40), a: f.a, life: 900, bounce: 0, ph: 0 };
+        shout('The dog came up too!', 1700, 1);
+        sfx.woof();
+      }
+    } else {
+      nightLeft = 900;
+      shout('Fireworks!', 1700, 1);
+      for (let i = 0; i < 5; i++){
+        setTimeout(()=> fireworkAt(rnd(IN_L, IN_R), p.a + rnd(120, 300)), i*260);
+      }
+    }
+  }
+
+  /* A bunch of balloons, drifting down to be caught. On a section's top floor
+     it ferries them sideways to the bell instead of lifting: the bell is the
+     only way off that floor, and a balloon that sailed straight over it would
+     rob the climber of the best moment in the game. */
+  function sendBalloon(){
+    const top = isTopFloor(floorOf(p.a));
+    const f = floors.get(floorOf(p.a));
+    const toBell = !!(top && f && f.bell && !f.bell.rung);
+    const toX = toBell ? f.bell.x : clamp(p.x + rnd(-90,90), IN_L+40, IN_R-40);
+    /* It spawns above the CLIMBER, not above where it is taking them. Spawned
+       over the bell it simply hung there, four hundred pixels from the child
+       it had come to fetch, and the rescue never fired at all. */
+    temps.push({ kind:'balloon', x: clamp(p.x + rnd(-50,50), IN_L+30, IN_R-30),
+                 a: p.a + rnd(100, 170), w: 44, solid: false,
+                 life: 900, toX, noLift: toBell,
+                 c: pick(['#FF6FA8','#FFD23D','#4FD16A','#3DA9F5','#FF8A3D']), ph: rnd(0,6.3) });
+    shout('Balloons! Grab one!', 1700, 1);
+    sfx.pop();
+  }
+
+  /* Somewhere on this floor it is safe to be put down. */
+  function landingX(f, nearX){
+    if (!f) return nearX;
+    let bestSeg = null, bestD = Infinity;
+    for (const s of f.segs){
+      if (nearX >= s.x0 + 20 && nearX <= s.x1 - 20) return nearX;
+      const mid = (s.x0 + s.x1)/2, d = Math.abs(mid - nearX);
+      if (d < bestD){ bestD = d; bestSeg = s; }
+    }
+    return bestSeg ? clamp(nearX, bestSeg.x0 + 22, bestSeg.x1 - 22) : nearX;
+  }
+
+  /* Catching the balloons books a whole journey — where from, where to, how
+     long — rather than just pushing upwards for a while. A push let go of the
+     climber in mid-air over the same gap they started above, and they fell
+     most of the way back down; the gift has to actually put them somewhere. */
+  function grabBalloon(tp){
+    const here = floorOf(p.a);
+    const upTo = tp.noLift ? here : here + (Math.random() < 0.35 ? 2 : 1);
+    const dest = floors.get(upTo) || floors.get(here);
+    const f = floors.get(here);
+    tp.carrying = true;
+    tp.fromX = p.x; tp.fromA = p.a;
+    tp.toA = dest ? dest.a : p.a + TUNE.floorH;
+    tp.toX = tp.noLift && f && f.bell ? f.bell.x : landingX(dest, p.x);
+    tp.t = 0;
+    tp.dur = 56 + Math.abs(tp.toA - p.a)*0.2 + Math.abs(tp.toX - p.x)*0.12;
+    tp.life = tp.dur + 40;
+    p.carried = tp;
+    p.ladder = null;
+    sfx.whoosh();
+    pop(p.x, p.a + 60, 'UP!', '#FF6FA8', 28);
+  }
+
+  /* The star boost rides on the same delivery as the balloons. It used to be
+     a shove — thirteen pixels a frame straight up — which threw the climber
+     off whatever ladder they were on and dropped them wherever they happened
+     to come down. With a magnet on, that shove fired every few seconds and
+     the strongest star-collecting power in the game was measurably WORSE
+     than carrying nothing at all. A gift has to put you somewhere. */
+  function boostCarry(upFloors){
+    const here = floorOf(p.a);
+    const dest = floors.get(here + upFloors) || floors.get(here);
+    const tp = {
+      kind:'balloon', style:'stars', x: p.x, a: p.a + 78, w: 44, solid: false, ph: 0,
+      carrying: true, fromX: p.x, fromA: p.a,
+      toA: dest ? dest.a : p.a + upFloors*TUNE.floorH,
+      toX: landingX(dest, p.x), noLift: false, t: 0,
+    };
+    tp.dur = 50 + Math.abs(tp.toA - p.a)*0.16;
+    tp.life = tp.dur + 40;
+    temps.push(tp);
+    p.carried = tp;
+    p.ladder = null;
+  }
+
+  function updateEvents(dt){
+    // no new events mid-fly-up: that set piece owns the screen
+    if (state === 'play' && !lift){
+      if (evIn > 0) evIn -= dt;
+      else fireEvent();
+    }
+
+    /* The backstop, and the reason nobody ever needs rescuing by an adult:
+       seven seconds without gaining any height and the balloons come whether
+       the event clock wanted them or not. `stuck` counts frames since the
+       last altitude gained, which catches the child who has put the
+       controller down AND the one leaning on a single direction with their
+       back to a wall. Asking "are they pressing anything?" only ever caught
+       the first, and the second is the common one. */
+    if (rescueCd > 0) rescueCd -= dt;
+    if (state === 'play' && !lift && p.stuck > 420 && rescueCd <= 0){
+      rescueCd = 900;
+      sendBalloon();
+    }
+
+    if (nightLeft > 0){
+      nightLeft -= dt;
+      if (Math.random() < 0.03*dt) fireworkAt(rnd(IN_L, IN_R), p.a + rnd(100, 320));
+    }
+    night += ((nightLeft > 0 ? 1 : 0) - night)*0.02*dt;
+    if (night < .004 && nightLeft <= 0) night = 0;
+
+    for (const tp of temps){
+      tp.life -= dt;
+      tp.ph += 0.05*dt;
+      if (tp.kind === 'bird'){
+        tp.x += tp.dir*tp.sp*dt;
+        if (tp.x < IN_L + 40){ tp.x = IN_L + 40; tp.dir = 1; }
+        if (tp.x > IN_R - 40){ tp.x = IN_R - 40; tp.dir = -1; }
+        tp.a += Math.sin(tp.ph)*0.5*dt + 0.32*dt;      // they climb, slowly
+      } else if (tp.kind === 'balloon'){
+        if (!tp.carrying){
+          tp.a -= 0.8*dt;                               // drifts down to be caught
+          tp.x += (p.x - tp.x)*0.03*dt + Math.sin(tp.ph)*0.3*dt;
+          if (!p.carried && Math.hypot(tp.x - p.x, tp.a - (p.a + 20)) < 48){
+            grabBalloon(tp);
+          }
+        } else {
+          tp.x = p.x;
+          tp.a = p.a + 78;
+          if (Math.random() < 0.3*dt) sparkAt(p.x, p.a + 10, 1, '#FFD9EC');
+        }
+      }
+    }
+    temps = temps.filter(tp => tp.life > 0 && tp.a > cam - 200 && tp.a < cam + H + 700);
+    if (p.carried && temps.indexOf(p.carried) === -1) p.carried = null;
+
+    if (dog){
+      dog.life -= dt;
+      dog.ph += 0.08*dt;
+      if (dog.bounce > 0) dog.bounce -= dt;
+      // a bounce off the dog's back, never anything else
+      if (Math.abs(dog.x - p.x) < 34 && p.a > dog.a + 6 && p.a < dog.a + 46 && p.va < 0 && dog.bounce <= 0){
+        dog.bounce = 26;
+        p.va = TUNE.spring*0.86;
+        p.ladder = null;
+        sfx.boing();
+        pop(dog.x, dog.a + 60, 'BOING!', '#FFD23D', 26);
+        sparkAt(dog.x, dog.a + 20, 8, '#FFE9B0');
+      }
+      if (dog.life <= 0) dog = null;
+    }
+  }
+
+  /* ================================================================== *
+   * input
+   * ================================================================== */
+  const pads = KidKit.input.create({
+    element: document.getElementById('stage'),
+    steer: true,
+    onPress: () => press(),
+    onAction: () => swapKid(),
+    onNav: dir => { if (state === 'menu') KidKit.input.moveFocus(dir); },
+    onGamepad: on => { el.padTag.hidden = !on; },
+  });
+
+  function press(){
+    if (state === 'menu'){ startGame(); return; }
+    if (lift){                       // mashing during the fly-up throws confetti
+      confettiAt(p.x, p.a + rnd(20, 90), 6);
+      sfx.pop();
+      return;
+    }
+    p.buffer = TUNE.buffer;
+  }
+
+  /* Hold a finger where you want to go: only its x steers.
+   *
+   * Its height deliberately does NOT, even though the finger obviously has
+   * one. Feeding it in made a low-held finger read as "down", and a thumb
+   * resting at the bottom of a phone is the ordinary way a child holds one —
+   * so the commonest grip in the house rode every ladder back down again.
+   * Climbing down is worth nothing in a game about getting up, so it stays
+   * on the keys and the stick, where it has to be asked for on purpose. */
+  function steering(){
+    const a = pads.axis();
+    let sx = a.x;
+    const pt = pads.pointer();
+    if (pt.active){
+      const dx = pt.nx*W - p.x;
+      if (Math.abs(dx) > 16) sx = clamp(dx/70, -1, 1);
+      else if (Math.abs(a.x) < 0.06) sx = 0;
+    }
+    return { x: sx, y: a.y };
+  }
+
+  function swapKid(){
+    if (state !== 'play') return;
+    kidIdx = (kidIdx + 1) % KIDS.length;
+    KidKit.storage.set('tower-climb-kid', kid().id);
+    sfx.swap();
+    sparkAt(p.x, p.a + 20, 8, '#FFF0C4');
+    updateHud();
+  }
+  el.swap.addEventListener('click', e => { e.stopPropagation(); swapKid(); });
+
+  document.getElementById('pickOliver').addEventListener('click', e => { e.stopPropagation(); pickKid(0); });
+  document.getElementById('pickEmsile').addEventListener('click', e => { e.stopPropagation(); pickKid(1); });
+  function pickKid(i){
+    kidIdx = i;
+    KidKit.storage.set('tower-climb-kid', kid().id);
+    document.getElementById('pickOliver').setAttribute('aria-pressed', String(i === 0));
+    document.getElementById('pickEmsile').setAttribute('aria-pressed', String(i === 1));
+    sfx.swap();
+    updateHud();
+  }
+  pickKid(kidIdx);
+
+  document.getElementById('startBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (state === 'menu') startGame();
+  });
+
+  function startGame(){
+    state = 'play';
+    el.start.hidden = true;
+    floors.clear();
+    baseFloor = 0;
+    gems = []; orbs = []; foes = []; temps = []; sparks = []; confetti = [];
+    pops = []; puffs = []; fireworks = [];
+    lift = null; dog = null; night = 0; nightLeft = 0; evIn = 420; rescueCd = 0;
+    floorsClimbed = 0; bells = 0; stars = 0; starTotal = 0;
+    power = null; recordBeaten = false;
+    p.x = 120; p.a = 0; p.vx = 0; p.va = 0; p.onGround = true; p.ladder = null;
+    p.coyote = 0; p.buffer = 0; p.fellFrom = 0; p.chute = 0; p.jumps = 0; p.ladCd = 0;
+    p.stuck = 0; p.high = 0; p.carried = null;
+    cam = camTarget = -BASE_Y;
+    growTower();
+    jukebox.play(zoneOf(0).track);
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * the climber
+   *
+   * One substep of at most a frame at a time: a platformer that integrates a
+   * whole 2.4-frame catch-up step in one go tunnels straight through a floor,
+   * and on a slow telly that is exactly the step it would get.
+   * ================================================================== */
+  function movePlayer(dt, steer){
+    let left = dt;
+    let guard = 0;
+    while (left > 0.0001 && ++guard < 8){
+      const s = Math.min(1, left);
+      left -= s;
+      substep(s, steer);
+    }
+  }
+
+  function substep(s, steer){
+    const plats = activePlats();
+    const a0 = p.a;
+
+    if (p.coyote > 0) p.coyote -= s;
+    if (p.buffer > 0) p.buffer -= s;
+    if (p.hurt > 0) p.hurt -= s;
+
+    /* --- ladders: walk into one and you ride it up ------------------ *
+     * No button, no holding up, no timing. This is the promise the whole
+     * game rests on — a child who can only push one direction still gets to
+     * the top of every floor. */
+    if (p.ladCd > 0) p.ladCd -= s;
+    /* Grabbing works on the way down, and at the top of an arc, as well as
+       from standing — anything but a hard climb. It first needed both feet on
+       the floor, which quietly locked a child who taps constantly out of the
+       one route up that needs no skill at all, and did the same to anyone
+       carrying the Bouncy Ball, since that power never stops bouncing: the
+       gift turned into the only thing in the game that could hobble you.
+       The 3.4 ceiling is what keeps a fresh jump (8.1) and the rocket (6.6)
+       able to sail straight past a ladder rather than being reeled onto it. */
+    const lad = p.ladder || (p.ladCd > 0 ? null : ladderNear(p.x, p.a));
+    if (!p.ladder && lad && p.va <= 3.4 && p.a >= lad.a0 - 6 && p.a < lad.a1 - 8){
+      p.ladder = lad;
+      p.va = 0;
+      p.jumps = 0;
+      sfx.rung();
+    }
+    if (p.ladder){
+      const u = p.ladder;
+      p.x += (u.x - p.x)*0.35*s;
+      /* Sideways does NOT let go, and that is deliberate. Holding right is
+         how you walked into the ladder in the first place, so a sideways
+         release drops you off it on the very frame you got on — which is
+         exactly what it did, over and over, one rung above the floor. */
+      const dir = steer.y > 0.45 ? -1 : 1;
+      p.a += TUNE.climb*dir*s;
+      p.climbing += s;
+      p.va = 0;
+      if (Math.floor(p.climbing/9) !== Math.floor((p.climbing - s)/9)) sfx.rung();
+
+      /* A tap on a ladder is a rung-leap UP it, not a jump off it. Letting go
+         was the obvious reading and it was the wrong one: a child who mashes
+         spent the whole game bouncing off the foot of every ladder in the
+         tower and climbed a third as far as one who tapped occasionally.
+         Whatever the button does, harder must never mean worse. */
+      if (p.buffer > 0){
+        p.buffer = 0;
+        p.a += 26;
+        p.climbing += 7;
+        sfx.rung();
+        sparkAt(p.x, p.a - 10, 3, '#FFE9A8');
+      }
+
+      if (p.a >= u.a1){                             // over the top and onto the floor
+        p.a = u.a1; p.ladder = null; p.onGround = true; p.va = 0;
+        p.x += (steer.x > 0.2 ? 6 : steer.x < -0.2 ? -6 : 0);
+        sfx.land();
+      } else if (p.a <= u.a0){                      // rode it back to the bottom
+        p.a = u.a0; p.ladder = null; p.onGround = true; p.va = 0;
+        p.ladCd = 30;                               // …and a moment to walk away
+      }
+      finishStep(a0, s);
+      return;
+    }
+
+    /* --- carried by a bunch of balloons ----------------------------- *
+     * This owns the climber outright, exactly as the ladder does, rather
+     * than adding a pull on top of the running. Added on top, the balloon's
+     * ease and a held direction key found an equilibrium and parked the
+     * child seventy pixels short of the bell they were being fetched to. */
+    if (p.carried){
+      const tp = p.carried;
+      tp.t += s;
+      const u = ease(tp.t/tp.dur);
+      p.vx = 0; p.va = 0;
+      p.x = lerp(tp.fromX, tp.toX, u);
+      p.a = lerp(tp.fromA, tp.toA, u);
+      p.onGround = tp.noLift;
+      p.fellFrom = p.a;
+      if (tp.t >= tp.dur){
+        p.x = tp.toX; p.a = tp.toA;
+        p.onGround = true; p.jumps = 0;
+        p.carried = null;
+        tp.life = Math.min(tp.life, 22);
+        sfx.land();
+      }
+      finishStep(a0, s);
+      return;
+    }
+
+    /* --- sticky grip climbs the shaft walls the same way ------------ *
+     * Two things here are load-bearing. It takes the MAX of the two speeds
+     * rather than setting one, because assigning it flattened every jump
+     * made anywhere near a wall down to a crawl — the power was cancelling
+     * the thing it was supposed to be helping with. And it wants the wall
+     * pressed into on purpose, so drifting past one is not mistaken for
+     * wanting to stop and climb it. */
+    const onWall = (p.x < IN_L + 22 && steer.x < -0.3) || (p.x > IN_R - 22 && steer.x > 0.3);
+    if (power && power.id === 'grip' && onWall && steer.y <= 0.4){
+      p.va = Math.max(p.va, TUNE.climb*0.85);
+      p.onGround = false;
+      p.wall = p.x < W/2 ? -1 : 1;
+      if (Math.random() < 0.25*s) sparkAt(p.x, p.a + 18, 1, '#B7F2C4');
+    } else p.wall = 0;
+
+    /* --- running ---------------------------------------------------- */
+    const ctrl = p.onGround ? 1 : TUNE.airCtrl;
+    const want = steer.x*TUNE.run;
+    p.vx += (want - p.vx)*(p.onGround ? 0.34 : 0.16)*ctrl*s*2;
+    if (Math.abs(p.vx) < 0.08) p.vx = 0;
+    p.x += p.vx*s;
+    p.x = clamp(p.x, IN_L + 6, IN_R - 6);
+    if (Math.abs(p.vx) > 0.4) p.face = p.vx > 0 ? 1 : -1;
+
+    /* --- jumping ---------------------------------------------------- */
+    if (p.buffer > 0 && (p.onGround || p.coyote > 0)){
+      doJump(1);
+    } else if (p.buffer > 0 && power && power.id === 'rocket'){
+      /* A burst sets a top speed, it does not add to one. Adding meant a
+         child holding the button down accumulated 6.2 more every frame:
+         one test run flew forty-two thousand floors in eighty seconds. */
+      p.va = Math.min(p.va + 5.2, 6.6);
+      p.buffer = 0;
+      puffAt(p.x, p.a + 4, 4);
+      sparkAt(p.x, p.a + 6, 4, '#FFD9A0');
+      sfx.whoosh();
+    } else if (p.buffer > 0 && power && power.id === 'feather' && p.jumps < 2){
+      doJump(0.9);
+    }
+
+    /* --- gravity ---------------------------------------------------- */
+    const light = power && power.id === 'feather' && p.va < 0 ? 0.42 : 1;
+    p.va -= TUNE.grav*light*s*(p.chute > 0 ? 0.16 : 1);
+    if (p.chute > 0){
+      p.chute -= s;
+      p.va = Math.max(p.va, -1.9);
+    }
+    // a ceiling as well as a floor: nothing in the game should ever be able
+    // to stack vertical speed, and a backstop here is cheaper than trusting
+    // that none of six powers and five events ever will
+    p.va = clamp(p.va, -14, 16);
+    p.a += p.va*s;
+
+    /* --- landing ----------------------------------------------------- *
+     * One-way platforms: you rise straight through them and only ever land on
+     * a top. No ceilings to bonk, which removes a whole category of "why am I
+     * stuck" from a five-year-old's afternoon. */
+    if (p.va <= 0){
+      let hit = null;
+      for (const pl of plats){
+        if (a0 + 0.6 < pl.a || p.a > pl.a) continue;
+        const grab = TUNE.ledgeGrab*(p.va < -4 ? 0 : 1);
+        if (p.x < pl.x0 - grab || p.x > pl.x1 + grab) continue;
+        if (!hit || pl.a > hit.a) hit = pl;
+      }
+      if (hit){
+        p.a = hit.a;
+        p.x = clamp(p.x, hit.x0 + 4, hit.x1 - 4);     // the ledge pulls you up
+        landOn(hit);
+      } else if (p.onGround){
+        p.onGround = false;
+        p.coyote = TUNE.coyote;
+        p.fellFrom = a0;
+      }
+    } else if (p.onGround){
+      p.onGround = false;
+      p.fellFrom = a0;
+    }
+
+    /* --- caught by a cloud ------------------------------------------- *
+     * A long fall turns into a slow float. Nothing else in the game takes
+     * anything away, and neither does this — it is the difference between
+     * "whoops" and a crying child. */
+    if (!p.onGround && p.chute <= 0 && p.va < -3.2 && p.fellFrom - p.a > TUNE.floorH*1.15){
+      p.chute = 150;
+      p.va = -1.6;
+      sfx.soft();
+      pop(p.x, p.a + 46, 'SOFT!', '#FFFFFF', 24);
+      puffAt(p.x, p.a - 6, 8);
+    }
+
+    finishStep(a0, s);
+  }
+
+  function doJump(scale){
+    const boots = power && power.id === 'boots' ? 1.52 : 1;
+    p.va = TUNE.jump*boots*scale;
+    p.onGround = false;
+    p.ladder = null;
+    p.coyote = 0;
+    p.buffer = 0;
+    p.chute = 0;
+    p.jumps++;
+    p.fellFrom = p.a;
+    puffAt(p.x, p.a + 2, 3);
+    sfx.hop();
+  }
+
+  function landOn(pl){
+    const wasFalling = p.va;
+    p.va = 0;
+    p.onGround = true;
+    p.ground = pl;
+    p.jumps = 0;
+    p.chute = 0;
+    p.fellFrom = p.a;
+    if (wasFalling < -2.2){ puffAt(p.x, p.a + 2, 4); sfx.land(); }
+
+    const spring = springNear(p.x, p.a);
+    if (spring){
+      spring.squish = 12;
+      p.va = TUNE.spring;
+      p.onGround = false;
+      p.jumps = 0;
+      p.fellFrom = p.a;
+      sfx.spring();
+      pop(p.x, p.a + 52, 'BOING!', '#4FD16A', 26);
+      sparkAt(p.x, p.a + 8, 8, '#CFF7D4');
+    } else if (power && power.id === 'bounce'){
+      /* Each bounce apexes at 124px, a shade over one floor, so bouncing
+         along a floor climbs the tower on its own. At 1.16 it apexed just
+         SHORT of a floor: the ball could never quite reach the next landing,
+         and being permanently airborne cost the ladders as well — the fun
+         power was the slowest way up in the game. */
+      p.va = TUNE.jump*1.26;
+      p.onGround = false;
+      p.fellFrom = p.a;
+      sfx.boing();
+    }
+    if (p.buffer > 0) doJump(1);                     // a press just before landing counts
+  }
+
+  function finishStep(a0, s){
+    if (p.onGround && Math.abs(p.vx) > 0.5){
+      p.run += Math.abs(p.vx)*s*0.08;
+      if (Math.floor(p.run) !== Math.floor(p.run - Math.abs(p.vx)*s*0.08)) sfx.step();
+    }
+    p.a = Math.max(p.a, baseFloor*TUNE.floorH - 10);   // the tower has a bottom
+    if (p.a <= baseFloor*TUNE.floorH - 10){ p.va = Math.max(p.va, 0); p.onGround = true; }
+  }
+
+  /* ================================================================== *
+   * critters
+   *
+   * They are scenery with a bounce in them. Landing on one is a free jump;
+   * walking into one is a boop and a giggle. Nothing they do can take a floor
+   * off you — and a boop always pushes you towards the middle of whatever you
+   * are standing on, never off the edge of it.
+   * ================================================================== */
+  function updateFoes(dt){
+    for (const f of foes){
+      if (f.squash > 0){ f.squash -= dt; f.dizzy = Math.max(f.dizzy, 20); }
+      if (f.dizzy > 0) f.dizzy -= dt;
+      if (f.cd > 0) f.cd -= dt;
+      f.ph += 0.07*dt;
+
+      if (f.squash <= 0){
+        const sp = f.kind === 'fly' ? 0.55 : f.kind === 'hop' ? 0.7 : 0.62;
+        f.x += f.dir*sp*dt*(f.dizzy > 0 ? 0.25 : 1);
+        if (f.x < f.x0){ f.x = f.x0; f.dir = 1; }
+        if (f.x > f.x1){ f.x = f.x1; f.dir = -1; }
+        if (f.kind === 'fly') f.a = f.base + 58 + Math.sin(f.ph)*22;
+        else if (f.kind === 'hop') f.a = f.base + Math.abs(Math.sin(f.ph*1.4))*30;
+      }
+
+      if (state !== 'play' || lift) continue;
+      const dx = Math.abs(f.x - p.x), da = p.a - f.a;
+      if (dx > 30 || da < -34 || da > 40) continue;
+
+      if (p.va < -0.6 && da > 10 && f.squash <= 0){
+        f.squash = 90;
+        p.va = TUNE.squash;
+        p.onGround = false;
+        p.ladder = null;
+        p.jumps = 0;
+        p.fellFrom = p.a;
+        sfx.boing();
+        pop(f.x, f.a + 54, 'BOING!', '#FFD23D', 26);
+        sparkAt(f.x, f.a + 18, 8, '#FFEFAF');
+        collectStars(2, f.x, f.a + 30);
+      } else if (f.cd <= 0 && f.squash <= 0){
+        f.cd = 70;
+        f.dizzy = 70;
+        p.hurt = 22;
+        // shove towards the middle of the platform underfoot, never off it
+        let toward = f.x > p.x ? -1 : 1;
+        if (p.onGround && p.ground){
+          const mid = (p.ground.x0 + p.ground.x1)/2;
+          toward = mid > p.x ? 1 : -1;
+        }
+        p.vx = toward*2.6;
+        p.va = Math.max(p.va, 2.7);
+        sfx.boop();
+        pop(p.x, p.a + 50, 'BOOP!', '#FFD9EC', 24);
+      }
+    }
+  }
+
+  /* ================================================================== *
+   * stars, orbs and the boost
+   * ================================================================== */
+  function collectStars(n, x, a){
+    stars += n; starTotal += n;
+    sparkAt(x, a, 4 + n, '#FFE9A8');
+    if (stars >= TUNE.starGoal && !lift && !p.carried){
+      stars = 0;
+      boostCarry(2);
+      shout('<em>BOOST!</em>', 1500, 2);
+      sfx.liftoff();
+      confettiAt(p.x, p.a + 30, 16);
+      pop(p.x, p.a + 70, 'WHOOSH!', '#4FD16A', 30);
+    }
+  }
+
+  function updatePickups(dt){
+    const mag = power && power.id === 'magnet';
+    for (const g of gems){
+      if (g.got) continue;
+      g.ph += 0.09*dt;
+      if (g.fall){
+        g.a -= g.fall*dt;
+        if (g.a < baseFloor*TUNE.floorH - 40) g.got = true;
+      }
+      const dx = p.x - g.x, da = (p.a + 20) - g.a;
+      const d = Math.hypot(dx, da);
+      // d > 0.01, not d > 0: a star sitting exactly on the climber divides by
+      // zero, and a NaN coordinate draws nothing in the harness and throws
+      // IndexSizeError out of the render loop in a real browser
+      if (mag && d < 270 && d > 0.01){
+        g.x += dx/d*6.2*dt;
+        g.a += da/d*6.2*dt;
+      }
+      if (d < 30){
+        g.got = true;
+        sfx.star();
+        collectStars(1, g.x, g.a);
+      }
+    }
+    gems = gems.filter(g => !g.got);
+
+    for (const o of orbs){
+      o.ph += 0.07*dt;
+      if (Math.hypot(p.x - o.x, (p.a + 20) - o.a) < 36){
+        o.taken = true;
+        takePower();
+      }
+    }
+    orbs = orbs.filter(o => !o.taken);
+  }
+
+  function takePower(){
+    const had = power;
+    let next = pick(POWERS);
+    if (had && POWERS.length > 1){
+      for (let i = 0; i < 6 && next.id === had.id; i++) next = pick(POWERS);
+    }
+    power = next;
+    sfx.power();
+    confettiAt(p.x, p.a + 40, 12);
+    shout(had ? '<em>' + power.name + '!</em> swapped!' : '<em>' + power.name + '!</em>', 1700, 2);
+    pop(p.x, p.a + 74, power.name, power.c, 26);
+    updateHud();
+  }
+
+  /* ================================================================== *
+   * the top of a section — the whole point of the game
+   *
+   * Ring the bell and the tower flies up: balloons lift the climber off the
+   * last floor, the camera chases them, fireworks go off, and the next
+   * section is already there when they land. Every eight floors.
+   * ================================================================== */
+  function checkBell(){
+    const f = floors.get(floorOf(p.a));
+    if (!f || !f.bell || f.bell.rung || lift) return;
+    if (Math.abs(f.bell.x - p.x) > 46 || Math.abs(f.a - p.a) > 60) return;
+    f.bell.rung = true;
+    startLiftoff(f);
+  }
+
+  function startLiftoff(f){
+    lift = { t: 0, from: p.a, to: f.a + TUNE.floorH*1.02, x: f.bell.x, done: false };
+    f.linked = false;               // growTower gives the floor real routes now
+    bells++;
+    shake = 12; flash = 1;
+    sfx.bell();
+    setTimeout(()=> sfx.liftoff(), 420);
+    jukebox.play('top');
+    const nextZone = zoneOf(f.k + 1);
+    shout('<em>TOP OF THE TOWER!</em><br>' + nextZone.icon + ' ' + nextZone.name, 2600, 4);
+    for (let i = 0; i < 8; i++){
+      setTimeout(()=> fireworkAt(rnd(IN_L, IN_R), f.a + rnd(60, 340)), i*180);
+    }
+    confettiAt(f.bell.x, f.a + 50, 44);
+    saveBest();
+  }
+
+  function updateLiftoff(dt){
+    lift.t += dt;
+    const rise = ease(lift.t/104);
+    p.x += (lift.x - p.x)*0.1*dt;
+    p.a = lerp(lift.from, lift.to, rise);
+    p.va = 0;
+    p.onGround = false;
+    p.ladder = null;
+    p.carried = null;
+    if (Math.random() < 0.5*dt) sparkAt(p.x + rnd(-20,20), p.a + rnd(0,40), 1, '#FFF0C0');
+    if (Math.random() < 0.16*dt) confettiAt(rnd(IN_L, IN_R), cam + H + 40, 2);
+    growTower();
+    if (lift.t >= 116){
+      p.onGround = true;
+      p.va = 0;
+      lift = null;
+      sfx.fanfare();
+      jukebox.play(zoneOf(floorOf(p.a)).track);
+      shout('<em>Floor ' + floorOf(p.a) + '!</em> Keep going!', 1800, 2);
+    }
+  }
+
+  /* ================================================================== *
+   * update
+   * ================================================================== */
+  function update(dt){
+    t += dt;
+    if (shake > 0) shake = Math.max(0, shake - dt);
+    if (flash > 0) flash = Math.max(0, flash - 0.05*dt);
+
+    if (state === 'play'){
+      if (lift){
+        updateLiftoff(dt);
+      } else {
+        const steer = steering();
+        movePlayer(dt, steer);
+        if (p.a > p.high + 8){ p.high = p.a; p.stuck = 0; } else p.stuck += dt;
+        checkBell();
+      }
+      growTower();
+      updateFoes(dt);
+      updatePickups(dt);
+
+      const here = floorOf(p.a);
+      if (here > floorsClimbed){
+        floorsClimbed = here;
+        saveBest();
+        if (!recordBeaten && best > 0 && floorsClimbed > best){
+          recordBeaten = true;
+          shout('<em>NEW RECORD!</em>', 2000, 3);
+          sfx.record();
+          confettiAt(p.x, p.a + 50, 30);
+        }
+        const z = zoneOf(here);
+        if (z !== lastZone){
+          lastZone = z;
+          if (!lift) jukebox.play(z.track);
+        }
+      }
+    }
+
+    updateEvents(dt);
+    updateBits(dt);
+
+    // camera: chase the climber, but never show below the bottom of the tower
+    camTarget = p.a - H*TUNE.camLow;
+    const lowest = baseFloor*TUNE.floorH - BASE_Y;
+    camTarget = Math.max(camTarget, lowest);
+    cam += (camTarget - cam)*(lift ? 0.16 : TUNE.camEase)*dt;
+    cam = Math.max(cam, lowest);
+
+    if (Math.floor(t) % 6 === 0) updateHud();
+  }
+
+  function updateBits(dt){
+    for (const s of sparks){ s.x += s.vx*dt; s.a += s.va*dt; s.va -= 0.06*dt; s.life -= dt; }
+    sparks = sparks.filter(s => s.life > 0);
+    for (const q of puffs){ q.x += q.vx*dt; q.a += q.va*dt; q.s += 0.2*dt; q.life -= dt; }
+    puffs = puffs.filter(q => q.life > 0);
+    for (const c of confetti){
+      c.x += c.vx*dt; c.a += c.va*dt; c.va -= 0.12*dt; c.r += c.spin*dt; c.life -= dt;
+    }
+    confetti = confetti.filter(c => c.life > 0 && c.a > cam - 120);
+    for (const q of pops){ q.a += 0.8*dt; q.life -= dt; }
+    pops = pops.filter(q => q.life > 0);
+    for (const f of fireworks){ f.r += 2.6*dt; f.life -= dt; }
+    fireworks = fireworks.filter(f => f.life > 0);
+    if (confetti.length > 260) confetti.splice(0, confetti.length - 260);
+    if (gems.length > 400) gems.splice(0, gems.length - 400);
+  }
+
+  /* ================================================================== *
+   * art — the sky
+   * ================================================================== */
+  function zoneBlend(){
+    const here = floorOf(p.a);
+    const z = zoneOf(here);
+    const nz = zoneOf(here + 1) === z ? zoneOf(here + TUNE.section) : zoneOf(here + 1);
+    // crossfade over the last floor and a half of a section
+    const into = (p.a - here*TUNE.floorH)/TUNE.floorH;
+    const left = TUNE.section - 1 - (here % TUNE.section);
+    const k = left <= 0 ? clamp(into, 0, 1) : left === 1 ? clamp(into - 0.4, 0, 1)*0.5 : 0;
+    return { z, nz, k };
+  }
+
+  function drawSky(){
+    const b = zoneBlend();
+    const top = mix(b.z.sky[0], b.nz.sky[0], b.k);
+    const bot = mix(b.z.sky[1], b.nz.sky[1], b.k);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, top);
+    g.addColorStop(1, bot);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // parallax scenery behind the tower, one band per zone flavour
+    const par = -(cam*0.22) % 1400;
+    drawDeco(b.z.deco, b.z, par);
+    if (b.k > 0.02){
+      ctx.save();
+      ctx.globalAlpha = b.k;
+      drawDeco(b.nz.deco, b.nz, par - 260);
+      ctx.restore();
+    }
+  }
+
+  function drawDeco(kind, z, par){
+    const baseY = H*0.62 + (par % 200);
+    ctx.save();
+    if (kind === 'garden' || kind === 'trees'){
+      ctx.fillStyle = z.far;
+      for (let i = 0; i < 7; i++){
+        const x = 40 + i*140 + Math.sin(i*2.3)*20;
+        const y = baseY - (i % 3)*46;
+        ellipse(x, y, 62, 48); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,.10)';
+        ellipse(x + 12, y + 8, 40, 30); ctx.fill();
+        ctx.fillStyle = z.far;
+      }
+    } else if (kind === 'houses'){
+      ctx.fillStyle = z.far;
+      for (let i = 0; i < 8; i++){
+        const x = 20 + i*126, hgt = 90 + ((i*37) % 90);
+        ctx.fillRect(x, baseY - hgt, 96, hgt + 240);
+        ctx.beginPath();
+        ctx.moveTo(x - 8, baseY - hgt);
+        ctx.lineTo(x + 48, baseY - hgt - 40);
+        ctx.lineTo(x + 104, baseY - hgt);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,232,180,.5)';
+        for (let w = 0; w < 3; w++) ctx.fillRect(x + 16 + w*28, baseY - hgt + 30, 16, 20);
+        ctx.fillStyle = z.far;
+      }
+    } else if (kind === 'clouds' || kind === 'balloons'){
+      ctx.fillStyle = kind === 'clouds' ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.6)';
+      for (let i = 0; i < 8; i++){
+        const x = 30 + i*128 + Math.sin(i*1.7 + par*0.004)*24;
+        const y = 60 + ((i*97 + par*0.5) % (H + 120)) - 60;
+        ellipse(x, y, 66, 26); ctx.fill();
+        ellipse(x - 30, y + 8, 40, 18); ctx.fill();
+        ellipse(x + 34, y + 6, 44, 20); ctx.fill();
+      }
+      if (kind === 'balloons'){
+        for (let i = 0; i < 6; i++){
+          const x = 60 + i*150, y = 120 + ((i*211 - par*0.8) % (H + 200)) - 100;
+          const c = ['#FF6FA8','#FFD23D','#4FD16A','#3DA9F5','#FF8A3D','#B274EB'][i % 6];
+          ctx.fillStyle = c;
+          ellipse(x, y, 22, 27); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(x, y + 26); ctx.lineTo(x, y + 58); ctx.stroke();
+        }
+      }
+    } else if (kind === 'castle'){
+      ctx.fillStyle = z.far;
+      for (let i = 0; i < 5; i++){
+        const x = 40 + i*200, hgt = 150 + ((i*53) % 80);
+        ctx.fillRect(x, baseY - hgt, 84, hgt + 260);
+        for (let c = 0; c < 3; c++) ctx.fillRect(x + c*30, baseY - hgt - 18, 20, 20);
+        ctx.fillStyle = '#FFD23D';
+        ctx.beginPath();
+        ctx.moveTo(x + 42, baseY - hgt - 20);
+        ctx.lineTo(x + 78, baseY - hgt - 8);
+        ctx.lineTo(x + 42, baseY - hgt + 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = z.far;
+      }
+    } else {
+      // stars and space: a fixed field that drifts slowly with the camera
+      for (let i = 0; i < 60; i++){
+        const x = (i*137) % W;
+        const y = ((i*197 + par*0.4) % (H + 80)) - 40;
+        const r = 1 + (i % 3)*0.8;
+        ctx.globalAlpha = 0.4 + 0.6*Math.abs(Math.sin(i + t*0.02));
+        ctx.fillStyle = i % 7 === 0 ? '#FFD23D' : '#FFFFFF';
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      if (kind === 'space'){
+        const px = 150 + Math.sin(cam*0.0006)*60;
+        const py = 150 + (cam*0.03 % (H + 400)) - 200;
+        ctx.fillStyle = '#C87A4E';
+        ctx.beginPath(); ctx.arc(px, py, 46, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,220,180,.6)'; ctx.lineWidth = 6;
+        ctx.save();
+        ctx.translate(px, py); ctx.rotate(-0.4); ctx.scale(1, 0.3);
+        ctx.beginPath(); ctx.arc(0, 0, 72, 0, 7); ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  /* ================================================================== *
+   * art — the shaft
+   * ================================================================== */
+  function drawShaft(){
+    const b = zoneBlend();
+    const back = mix(b.z.back, b.nz.back, b.k);
+    const wall = mix(b.z.wall, b.nz.wall, b.k);
+
+    ctx.save();
+    // everything inside the shaft is clipped to it, so a motif that does not
+    // divide neatly into the width cannot spill out over the walls
+    ctx.beginPath();
+    ctx.rect(WALL_L, 0, WALL_R - WALL_L, H);
+    ctx.clip();
+
+    ctx.fillStyle = back;
+    ctx.fillRect(WALL_L, 0, WALL_R - WALL_L, H);
+
+    // wallpaper: a soft stripe, and a motif that scrolls with the camera so
+    // the wall itself shows you moving even between floors
+    ctx.fillStyle = 'rgba(255,255,255,.14)';
+    for (let x = WALL_L + 18; x < WALL_R; x += 66) ctx.fillRect(x, 0, 26, H);
+    const off = (cam % 104);
+    ctx.globalAlpha = 0.16;
+    for (let y = -104; y < H + 104; y += 104){
+      for (let x = WALL_L + 50; x < WALL_R - 20; x += 104){
+        drawMotif(b.z.deco, x, y + off + ((x/104)|0)%2*52);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,.06)';
+    ctx.lineWidth = 2;
+    for (let y = -96; y < H + 96; y += 96){
+      ctx.beginPath(); ctx.moveTo(WALL_L, y + off); ctx.lineTo(WALL_R, y + off); ctx.stroke();
+    }
+    ctx.restore();
+
+    // the two walls, with bricks that scroll
+    for (const side of [0, 1]){
+      const x = side ? WALL_R - 14 : WALL_L;
+      const g = ctx.createLinearGradient(x, 0, x + 14, 0);
+      g.addColorStop(0, side ? 'rgba(0,0,0,.25)' : wall);
+      g.addColorStop(1, side ? wall : 'rgba(0,0,0,.25)');
+      ctx.fillStyle = wall;
+      ctx.fillRect(x, 0, 14, H);
+      ctx.fillStyle = 'rgba(0,0,0,.16)';
+      for (let y = -40; y < H + 40; y += 26){
+        ctx.fillRect(x, y + (cam % 26), 14, 3);
+      }
+    }
+    // an inner shadow so the shaft reads as a shaft and not a flat panel
+    const sg = ctx.createLinearGradient(WALL_L, 0, WALL_L + 90, 0);
+    sg.addColorStop(0, 'rgba(0,0,0,.22)');
+    sg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(WALL_L, 0, 90, H);
+    const sg2 = ctx.createLinearGradient(WALL_R, 0, WALL_R - 90, 0);
+    sg2.addColorStop(0, 'rgba(0,0,0,.22)');
+    sg2.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sg2;
+    ctx.fillRect(WALL_R - 90, 0, 90, H);
+  }
+
+  /* One little shape stamped over and over on the back wall. Which one says
+     where in the tower you are without anybody having to read the banner. */
+  function drawMotif(kind, x, y){
+    ctx.fillStyle = '#FFFFFF';
+    if (kind === 'garden' || kind === 'trees'){
+      for (let i = 0; i < 4; i++){                  // a leaf cluster
+        const a = i*1.57;
+        ellipse(x + Math.cos(a)*9, y + Math.sin(a)*9, 8, 5); ctx.fill();
+      }
+    } else if (kind === 'houses'){
+      ctx.fillRect(x - 10, y - 8, 20, 18);          // a window
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.fillRect(x - 1, y - 8, 2, 18);
+      ctx.fillRect(x - 10, y, 20, 2);
+    } else if (kind === 'clouds' || kind === 'balloons'){
+      ellipse(x, y, 15, 8); ctx.fill();
+      ellipse(x - 9, y + 3, 9, 5); ctx.fill();
+      ellipse(x + 9, y + 2, 10, 6); ctx.fill();
+    } else if (kind === 'castle'){
+      ctx.beginPath();                              // a shield
+      ctx.moveTo(x - 10, y - 11); ctx.lineTo(x + 10, y - 11);
+      ctx.lineTo(x + 10, y + 3); ctx.lineTo(x, y + 13); ctx.lineTo(x - 10, y + 3);
+      ctx.closePath(); ctx.fill();
+    } else {
+      star(x, y, 11); ctx.fill();
+    }
+  }
+
+  function drawSlab(x0, x1, a, z, thin){
+    const y = scrY(a);
+    if (y < -40 || y > H + 60) return;
+    const h = thin ? 11 : 17;
+    ctx.fillStyle = z.slab;
+    roundRect(x0, y, x1 - x0, h, 5); ctx.fill();
+    ctx.fillStyle = z.top;
+    roundRect(x0, y - 5, x1 - x0, 9, 4); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.22)';
+    ctx.fillRect(x0 + 4, y - 4, x1 - x0 - 8, 2);
+    // end caps, so a gap looks like a broken edge rather than a cut
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.fillRect(x0, y + h - 4, x1 - x0, 4);
+  }
+
+  function drawLadder(u, z){
+    const yTop = scrY(u.a1), yBot = scrY(u.a0);
+    if (yTop > H + 40 || yBot < -40) return;
+    const w = 30;
+    ctx.strokeStyle = '#8A5A32';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(u.x - w/2, yBot); ctx.lineTo(u.x - w/2, yTop);
+    ctx.moveTo(u.x + w/2, yBot); ctx.lineTo(u.x + w/2, yTop);
+    ctx.stroke();
+    ctx.strokeStyle = '#C79A5E';
+    ctx.lineWidth = 5;
+    for (let y = yBot - 14; y > yTop; y -= 20){
+      ctx.beginPath(); ctx.moveTo(u.x - w/2, y); ctx.lineTo(u.x + w/2, y); ctx.stroke();
+    }
+    // a little arrow at the foot so it reads as "this way up" without words
+    const bob = Math.sin(t*0.08 + u.ph)*3;
+    ctx.fillStyle = z.trim;
+    ctx.beginPath();
+    ctx.moveTo(u.x, yBot - 32 + bob);
+    ctx.lineTo(u.x - 9, yBot - 20 + bob);
+    ctx.lineTo(u.x + 9, yBot - 20 + bob);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawSpring(u){
+    const y = scrY(u.a);
+    if (y < -40 || y > H + 40) return;
+    const sq = u.squish > 0 ? u.squish/12 : 0;
+    if (u.squish > 0) u.squish -= 1;
+    const hgt = 22 - sq*12;
+    ctx.strokeStyle = '#B0B7C4';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    for (let i = 0; i <= 3; i++){
+      const yy = y - i*(hgt/3);
+      ctx.moveTo(u.x - 13, yy); ctx.lineTo(u.x + 13, yy - hgt/6);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#4FD16A';
+    roundRect(u.x - 20, y - hgt - 9, 40, 11, 5); ctx.fill();
+    ctx.fillStyle = '#8BE05A';
+    roundRect(u.x - 20, y - hgt - 9, 40, 4, 2); ctx.fill();
+  }
+
+  function drawBell(f, z){
+    const y = scrY(f.a);
+    if (y < -140 || y > H + 60) return;
+    const bx = f.bell.x;
+    const bob = Math.sin(t*0.05 + f.bell.ph)*4;
+    // a post with a rope
+    ctx.fillStyle = '#8A5A32';
+    ctx.fillRect(bx - 6, y - 96, 12, 96);
+    ctx.fillStyle = '#6B4423';
+    ctx.fillRect(bx - 34, y - 104, 68, 12);
+    if (!f.bell.rung){
+      // the bell itself, gold and swinging a little
+      ctx.save();
+      ctx.translate(bx, y - 92);
+      ctx.rotate(Math.sin(t*0.06 + f.bell.ph)*0.09);
+      ctx.fillStyle = '#FFD23D';
+      ctx.beginPath();
+      ctx.moveTo(-24, 44);
+      ctx.quadraticCurveTo(-24, 2, 0, 2);
+      ctx.quadraticCurveTo(24, 2, 24, 44);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#F5B21E';
+      roundRect(-28, 42, 56, 9, 4); ctx.fill();
+      ctx.fillStyle = '#C79A2B';
+      ctx.beginPath(); ctx.arc(0, 56, 6, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.45)';
+      ellipse(-10, 20, 5, 12); ctx.fill();
+      ctx.restore();
+      // a ring of sparkle so a five-year-old knows where they are heading
+      ctx.strokeStyle = 'rgba(255,210,61,' + (0.4 + Math.sin(t*0.1)*0.25) + ')';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(bx, y - 52 + bob, 46 + Math.sin(t*0.1)*4, 0, 7); ctx.stroke();
+      for (let i = 0; i < 5; i++){
+        const a = t*0.03 + i*1.256;
+        ctx.fillStyle = '#FFF0B0';
+        star(bx + Math.cos(a)*58, y - 52 + Math.sin(a)*30, 5); ctx.fill();
+      }
+    } else {
+      ctx.fillStyle = z.trim;
+      ctx.fillRect(bx - 4, y - 96, 8, 40);
+      ctx.fillStyle = '#FFD23D';
+      ctx.beginPath();
+      ctx.moveTo(bx + 4, y - 96); ctx.lineTo(bx + 54, y - 82); ctx.lineTo(bx + 4, y - 66);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  function drawFloors(){
+    const from = Math.max(baseFloor, floorOf(cam) - 1);
+    const to = floorOf(cam + H) + 1;
+    for (let k = from; k <= to; k++){
+      const f = floors.get(k);
+      if (!f) continue;
+      const z = zoneOf(k);
+      for (const u of f.up) if (u.kind === 'ladder') drawLadder(u, z);
+      for (const s of f.segs) drawSlab(s.x0, s.x1, f.a, z, false);
+      for (const s of f.steps) drawSlab(s.x0, s.x1, s.a, z, true);
+      for (const u of f.up) if (u.kind === 'spring') drawSpring(u);
+      if (f.bell) drawBell(f, z);
+      // a floor number painted on the wall every four floors
+      if (k % 4 === 0 && k > 0){
+        const y = scrY(f.a);
+        ctx.font = '800 22px "Trebuchet MS", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(0,0,0,.16)';
+        ctx.fillText(String(k), WALL_L + 20, y - 26);
+      }
+    }
+    ctx.textAlign = 'left';
+  }
+
+  /* ================================================================== *
+   * art — the cast
+   * ================================================================== */
+  function drawGem(g){
+    const y = scrY(g.a);
+    if (y < -30 || y > H + 30) return;
+    const bob = Math.sin(g.ph)*3;
+    ctx.save();
+    ctx.translate(g.x, y - bob);
+    ctx.rotate(Math.sin(g.ph*0.5)*0.2);
+    ctx.fillStyle = '#FFD23D';
+    star(0, 0, 11); ctx.fill();
+    ctx.fillStyle = '#FFF0B0';
+    star(0, 0, 5); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawOrb(o){
+    const y = scrY(o.a);
+    if (y < -40 || y > H + 40) return;
+    const bob = Math.sin(o.ph)*5;
+    const r = 17 + Math.sin(o.ph*1.6)*1.6;
+    const g = ctx.createRadialGradient(o.x - 5, y - bob - 5, 2, o.x, y - bob, r);
+    g.addColorStop(0, '#FFFFFF');
+    g.addColorStop(0.45, '#FFD23D');
+    g.addColorStop(1, '#FF8A3D');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(o.x, y - bob, r, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(o.x, y - bob, r + 5 + Math.sin(o.ph*2)*2, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#FFF';
+    ctx.font = '800 15px "Trebuchet MS", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('?', o.x, y - bob + 5);
+    ctx.textAlign = 'left';
+  }
+
+  function drawFoe(f){
+    const y = scrY(f.a);
+    if (y < -60 || y > H + 60) return;
+    const s = f.spec;
+    const flat = f.squash > 0 ? clamp(f.squash/90, 0, 1) : 0;
+    const sx = 1 + flat*0.7, sy = 1 - flat*0.66;
+    const wob = Math.sin(f.ph*2)*(f.dizzy > 0 ? 0.22 : 0.07);
+    ctx.save();
+    ctx.translate(f.x, y);
+    ctx.rotate(wob);
+    ctx.scale(sx, sy);
+
+    ctx.fillStyle = 'rgba(0,0,0,.16)';
+    ellipse(0, -2, 19, 6); ctx.fill();
+
+    if (s.shape === 'bee' || s.shape === 'balloonbug'){
+      ctx.strokeStyle = 'rgba(255,255,255,.75)';
+      ctx.lineWidth = 2;
+      const flap = Math.sin(t*0.6)*8;
+      for (const side of [-1, 1]){
+        ctx.beginPath();
+        ctx.ellipse(side*13, -34 - flap*0.2, 11, 7, side*0.5, 0, 7);
+        ctx.stroke();
+      }
+    }
+    if (s.shape === 'balloonbug'){
+      ctx.strokeStyle = 'rgba(255,255,255,.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, -40); ctx.lineTo(0, -58); ctx.stroke();
+      ctx.fillStyle = s.c;
+      ellipse(0, -68, 12, 15); ctx.fill();
+    }
+
+    /* The body is a path first and a fill second, so the markings can be
+       clipped to it. Drawn as plain rectangles over the top they hung out
+       past the edges and every beetle in the game wore a square box. */
+    ctx.fillStyle = s.c;
+    if (s.shape === 'ghost'){
+      ctx.beginPath();
+      ctx.moveTo(-19, -6);
+      ctx.lineTo(-19, -26);
+      ctx.quadraticCurveTo(-19, -48, 0, -48);
+      ctx.quadraticCurveTo(19, -48, 19, -26);
+      ctx.lineTo(19, -6);
+      for (let i = 0; i < 3; i++){
+        ctx.quadraticCurveTo(19 - i*12.6 - 6.3, -6 + (i % 2 ? -7 : 7), 19 - (i+1)*12.6, -6);
+      }
+      ctx.closePath(); ctx.fill();
+    } else if (s.shape === 'star'){
+      star(0, -26, 24); ctx.fill();
+    } else {
+      ellipse(0, -24, 20, 20); ctx.fill();
+    }
+
+    if (s.shape === 'bug' || s.shape === 'bee'){
+      ctx.save();
+      ellipse(0, -24, 20, 20); ctx.clip();
+      ctx.fillStyle = s.c2;
+      for (let i = -1; i <= 1; i++) ctx.fillRect(-22, -32 + i*11, 44, 5);
+      ctx.restore();
+    }
+    if (s.shape === 'cat'){
+      ctx.fillStyle = s.c;
+      for (const side of [-1, 1]){
+        ctx.beginPath();
+        ctx.moveTo(side*7, -40); ctx.lineTo(side*17, -52); ctx.lineTo(side*18, -36);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.strokeStyle = s.c; ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-18, -14);
+      ctx.quadraticCurveTo(-34, -16, -30, -34);
+      ctx.stroke();
+    }
+    if (s.shape === 'alien'){
+      ctx.strokeStyle = s.c2; ctx.lineWidth = 3;
+      for (const side of [-1, 1]){
+        ctx.beginPath();
+        ctx.moveTo(side*8, -42); ctx.lineTo(side*15, -56);
+        ctx.stroke();
+        ctx.fillStyle = s.c2;
+        ctx.beginPath(); ctx.arc(side*15, -58, 4, 0, 7); ctx.fill();
+      }
+    }
+
+    // eyes — dizzy ones get spirals, everybody else gets a happy blink
+    const ex = 7;
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath(); ctx.arc(-ex, -28, 7, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex, -28, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = '#22202C';
+    if (f.dizzy > 0){
+      ctx.strokeStyle = '#22202C'; ctx.lineWidth = 2;
+      for (const side of [-1, 1]){
+        ctx.beginPath();
+        for (let i = 0; i < 14; i++){
+          const ang = i*0.7 + t*0.1, rr = i*0.42;
+          const px = side*ex + Math.cos(ang)*rr, py = -28 + Math.sin(ang)*rr;
+          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.stroke();
+      }
+    } else {
+      const look = f.dir*2;
+      ctx.beginPath(); ctx.arc(-ex + look, -28, 3.4, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex + look, -28, 3.4, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawDog(){
+    const y = scrY(dog.a);
+    if (y < -60 || y > H + 60) return;
+    const sq = dog.bounce > 0 ? dog.bounce/26 : 0;
+    ctx.save();
+    ctx.translate(dog.x, y);
+    // 0.8: at full size he was taller than the child he came to bounce
+    ctx.scale((1 + sq*0.3)*0.8, (1 - sq*0.3)*0.8);
+    ctx.fillStyle = 'rgba(0,0,0,.16)';
+    ellipse(0, -2, 24, 6); ctx.fill();
+    ctx.fillStyle = '#C89A5E';
+    roundRect(-24, -30, 48, 26, 12); ctx.fill();
+    ctx.beginPath(); ctx.arc(18, -38, 14, 0, 7); ctx.fill();
+    ctx.fillStyle = '#A87B44';
+    ctx.beginPath(); ctx.arc(10, -46, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3A2A1A';
+    ctx.beginPath(); ctx.arc(29, -38, 3.2, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(22, -42, 2.4, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#C89A5E'; ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-22, -22);
+    ctx.quadraticCurveTo(-36, -30 + Math.sin(dog.ph*3)*8, -30, -42);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTemp(tp){
+    const y = scrY(tp.a);
+    if (y < -80 || y > H + 80) return;
+    if (tp.kind === 'bird'){
+      const flap = Math.sin(t*0.28 + tp.ph);
+      ctx.fillStyle = '#F2F6FF';
+      ellipse(tp.x, y - 8, 34, 13); ctx.fill();
+      ctx.fillStyle = '#DCE6F5';
+      for (const side of [-1, 1]){
+        ctx.save();
+        ctx.translate(tp.x + side*18, y - 12);
+        ctx.rotate(side*flap*0.5);
+        ellipse(side*14, 0, 22, 8); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle = '#F2F6FF';
+      ctx.beginPath(); ctx.arc(tp.x + tp.dir*28, y - 16, 11, 0, 7); ctx.fill();
+      ctx.fillStyle = '#FF8A3D';
+      ctx.beginPath();
+      ctx.moveTo(tp.x + tp.dir*38, y - 17);
+      ctx.lineTo(tp.x + tp.dir*50, y - 13);
+      ctx.lineTo(tp.x + tp.dir*38, y - 10);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#22202C';
+      ctx.beginPath(); ctx.arc(tp.x + tp.dir*31, y - 19, 2.4, 0, 7); ctx.fill();
+    } else if (tp.kind === 'balloon' && tp.style === 'stars'){
+      // the star boost: a whirl of gold overhead instead of balloons
+      for (let i = 0; i < 7; i++){
+        const a = t*0.14 + i*0.9;
+        const rr = 26 + Math.sin(t*0.1 + i)*7;
+        ctx.fillStyle = i % 2 ? '#FFF0B0' : '#FFD23D';
+        star(tp.x + Math.cos(a)*rr, y - 30 + Math.sin(a)*rr*0.5, 8 - (i % 3));
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(255,210,61,.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(tp.x, y - 30, 34, 0, 7); ctx.stroke();
+    } else if (tp.kind === 'balloon'){
+      ctx.strokeStyle = 'rgba(255,255,255,.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(tp.x, y); ctx.lineTo(tp.x, y - 40); ctx.stroke();
+      for (let i = 0; i < 3; i++){
+        const bx = tp.x + (i - 1)*17, by = y - 52 - Math.abs(i - 1)*6 + Math.sin(tp.ph + i)*3;
+        ctx.fillStyle = ['#FF6FA8','#FFD23D','#3DA9F5'][i];
+        ellipse(bx, by, 17, 21); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.5)';
+        ellipse(bx - 5, by - 7, 4, 6); ctx.fill();
+      }
+    }
+  }
+
+  /* the climber: a small stack of shapes, animated off `run` and `va` */
+  function drawClimber(){
+    const k = kid();
+    const y = scrY(p.a);
+    const climbing = !!p.ladder || p.wall !== 0;
+    const air = !p.onGround && !climbing;
+    const swing = Math.sin(p.run*1.1)*(p.onGround && Math.abs(p.vx) > 0.5 ? 1 : 0);
+    const climbSwing = Math.sin(p.climbing*0.25);
+    const squash = p.onGround && p.va === 0 ? 1 : 1 + clamp(p.va, -6, 6)*0.018;
+    const hurt = p.hurt > 0 && Math.floor(t*0.4) % 2 === 0;
+
+    ctx.save();
+    // shadow on the floor under them, fading as they rise
+    const under = p.onGround ? p.a : p.fellFrom;
+    const sy2 = scrY(Math.min(under, p.a));
+    ctx.fillStyle = 'rgba(0,0,0,' + (p.onGround ? .2 : .1) + ')';
+    ellipse(p.x, sy2 + 2, 15, 5); ctx.fill();
+
+    ctx.translate(p.x, y);
+    ctx.scale(climbing ? 1 : p.face, 1);
+    ctx.scale(1/squash, squash);
+    if (hurt) ctx.globalAlpha = 0.6;
+
+    // a cloud under their feet on the way down from a big fall
+    if (p.chute > 0){
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      ellipse(0, 4, 30, 12); ctx.fill();
+      ellipse(-16, 0, 18, 10); ctx.fill();
+      ellipse(16, 1, 20, 11); ctx.fill();
+    }
+
+    // legs
+    ctx.strokeStyle = k.legs;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    const legA = climbing ? climbSwing*7 : air ? 5 : swing*8;
+    const legB = climbing ? -climbSwing*7 : air ? -3 : -swing*8;
+    ctx.beginPath();
+    ctx.moveTo(-3, -16); ctx.lineTo(-4 + legA, -2);
+    ctx.moveTo(3, -16);  ctx.lineTo(4 + legB, -2);
+    ctx.stroke();
+    ctx.fillStyle = k.shoe;
+    ellipse(-4 + legA, -1, 5.5, 3.5); ctx.fill();
+    ellipse(4 + legB, -1, 5.5, 3.5); ctx.fill();
+
+    // body
+    ctx.fillStyle = k.shirt;
+    roundRect(-9, -34, 18, 20, 7); ctx.fill();
+    ctx.fillStyle = k.shirt2;
+    roundRect(-9, -20, 18, 6, 3); ctx.fill();
+
+    // arms — up on a ladder, out in the air, swinging on the ground
+    ctx.strokeStyle = k.skin;
+    ctx.lineWidth = 5;
+    if (climbing){
+      ctx.beginPath();
+      ctx.moveTo(-6, -30); ctx.lineTo(-11, -42 + climbSwing*4);
+      ctx.moveTo(6, -30);  ctx.lineTo(11, -42 - climbSwing*4);
+      ctx.stroke();
+    } else if (air){
+      ctx.beginPath();
+      ctx.moveTo(-6, -30); ctx.lineTo(-15, -40);
+      ctx.moveTo(6, -30);  ctx.lineTo(15, -40);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(-6, -30); ctx.lineTo(-9 - swing*5, -20);
+      ctx.moveTo(6, -30);  ctx.lineTo(9 + swing*5, -20);
+      ctx.stroke();
+    }
+
+    // head
+    ctx.fillStyle = k.skin;
+    ctx.beginPath(); ctx.arc(0, -43, 10, 0, 7); ctx.fill();
+    ctx.fillStyle = k.hair;
+    ctx.beginPath();
+    ctx.arc(0, -45, 10.5, Math.PI, 0);
+    ctx.fill();
+    if (k.style === 'girl'){
+      ctx.beginPath(); ctx.arc(-10, -42, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(10, -42, 5, 0, 7); ctx.fill();
+    }
+    ctx.fillStyle = '#22202C';
+    ctx.beginPath(); ctx.arc(3.5, -43, 1.9, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(-3.5, -43, 1.9, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#22202C';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(0, -39, 3.6, 0.2, Math.PI - 0.2); ctx.stroke();
+
+    // whatever power they are carrying, worn
+    if (power){
+      if (power.id === 'boots'){
+        ctx.fillStyle = '#FF8A3D';
+        roundRect(-9 + legA, -6, 11, 7, 3); ctx.fill();
+        roundRect(-1 + legB, -6, 11, 7, 3); ctx.fill();
+      } else if (power.id === 'rocket'){
+        ctx.fillStyle = '#C6CBD8';
+        roundRect(-14, -34, 7, 16, 3); ctx.fill();
+        if (!p.onGround){
+          ctx.fillStyle = '#FFD23D';
+          ctx.beginPath();
+          ctx.moveTo(-14, -18); ctx.lineTo(-10.5, -6 - Math.random()*6); ctx.lineTo(-7, -18);
+          ctx.closePath(); ctx.fill();
+        }
+      } else if (power.id === 'feather'){
+        ctx.fillStyle = '#8FD8F5';
+        ctx.save(); ctx.translate(0, -52); ctx.rotate(-0.5);
+        ellipse(0, 0, 4, 11); ctx.fill();
+        ctx.restore();
+      } else if (power.id === 'bounce'){
+        ctx.strokeStyle = 'rgba(178,116,235,.75)';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, -26, 28 + Math.sin(t*0.2)*2, 0, 7); ctx.stroke();
+      } else if (power.id === 'magnet'){
+        ctx.strokeStyle = 'rgba(240,69,58,.5)';
+        ctx.lineWidth = 2;
+        for (let i = 1; i <= 2; i++){
+          ctx.beginPath(); ctx.arc(0, -26, 22 + i*13 + Math.sin(t*0.15 + i)*3, 0, 7); ctx.stroke();
+        }
+      } else if (power.id === 'grip'){
+        ctx.fillStyle = '#4FD16A';
+        ctx.beginPath(); ctx.arc(-13, -40, 4.4, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(13, -40, 4.4, 0, 7); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /* ================================================================== *
+   * art — particles, and the gauge down the side
+   * ================================================================== */
+  function drawBits(){
+    for (const q of puffs){
+      ctx.globalAlpha = clamp(q.life/q.max, 0, 1)*0.6;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(q.x, scrY(q.a), q.s, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const s of sparks){
+      ctx.globalAlpha = clamp(s.life/s.max, 0, 1);
+      ctx.fillStyle = s.c;
+      ctx.beginPath(); ctx.arc(s.x, scrY(s.a), s.s, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const c of confetti){
+      ctx.save();
+      ctx.globalAlpha = clamp(c.life/c.max, 0, 1);
+      ctx.translate(c.x, scrY(c.a));
+      ctx.rotate(c.r);
+      ctx.fillStyle = c.c;
+      ctx.fillRect(-4, -6, 8, 12);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const f of fireworks){
+      const k = clamp(f.life/f.max, 0, 1);
+      const y = scrY(f.a);
+      ctx.globalAlpha = k;
+      ctx.strokeStyle = f.c;
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 12; i++){
+        const a = i/12*6.283;
+        ctx.beginPath();
+        ctx.moveTo(f.x + Math.cos(a)*f.r*0.6, y + Math.sin(a)*f.r*0.6);
+        ctx.lineTo(f.x + Math.cos(a)*f.r, y + Math.sin(a)*f.r);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.textAlign = 'center';
+    for (const q of pops){
+      const k = clamp(q.life/q.max, 0, 1);
+      const size = q.size*(1 + (1-k)*0.3);
+      ctx.globalAlpha = k;
+      ctx.font = '800 ' + size + 'px "Trebuchet MS", sans-serif';
+      ctx.lineWidth = size*0.2;
+      ctx.strokeStyle = 'rgba(0,0,0,.55)';
+      ctx.strokeText(q.text, q.x, scrY(q.a));
+      ctx.fillStyle = q.c;
+      ctx.fillText(q.text, q.x, scrY(q.a));
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+  }
+
+  /* The gauge is the answer to "how high have I got?", which a number alone
+     never answers for a five-year-old. The whole climb is squeezed into one
+     strip, so the marker creeping up it — and the zone icons sliding past —
+     is the picture of the run. It rescales as you go, which is the trick:
+     getting higher makes everything you have already done look smaller. */
+  function drawGauge(){
+    const x = GAUGE_X, w = GAUGE_W;
+    /* Starts below the score, which is the one thing on screen bigger than
+       it, and stops well above the sound buttons in the bottom corner. */
+    const y0 = 122, y1 = H - 76;
+    const here = floorOf(p.a);
+    const topFloor = Math.max(here + 3, best + 2, 10);
+    const fy = f => y1 - (f/topFloor)*(y1 - y0);
+
+    ctx.fillStyle = 'rgba(10,16,34,.42)';
+    roundRect(x - 5, y0 - 30, w + 10, (y1 - y0) + 62, 14); ctx.fill();
+
+    // the tower itself, banded by zone
+    for (let s = 0; s <= Math.floor(topFloor/TUNE.section); s++){
+      const z = zoneOf(s*TUNE.section);
+      const a = fy(Math.min(topFloor, (s + 1)*TUNE.section));
+      const b = fy(s*TUNE.section);
+      ctx.fillStyle = z.sky[0];
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(x, a, w, b - a);
+      ctx.globalAlpha = 1;
+      if (b - a > 15){
+        ctx.fillStyle = 'rgba(255,255,255,.35)';
+        ctx.fillRect(x, a, w, 1.5);
+      }
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.lineWidth = 2;
+    roundRect(x, fy(topFloor), w, fy(0) - fy(topFloor), 8); ctx.stroke();
+
+    // best-ever line
+    if (best > 0 && best <= topFloor){
+      const by = fy(best);
+      ctx.strokeStyle = '#FFD23D';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(x - 4, by); ctx.lineTo(x + w + 4, by); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#FFD23D';
+      ctx.font = '800 10px "Trebuchet MS", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('BEST', x - 7, by + 3);
+    }
+
+    // where they are now: a little head with the floor number beside it
+    const my = fy(clamp(here, 0, topFloor));
+    ctx.fillStyle = kid().skin;
+    ctx.beginPath(); ctx.arc(x + w/2, my, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = kid().hair;
+    ctx.beginPath(); ctx.arc(x + w/2, my - 2, 8.4, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#22202C';
+    ctx.beginPath(); ctx.arc(x + w/2 - 2.6, my, 1.5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + w/2 + 2.6, my, 1.5, 0, 7); ctx.fill();
+
+    // the live floor rides with the marker; the big number in the corner is
+    // the best of this run, and the two part company every time you fall
+    ctx.font = '800 12px "Trebuchet MS", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(8,12,26,.8)';
+    ctx.strokeText(String(here), x + w + 5, my + 4);
+    ctx.fillStyle = '#FFF';
+    ctx.fillText(String(here), x + w + 5, my + 4);
+
+    ctx.textAlign = 'center';
+    ctx.font = '800 9px "Trebuchet MS", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.fillText('UP', x + w/2, y1 + 20);
+    ctx.textAlign = 'left';
+    /* No stack of earned bells down here. It landed squarely on top of the
+       sound buttons in the corner, and the count is already beside the best
+       score where there is room for it. */
+  }
+
+  /* ================================================================== *
+   * render
+   * ================================================================== */
+  function render(){
+    ctx.save();
+    if (shake > 0) ctx.translate(rnd(-1,1)*shake*0.5, rnd(-1,1)*shake*0.5);
+
+    drawSky();
+    drawShaft();
+    drawFloors();
+
+    for (const g of gems) drawGem(g);
+    for (const o of orbs) drawOrb(o);
+    for (const tp of temps) drawTemp(tp);
+    for (const f of foes) drawFoe(f);
+    if (dog) drawDog();
+    drawClimber();
+    drawBits();
+
+    // night / fireworks dim
+    if (night > 0.01){
+      ctx.fillStyle = 'rgba(10,8,34,' + night*0.42 + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // the finger being held, so a parent can see what a kid is doing
+    const pt = pads.pointer();
+    if (pt.active && state === 'play'){
+      const fx = pt.nx*W, fy = pt.ny*H;
+      ctx.strokeStyle = 'rgba(255,210,61,.75)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(fx, fy, 15 + Math.sin(t*0.3)*3, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(fx, fy, 4, 0, 7); ctx.stroke();
+    }
+
+    ctx.restore();
+
+    drawGauge();
+
+    if (flash > 0){
+      ctx.fillStyle = 'rgba(255,250,220,' + flash*0.4 + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  /* ---------- kid lock (implementation lives in kidkit.js) ---------- */
+  const lockBtn = document.getElementById('lockBtn');
+  const toastEl = document.getElementById('toast');
+  let toastIv = null;
+  function toast(html, ms){
+    toastEl.innerHTML = html;
+    toastEl.classList.add('show');
+    clearTimeout(toastIv);
+    toastIv = setTimeout(()=> toastEl.classList.remove('show'), ms || 4200);
+  }
+  KidKit.kidLock(lockBtn, {
+    holdMs: 3000,
+    onHold: pct => {
+      lockBtn.style.background = pct
+        ? 'conic-gradient(#FFD23D '+pct+'%, rgba(255,255,255,.14) 0)' : '';
+    },
+    onChange: on => {
+      document.body.classList.toggle('locked', on);
+      lockBtn.textContent = on ? '\u{1F512}' : '\u{1F513}';
+      lockBtn.style.background = '';
+      lockBtn.setAttribute('aria-label', on
+        ? 'Kid lock is on — hold three seconds to turn off'
+        : 'Turn kid lock on');
+      toast(on ? '<em>Kid lock on.</em><br>Hold \u{1F512} for 3 seconds to exit.' : 'Kid lock off.',
+            on ? 4200 : 2200);
+    }
+  });
+
+  /* ---------- go ---------- */
+  growTower();
+  updateHud();
+  document.getElementById('startBtn').focus();
+
+  let last = performance.now();
+  const hintEl = document.getElementById('sndHint');
+  let hintCheck = 0;
+  function frame(now){
+    let dt = (now - last)/(1000/60); last = now;
+    dt = Math.min(dt, 1.8);           // a platformer cannot afford a long catch-up step
+    pads.poll();
+    update(dt); render();
+    if (state !== 'menu' && ++hintCheck % 30 === 0){
+      const blocked = !KidKit.audio.running;
+      hintEl.hidden = !(blocked && (musicOn || !muted));
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

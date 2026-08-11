@@ -4,8 +4,8 @@ Homemade browser games for my two young kids. Oliver (older) and Emsile (little
 sister) are the characters in both games. Built to be played on a phone, a
 tablet, and a TV with a controller.
 
-Three games, deliberately unlike each other. Keep it that way: a fourth should
-contrast with all three rather than land in between.
+Four games, deliberately unlike each other. Keep it that way: a fifth should
+contrast with all four rather than land in between.
 
 - `games/oliver-run` — endless runner, tap to jump, 14 worlds, 18 bosses, scores
   distance. Adventure deals the worlds from a shuffle bag, so a full set comes
@@ -81,6 +81,43 @@ contrast with all three rather than land in between.
   instant catch, and Daddy is quietly quicker in the dark to pay for nobody
   being able to see him. `daddy: nothing added to the room makes catches
   rarer` is the guard on that.
+- `games/tower-climb` — a Donkey-Kong-shaped maze of floors that goes up for
+  ever, scored in floors climbed. The only game you both **steer and tap**:
+  hold a finger where you want to go, every fresh tap is a jump. The pointer's
+  x steers and its **height is deliberately ignored** — a thumb parked at the
+  bottom of a phone is how a small child holds one, and reading that as "down"
+  rode every ladder back to the floor below.
+  **Ladders are escalators**: walk into one and you ride it, no button and no
+  timing. That is the promise the whole game rests on, so every floor is
+  generated with at least one route up that needs no jump at all — a ladder or
+  a spring, never only steps. `linkUp()` places routes only where both floors
+  are solid, which is why floors are built in two passes rather than one.
+  A tap on a ladder is a **rung-leap up it, not a release from it**. Letting go
+  was the obvious reading and it made mashing the slowest way to play: a child
+  who tapped constantly bounced off the foot of every ladder in the tower.
+  Nothing may ever get worse the harder the button is hit —
+  `climb: mashing is never worse than not tapping, at every speed` sweeps the
+  whole range of cadences, the same shape of guard as the fishing one.
+  **Nobody ever gets stuck.** If seven seconds pass without any height gained,
+  balloons come and fetch them. The counter is frames-since-the-last-floor, not
+  frames-since-an-input: the common case is a child leaning on one direction
+  with their back to a wall, and "are they pressing anything?" misses it
+  entirely. On a section's top floor the balloons ferry them *sideways to the
+  bell* instead of lifting, because the bell is the only way off that floor.
+  Every eighth floor is a **top floor**: solid, no routes up, just a bell.
+  Ringing it flies the climber into the next zone — the epic moment, every
+  eight floors. Once rung the floor gets ordinary routes, or a climber who fell
+  back down a gap would be standing on the one floor with no way up.
+  Six powers, same rule as Oliver Run: one lasts until you take another. Three
+  of them were *hobbles* when first written and none of it was visible by
+  playing — the Bouncy Ball apexed just short of a floor and being permanently
+  airborne locked it out of ladders, Sticky Grip assigned its climb speed and so
+  flattened any jump made near a wall, and the star boost was a shove that threw
+  you off whatever ladder you were on. `climb: no power-up is ever a hobble`
+  measures floors-per-frame while each one is carried, read off the HUD tag.
+  Falling is never a punishment: a drop of more than a floor turns into a slow
+  float on a cloud. There are no ceilings anywhere — every platform is one-way,
+  so you rise straight through them and only ever land on a top.
 
 ## Hard constraints — do not break these
 
@@ -113,10 +150,11 @@ way that eyeballing missed (a `ReferenceError` firing every frame a power-up
 was active, and a hitbox that stretched to the ground while jumping).
 
 ```bash
-node test/smoke.js            # all three games, a minute or two, no dependencies
+node test/smoke.js            # all four games, several minutes, no dependencies
 node test/smoke.js powers     # only tests matching "powers"
 node test/smoke.js fishing    # only the Emsile Fishing block
 node test/smoke.js daddy      # only the Daddy Smash block
+node test/smoke.js climb      # only the Tower Climb block
 node test/smoke.js levels     # only the fourteen-worlds block
 ```
 
@@ -281,6 +319,20 @@ every cadence from one tap a frame to one every 40 and asserts the catch count
 rises as tapping gets faster. **When you write a clamp, clamp the delta, not the
 total** — and if a rule says "faster is better", test the whole range, not one
 convenient speed.
+
+## A debounced save can starve for ever
+
+`saveBest()` in every game defers the storage write so a burst of score changes
+costs one write. In Oliver Run and Daddy Smash the events are seconds apart and
+a plain debounce — `clearTimeout` then re-arm — is fine. In Tower Climb a floor
+is gained roughly every forty frames, so the re-arm always beat the 1200ms
+timer and **the write never happened at all**: a run that climbed to floor 138
+saved 120, and closing the tab mid-climb lost the lot.
+
+Throttle instead of debouncing when the thing being saved can change faster
+than the delay: if a timer is already pending, leave it alone. The first change
+then always lands within the delay, and a burst still costs one write. Worth
+checking the other three if their pacing ever changes.
 
 ## Careful with
 

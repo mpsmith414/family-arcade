@@ -11,16 +11,29 @@ shared/kidkit.js                 reusable: storage, input+gamepad, audio, music,
 games/oliver-run/index.html      game one — fast one-tap runner
 games/emsile-fishing/index.html  game two — slow one-tap fishing, 15 creatures to collect
 games/daddy-smash/index.html     game three — chase round the living room, no buttons at all
-test/harness.js, test/smoke.js   headless tests for all three  (node test/smoke.js)
+games/tower-climb/index.html     game four — climb an endless tower, steer and tap
+test/harness.js, test/smoke.js   headless tests for all four  (node test/smoke.js)
 icons/                           app icons
 ```
 
-The three games are deliberately unlike each other. Oliver Run is fast and loud
+The four games are deliberately unlike each other. Oliver Run is fast and loud
 and scores distance; Emsile Fishing is still and quiet, runs at 84 bpm instead of
 132, and scores a picture book you fill in. Daddy Smash is the odd one out on
 purpose: no button at all, just steering round one room while Daddy chases both
 kids, and **getting caught is the reward** — he body-slams you onto the couch,
-you bounce, you run off again. Nobody loses any of them.
+you bounce, you run off again. Tower Climb is the only one you both steer *and*
+tap: a Donkey-Kong-shaped maze of floors that goes up for ever, scoring how many
+you climb. Nobody loses any of them.
+
+Tower Climb's trick is that **it cannot be failed by being bad at it**. Ladders
+are escalators — walk into one and you ride it up, no button and no timing.
+Springs fire the moment you stand on them, a long fall turns into a slow float
+on a cloud, and the critters are trampolines rather than hazards. If seven
+seconds go by without any height being gained — a child who has put the tablet
+down, or one leaning on a single direction with their back to a wall — a bunch
+of balloons comes and fetches them. Tapping to jump is the fast route, never the
+only one. Every eight floors the tower tops out at a bell, and ringing it flies
+you up into a new one.
 
 ## Putting it online
 
@@ -104,17 +117,24 @@ Everything is wired through `KidKit.input`, so every game gets all of these free
 | Almost any key | jump |
 | Arrow keys | menu navigation |
 | Gamepad A/B/bumpers/triggers/d-pad, stick up | jump |
-| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing, swaps which kid you are in Daddy Smash) |
+| Gamepad X or Y | secondary action (swaps the kids in Oliver Run, opens the fish book in Emsile Fishing, swaps which kid you are in Daddy Smash and in Tower Climb) |
 | Gamepad Start | confirm in menus |
 
-Daddy Smash also needs to *steer*, so it opts into the kit's steering layer and
-gets these on top:
+Daddy Smash and Tower Climb also need to *steer*, so they opt into the kit's
+steering layer and get these on top:
 
 | Input | Action |
 |---|---|
 | Hold a finger anywhere | run to it — the whole control scheme |
 | Arrow keys or WASD, held | run that way |
 | Left stick / d-pad, held | run that way |
+
+In Tower Climb one finger does both jobs: hold it where you want to go and the
+climber runs there, and every fresh tap is a jump. Only the finger's *side* is
+read, never its height — a thumb parked at the bottom of a phone is how a small
+child actually holds one, and reading that as "down" sent them back down every
+ladder. Climbing down is on the keys and the stick, where it has to be asked
+for on purpose.
 
 Holding a finger down is the one to show a three-year-old: no virtual joystick to
 find, no button to hit, the kid just runs to your fingertip.
@@ -145,7 +165,8 @@ which never move it.
 
 1. `games/your-game/index.html`
 2. Add `<script src="../../shared/kidkit.js"></script>` in the head
-3. Copy a card in `index.html` and point `data-go` at it
+3. Copy a card in `index.html` and point `data-go` at it (and give `.art` a
+   gradient of its own)
 4. Add the new path to `FILES` in `sw.js` and bump `CACHE` to the next `arcade-vN`
 5. `node test/smoke.js` — the harness takes any folder name under `games/`
 
